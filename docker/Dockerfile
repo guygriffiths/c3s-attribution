@@ -44,6 +44,6 @@ RUN apt-get update && apt-get install -y \
 
 # WORKDIR /git
 
-CMD ["micromamba", "activate", "c3s-pyenv"]
+ENTRYPOINT ["micromamba", "activate", "c3s-pyenv"]
 
 
