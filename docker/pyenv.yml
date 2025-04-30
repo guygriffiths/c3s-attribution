@@ -1,0 +1,22 @@
+name: c3s-pyenv
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - xarray
+  - netcdf4
+  - zarr
+  - conda-pack
+  - numpy
+  - dask
+  - geopandas
+  - fiona
+  - shapely
+  - rasterio
+  - geopy
+  - beautifulsoup4
+  - scikit-learn
+  - pip
+  - pip:
+      - hdbscan
