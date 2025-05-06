@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<config>
+    <datasets>
+        <dataset id="era5" title="ERA5" location="/data/era5_[12]*.nc" queryable="true" downloadable="false" dataReaderClass="" copyrightStatement="" moreInfo="" disabled="false" updateInterval="-1">
+            <variables>
+                <variable id="t2m" title="2 metre temperature" description="2 metre temperature" palette="psu-magma" belowMinColor="extend" aboveMaxColor="extend" noDataColor="transparent" numColorBands="250" disabled="false" colorScaleRange="218.0 321.0" scaling="linear"/>
+            </variables>
+        </dataset>
+    </datasets>
+    <cache enabled="true">
+        <inMemorySizeMB>512</inMemorySizeMB>
+        <elementLifetimeMinutes>0.0</elementLifetimeMinutes>
+    </cache>
+    <dynamicServices/>
+    <dynamicCache enabled="true">
+        <numberOfDatasets>10</numberOfDatasets>
+        <elementLifetimeMinutes>0.0</elementLifetimeMinutes>
+    </dynamicCache>
+    <contact>
+        <name></name>
+        <organization></organization>
+        <telephone></telephone>
+        <email></email>
+    </contact>
+    <server>
+        <title>ncWMS for C3S Attribution Context Layers</title>
+        <allowFeatureInfo>true</allowFeatureInfo>
+        <maxImageWidth>1024</maxImageWidth>
+        <maxImageHeight>1024</maxImageHeight>
+        <abstract></abstract>
+        <keywords></keywords>
+        <url></url>
+        <allowglobalcapabilities>true</allowglobalcapabilities>
+    </server>
+    <crsCodes/>
+</config>

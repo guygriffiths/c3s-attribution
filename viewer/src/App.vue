@@ -12,14 +12,15 @@ const store = useStore()
 
 onMounted(() => {
 	document.title = l.value.title
+	store.init()
 })
 </script>
 
-<template>
+<template id="app">
 	<loading :active="store.isLoading" :isFullPage="true" id="loading"></loading>
-	<AppHeader id="header" />
+	<!-- <AppHeader id="header" /> -->
 	<router-view id="main"></router-view>
-	<AppFooter id="footer" />
+	<!-- <AppFooter id="footer" /> -->
 </template>
 
 <style lang="scss">
@@ -31,10 +32,10 @@ onMounted(() => {
 	height: 100vh;
 	max-width: 100vw;
 	max-height: 100vh;
-	display: grid;
-	grid-template-columns: 100%;
-	grid-template-rows: $headerHeight + $gap 1fr $footerHeight + $gap;
-	grid-template-areas: 'header' 'main' 'footer';
+	// display: grid;
+	// grid-template-columns: 100%;
+	// grid-template-rows: $headerHeight + $gap 1fr $footerHeight + $gap;
+	// grid-template-areas: 'header' 'main' 'footer';
 
 	#loading {
 		width: 100vw;
@@ -48,10 +49,11 @@ onMounted(() => {
 	}
 
 	#main {
-		grid-area: main;
-		// Constrains certain badly-behaved elements
-		max-height: calc(100vh - $headerHeight - $footerHeight - 2 * $gap);
-		padding: 1rem;
+		// grid-area: main;
+		// // Constrains certain badly-behaved elements
+		// max-height: calc(100vh - $headerHeight - $footerHeight - 2 * $gap);
+		// padding: 1rem;
+		height: 100vh;
 	}
 
 	#footer {

@@ -1,0 +1,33 @@
+FROM tomcat:9-jdk17
+
+# Set environment variables
+ENV NCWMS_VERSION=2.5.2 \
+    CONFIG_DIR=/root/.ncWMS2 \
+    CATALINA_OPTS="-Xms1g -Xmx4g" \
+    JAVA_OPTS="--add-opens java.base/java.net=ALL-UNNAMED \
+                --add-opens java.base/java.lang=ALL-UNNAMED \
+                --add-opens java.base/java.lang.ref=ALL-UNNAMED \
+                --add-opens java.base/java.util=ALL-UNNAMED \
+                --add-opens java.base/java.security=ALL-UNNAMED \
+                --add-opens java.base/java.io=ALL-UNNAMED"
+
+
+# Install curl and download ncWMS2.war
+RUN apt-get update && apt-get install -y curl && \
+    curl -L -o /usr/local/tomcat/webapps/ncWMS2.war \
+    https://github.com/Reading-eScience-Centre/ncwms/releases/download/ncwms-${NCWMS_VERSION}/ncWMS2.war
+
+# Create config directory and copy config.xml
+RUN mkdir -p $CONFIG_DIR
+COPY config.xml $CONFIG_DIR/config.xml
+
+# Add tomcat user with ncWMS-admin role
+COPY tomcat-users.xml /usr/local/tomcat/conf/tomcat-users.xml
+
+# Create /data directory (volume mount point)
+RUN mkdir -p /data
+VOLUME ["/data"]
+
+EXPOSE 8080
+
+CMD ["catalina.sh", "run"]

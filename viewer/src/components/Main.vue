@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import Map from './Map.vue'
+import TimeReel from './common/TimeReel.vue'
 
 const $l = useLabels()
 const store = useStore()
@@ -18,9 +19,14 @@ onMounted(async () => {
 
 <template>
 	<div class="main">
-		<h1>{{ $l.mainTitle }}</h1>
-		<p>Information from the store: {{ store.value }}</p>
-		<Map></Map>
+		<Map id="map"></Map>
+		<TimeReel
+			id="times"
+			:start="store.earliestDate"
+			:end="store.latestDate"
+			:events="store.events"
+			v-model="store.selectedTime"
+		></TimeReel>
 	</div>
 </template>
 
@@ -30,5 +36,14 @@ onMounted(async () => {
 .main {
 	display: flex;
 	flex-direction: column;
+
+	#map {
+		flex: 1 1 100%;
+	}
+
+	#times {
+		flex: 0 0 100px;
+
+	}
 }
 </style>

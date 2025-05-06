@@ -18,7 +18,7 @@ services:
     platform: "linux/amd64"
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile.python
       args:
         - CUSTOM_ENV=pyenv.yml
     stdin_open: true
@@ -27,3 +27,14 @@ services:
     - *services-repo
     - *services-storage
     command: bash
+  
+  ncwms:
+    image: ncwms
+    platform: "linux/amd64"
+    build:
+      context: .
+      dockerfile: ./Dockerfile.ncwms2
+    ports:
+      - "8080:8080"
+    volumes:
+    - *services-storage

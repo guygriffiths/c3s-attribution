@@ -20,7 +20,7 @@ def to_radians(degrees):
     return degrees * np.pi / 180.0
 
 def load_data(data_path, ref_path):
-    ds = xr.open_dataset(data_path)
+    ds = xr.open_mfdataset(data_path, chunks={"valid_time": CHUNK_SIZE})
     ref = xr.open_dataset(ref_path)
     return ds["t2m"], ref["t2m"]
 
@@ -66,7 +66,9 @@ def run_dbscan(coords, eps=EPS, min_samples=MIN_SAMPLES):
     if coords.size == 0:
         return np.array([])
 
+    print(f"Running DBSCAN with eps={eps}, min_samples={min_samples} on {coords.shape[0]} points")
     clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    print(f"DBSCAN found {len(set(clustering.labels_))} clusters")
     return clustering.labels_
 
 def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
@@ -92,7 +94,7 @@ def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
         extended = False
         if last_clusters:
             for cluster in last_clusters:
-                overlap_times = set([t for t in times if t in cluster["time_indices"]])
+                overlap_times = set([t for t in times if t in cluster["timeIndices"]])
                 cdist = np.linalg.norm(
                     np.array(cluster["centroid"]) - np.array([float(np.mean(lats)), float(np.mean(lons))])
                 )
@@ -114,10 +116,12 @@ def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
                     # print(f"Cluster {times}, {sizes} is similar to previous cluster {cluster}. Merging.")
                     print(f"Similar clusters, centroid distance: {cdist}")
                     # print(f"Last centroid: {cluster['centroid']}, new centroid: {[float(np.mean(lats)), float(np.mean(lons))]}")
-                    # print(f"Last {CHUNK_OVERLAP} times: {cluster['time_indices'][-CHUNK_OVERLAP:]}, new times: {times[:CHUNK_OVERLAP]}")
+                    # print(f"Last {CHUNK_OVERLAP} times: {cluster['timeIndices'][-CHUNK_OVERLAP:]}, new times: {times[:CHUNK_OVERLAP]}")
                     # print(f"Last {CHUNK_OVERLAP} sizes: {cluster['sizes'][-CHUNK_OVERLAP:]}, new sizes: {sizes[:CHUNK_OVERLAP]}")
                     cluster["size"] += len(points)
-                    cluster["time_indices"] = sorted(set(cluster["time_indices"] + times))
+                    cluster["timeIndices"] = sorted(set(cluster["timeIndices"] + times))
+                    cluster["startTime"] = str(time_values[cluster["timeIndices"][0]].astype("M8[ms]"))
+                    cluster["endTime"] = str(time_values[cluster["timeIndices"][-1]].astype("M8[ms]"))
                     cluster["bbox"] = [
                         float(min(cluster["bbox"][0], np.min(lats))),
                         float(min(cluster["bbox"][1], np.min(lons))),
@@ -131,7 +135,9 @@ def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
         if not extended:
             # print(f"Creating new cluster {times}, {sizes}, centroid: {np.mean(lats)}, {np.mean(lons)}")
             clusters.append({
-                "time_indices": times,
+                "timeIndices": times,
+                "startTime": str(time_values[times[0]].astype("M8[ms]")),
+                "endTime": str(time_values[times[-1]].astype("M8[ms]")),
                 "sizes": sizes,
                 "bbox": [
                     float(np.min(lats)),
@@ -151,7 +157,7 @@ def bboxes_overlap(b1, b2):
     return lat_overlap and lon_overlap
 
 def main():
-    t2m, ref = load_data("/data/era5_2024.nc", "/data/era5_ref98.nc")
+    t2m, ref = load_data("/data/era5_2*.nc", "/data/era5_ref98.nc")
     time_values = np.array([np.datetime64(t) for t in t2m.valid_time.values])
     n_timesteps = t2m.sizes["valid_time"]
     n_timesteps = min(TIMESTEPS, n_timesteps)  # Limit to TIMESTEPS for testing
