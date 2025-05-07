@@ -10,7 +10,6 @@ TEMP_THRESHOLD = 28 + 273.15  # Kelvin
 TIME_SCALE = np.radians(0.1)  # radians per time step
 EPS = np.radians(0.38)  # epsilon for DBSCAN
 MIN_SAMPLES = 30  # minimum samples for DBSCAN
-TIMESTEPS = 366
 CHUNK_SIZE = 10
 # Make the chunks overlap by enough that no edges get missed
 CHUNK_OVERLAP = int(np.ceil(EPS / TIME_SCALE))
@@ -160,7 +159,7 @@ def main():
     t2m, ref = load_data("/data/era5_2*.nc", "/data/era5_ref98.nc")
     time_values = np.array([np.datetime64(t) for t in t2m.valid_time.values])
     n_timesteps = t2m.sizes["valid_time"]
-    n_timesteps = min(TIMESTEPS, n_timesteps)  # Limit to TIMESTEPS for testing
+    # n_timesteps = min(TIMESTEPS, n_timesteps)  # Limit to TIMESTEPS for testing
 
     chunk_ranges = generate_chunks(n_timesteps, CHUNK_SIZE, CHUNK_OVERLAP)
     all_clusters = []

@@ -9,7 +9,8 @@ ENV NCWMS_VERSION=2.5.2 \
                 --add-opens java.base/java.lang.ref=ALL-UNNAMED \
                 --add-opens java.base/java.util=ALL-UNNAMED \
                 --add-opens java.base/java.security=ALL-UNNAMED \
-                --add-opens java.base/java.io=ALL-UNNAMED"
+                --add-opens java.base/java.io=ALL-UNNAMED \
+                --add-opens java.base/sun.nio.fs=ALL-UNNAMED"
 
 
 # Install curl and download ncWMS2.war

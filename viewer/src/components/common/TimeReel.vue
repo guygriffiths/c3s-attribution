@@ -2,6 +2,7 @@
 import { format, getDayOfYear, setDayOfYear } from 'date-fns'
 import { rectangle } from 'leaflet'
 import { ref, computed, defineModel, Ref, watch, onMounted } from 'vue'
+import { catScheme } from '@/store/store';
 
 const props = defineProps({
 	start: {
@@ -20,7 +21,7 @@ const props = defineProps({
 
 const startYear = computed(() => props.start.getFullYear())
 const endYear = computed(() => props.end.getFullYear())
-const yearHeight = 64
+const yearHeight = 128
 const totalYears = computed(() => endYear.value - startYear.value + 3)
 const totalDays = 366
 
@@ -34,9 +35,16 @@ watch(
 	() => model.value,
 	(newValue: Date) => {
 		selectedDay.value = getDayOfYear(newValue)
+		selectedYear.value = newValue.getFullYear()
+		const yearIndex = selectedYear.value - startYear.value
+		const targetScrollTop = yearIndex * yearHeight
+		if (containerRef.value) {
+			containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
+		}
 	},
 )
-const selectedYear = ref(model.value.getFullYear() - 1)
+const selectedYear = ref(model.value.getFullYear())
+console.log('selectedYear', selectedYear.value)
 
 const containerRef = ref<HTMLDivElement | null>(null)
 const needleRef = ref<HTMLDivElement | null>(null)
@@ -110,7 +118,7 @@ const isEvenMonth = (day: number) => {
 }
 
 function assignTimelinePositions(
-	events: { startTime: Date; endTime: Date }[],
+	events: { startTime: Date; endTime: Date, color: string, y: number }[],
 	targetYear: number,
 ) {
 	// console.log('assignTimelinePositions', events, targetYear)
@@ -147,7 +155,7 @@ function assignTimelinePositions(
 
 	const result = sliced
 		.sort((a, b) => a.startX - b.startX)
-		.map((event) => {
+		.map((event, idx) => {
 			// Reclaim rows that are now free
 			const usedYs = new Set()
 			for (let row of activeRows) {
@@ -160,6 +168,7 @@ function assignTimelinePositions(
 			while (usedYs.has(y)) y++
 			activeRows.push({ endX: event.endX, y })
 			event.y = y
+			event.color = catScheme[idx % catScheme.length]
 			return event
 		})
 
@@ -200,9 +209,9 @@ function assignTimelinePositions(
 							v-for="event in assignTimelinePositions(props.events as any[], year)"
 							:x="event.startX"
 							:width="event.endX - event.startX"
-							:y="event.y * 0.1"
-							:height="0.1"
-							:fill="`rgb(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255})`"
+							:y="event.y * 0.025"
+							:height="0.024"
+							:fill="event.color"
 						></rect>
 					</svg>
 				</div>

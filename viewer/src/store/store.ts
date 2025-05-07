@@ -1,3 +1,4 @@
+import * as d3 from 'd3'
 import { formatISO, parseISO } from 'date-fns'
 import { defineStore } from 'pinia'
 
@@ -10,10 +11,12 @@ interface State {
 	layerDetails: LayerDetails | null
 	times: Date[]
 	events: any[]
+	eventsByDay: any[]
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
 export const T2M_LAYER = 'era5/t2m'
+export const catScheme = [...d3.schemePaired, ...d3.schemeSet3]
 
 export const useStore = defineStore('main', {
 	state: (): State => {
@@ -23,38 +26,8 @@ export const useStore = defineStore('main', {
 			selectedTime: new Date(),
 			layerDetails: null,
 			times: [],
-			events: [
-				{
-					id: 1,
-					name: 'Event 1',
-					startDate: new Date('2024-01-01'),
-					endDate: new Date('2024-01-02'),
-				},
-				{
-					id: 2,
-					name: 'Event 2',
-					startDate: new Date('2024-01-03'),
-					endDate: new Date('2024-01-20'),
-				},
-				{
-					id: 3,
-					name: 'Event 3',
-					startDate: new Date('2024-01-04'),
-					endDate: new Date('2024-01-05'),
-				},
-				{
-					id: 4,
-					name: 'Event 4',
-					startDate: new Date('2024-01-06'),
-					endDate: new Date('2024-01-07'),
-				},
-				{
-					id: 5,
-					name: 'Event 5',
-					startDate: new Date('2024-01-08'),
-					endDate: new Date('2024-01-09'),
-				},
-			],
+			events: [],
+			eventsByDay: [],
 		}
 	},
 	getters: {
@@ -107,6 +80,7 @@ export const useStore = defineStore('main', {
 					Object.entries(this.layerDetails.datesWithData).forEach(
 						(entry: [string, any]) => {
 							const year: number = parseInt(entry[0])
+							console.log('year', year, this.layerDetails)
 							const months: any = entry[1]
 							Object.entries(months).forEach((monthEntry: [string, any]) => {
 								const month: number = parseInt(monthEntry[0])
@@ -118,6 +92,7 @@ export const useStore = defineStore('main', {
 							})
 						},
 					)
+					// TODO - this should probably contain every time in the range
 					this.times = datesWithData.sort((a, b) => a.getTime() - b.getTime())
 					this.selectedTime = parseISO(this.layerDetails.nearestTimeIso)
 					this.setLoadingDone()
@@ -138,7 +113,7 @@ export const useStore = defineStore('main', {
 					this.events = data
 					this.events.forEach((event) => {
 						event.startTime = new Date(event.startTime)
-						event.endTime= new Date(event.endTime)
+						event.endTime = new Date(event.endTime)
 					})
 					console.log('events', this.events)
 				})
