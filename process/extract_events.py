@@ -10,7 +10,7 @@ TEMP_THRESHOLD = 28 + 273.15  # Kelvin
 TIME_SCALE = np.radians(0.1)  # radians per time step
 EPS = np.radians(0.38)  # epsilon for DBSCAN
 MIN_SAMPLES = 30  # minimum samples for DBSCAN
-CHUNK_SIZE = 10
+CHUNK_SIZE = 16  # size of each chunk to process
 # Make the chunks overlap by enough that no edges get missed
 CHUNK_OVERLAP = int(np.ceil(EPS / TIME_SCALE))
 MIN_CLUSTER_SIZE = 500
@@ -21,7 +21,13 @@ def to_radians(degrees):
 def load_data(data_path, ref_path):
     ds = xr.open_mfdataset(data_path, chunks={"valid_time": CHUNK_SIZE})
     ref = xr.open_dataset(ref_path)
-    return ds["t2m"], ref["t2m"]
+
+    def shift_longitudes(da):
+        da = da.assign_coords(longitude=(((da.longitude + 180) % 360) - 180))
+        return da.sortby("longitude")
+
+    return shift_longitudes(ds["t2m"]), shift_longitudes(ref["t2m"])
+
 
 def generate_chunks(n_timesteps, chunk_size, overlap):
     step = chunk_size
@@ -135,8 +141,8 @@ def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
             # print(f"Creating new cluster {times}, {sizes}, centroid: {np.mean(lats)}, {np.mean(lons)}")
             clusters.append({
                 "timeIndices": times,
-                "startTime": str(time_values[times[0]].astype("M8[ms]")),
-                "endTime": str(time_values[times[-1]].astype("M8[ms]")),
+                "startTime": str(time_values[times[0]].astype("M8[ms]"))+'Z',
+                "endTime": str(time_values[times[-1]].astype("M8[ms]"))+'Z',
                 "sizes": sizes,
                 "bbox": [
                     float(np.min(lats)),

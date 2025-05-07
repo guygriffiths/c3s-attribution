@@ -1,5 +1,5 @@
 import * as d3 from 'd3'
-import { addDays, format, formatISO, parseISO } from 'date-fns'
+import { addDays, format, formatISO } from 'date-fns'
 import { defineStore } from 'pinia'
 
 type LayerDetails = any
@@ -24,7 +24,7 @@ export const useStore = defineStore('main', {
 		return {
 			lang: 'en',
 			loadingCount: 0,
-			selectedTime: new Date(),
+			selectedTime: new Date(2024, 4, 28, 0 ,0 ,0),
 			layerDetails: null,
 			// times: [],
 			startTime: new Date(),
@@ -47,7 +47,9 @@ export const useStore = defineStore('main', {
 		// 	}
 		// },
 		isoDatetime: (state) => {
-			return formatISO(state.selectedTime)
+			console.log('isoDatetime', formatISO(state.selectedTime))
+			console.log('isoDatetime', state.selectedTime.toISOString())
+			return state.selectedTime.toISOString()
 		},
 		activeEvents: (state) => {
 			const dateStr = format(state.selectedTime, 'yyyy-MM-dd')
@@ -68,46 +70,50 @@ export const useStore = defineStore('main', {
 		init() {
 			this.setLoading()
 
-			fetch(
-				`${WMS_ROOT}?service=WMS&version=1.3.0&request=GetMetadata&item=layerDetails&layername=${T2M_LAYER}`,
-			)
-				.then((response) => {
-					if (!response.ok) {
-						throw new Error('Network response was not ok')
-					}
-					return response.json()
-				})
-				.then((data) => {
-					this.layerDetails = data
-					const datesWithData: Date[] = []
-					Object.entries(this.layerDetails.datesWithData).forEach(
-						(entry: [string, any]) => {
-							const year: number = parseInt(entry[0])
-							console.log('year', year, this.layerDetails)
-							const months: any = entry[1]
-							Object.entries(months).forEach((monthEntry: [string, any]) => {
-								const month: number = parseInt(monthEntry[0])
-								const days: any = monthEntry[1]
-								days.forEach((day: number) => {
-									// Don't need to subtract 1 from month, as the month is already 0-indexed
-									datesWithData.push(new Date(year, month, day, 12, 0, 0))
-								})
-							})
-						},
-					)
-					// TODO - this should probably contain every time in the range
-					datesWithData.sort((a, b) => a.getTime() - b.getTime())
-					this.startTime = datesWithData[0]
-					this.endTime = datesWithData[datesWithData.length - 1]
-					this.selectedTime = parseISO(this.layerDetails.nearestTimeIso)
-					this.setLoadingDone()
-				})
-				.catch((error) => {
-					console.error('There was a problem with the fetch operation:', error)
-					this.setLoadingDone()
-				})
+			// fetch(
+			// 	`${WMS_ROOT}?service=WMS&version=1.3.0&request=GetMetadata&item=layerDetails&layername=${T2M_LAYER}`,
+			// )
+			// 	.then((response) => {
+			// 		if (!response.ok) {
+			// 			throw new Error('Network response was not ok')
+			// 		}
+			// 		return response.json()
+			// 	})
+			// 	.then((data) => {
+			// 		this.layerDetails = data
+			// 		const datesWithData: Date[] = []
+			// 		Object.entries(this.layerDetails.datesWithData).forEach(
+			// 			(entry: [string, any]) => {
+			// 				const year: number = parseInt(entry[0])
+			// 				console.log('year', year, this.layerDetails)
+			// 				const months: any = entry[1]
+			// 				Object.entries(months).forEach((monthEntry: [string, any]) => {
+			// 					const month: number = parseInt(monthEntry[0])
+			// 					const days: any = monthEntry[1]
+			// 					days.forEach((day: number) => {
+			// 						// Don't need to subtract 1 from month, as the month is already 0-indexed
+			// 						datesWithData.push(new Date(year, month, day, 12, 0, 0))
+			// 					})
+			// 				})
+			// 			},
+			// 		)
+			// 		// TODO - this should probably contain every time in the range
+			// 		datesWithData.sort((a, b) => a.getTime() - b.getTime())
+			// 		if(datesWithData[0] < this.startTime) {
+			// 			this.startTime = new Date(datesWithData[0])
+			// 		}
+			// 		if(datesWithData[datesWithData.length - 1] > this.endTime) {
+			// 			this.endTime = new Date(datesWithData[datesWithData.length - 1])
+			// 		}
+			// 		this.selectedTime = parseISO(this.layerDetails.nearestTimeIso)
+			// 		this.setLoadingDone()
+			// 	})
+			// 	.catch((error) => {
+			// 		console.error('There was a problem with the fetch operation:', error)
+			// 		this.setLoadingDone()
+			// 	})
 
-			fetch('/merged_clusters.json')
+			fetch('/events.json')
 				.then((response) => {
 					if (!response.ok) {
 						throw new Error('Network response was not ok')
@@ -120,8 +126,14 @@ export const useStore = defineStore('main', {
 						event.startTime = new Date(event.startTime)
 						event.endTime = new Date(event.endTime)
 						const startDate = new Date(event.startTime)
+						if(startDate < this.startTime) {
+							this.startTime = new Date(startDate)
+						}
 						startDate.setHours(0, 0, 0, 0)
 						const endDate = new Date(event.endTime)
+						if(endDate > this.endTime) {
+							this.endTime = new Date(endDate)
+						}
 						endDate.setHours(23, 59, 59, 999)
 						for (let d = startDate; d < endDate; d = addDays(d, 1)) {
 							const dateStr = format(d, 'yyyy-MM-dd')
@@ -131,7 +143,9 @@ export const useStore = defineStore('main', {
 							this.eventsByDay.get(dateStr)?.push(event)
 						}
 					})
+					// this.selectedTime = new Date(this.endTime)
 					console.log('events', this.eventsByDay)
+					this.setLoadingDone()
 				})
 				.catch((error) => {
 					console.error('There was a problem with the fetch operation:', error)

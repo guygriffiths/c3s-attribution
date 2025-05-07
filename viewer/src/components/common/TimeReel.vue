@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { format, getDayOfYear, setDayOfYear } from 'date-fns'
 import { ref, computed, defineModel, Ref, watch } from 'vue'
-import { catScheme } from '@/store/store';
+import { catScheme } from '@/store/store'
 
 const props = defineProps({
 	start: {
@@ -14,7 +14,7 @@ const props = defineProps({
 	},
 	events: {
 		type: Array,
-		default: () => [] as {startDate: Date; endDate: Date}[],
+		default: () => [] as { startDate: Date; endDate: Date }[],
 	},
 })
 
@@ -62,7 +62,7 @@ const onScrollEnd = () => {
 		// +1 is because we are looking at 3 years and want the second one
 		selectedYear.value = years.value[yearIndex + 1]
 		model.value = setDayOfYear(
-			new Date(selectedYear.value, 0, 1),
+			new Date(Date.UTC(selectedYear.value, 0, 1)),
 			selectedDay.value,
 		)
 	}
@@ -86,10 +86,29 @@ const endDrag = () => {
 	} else if (selectedDay.value > totalDays) {
 		selectedDay.value = totalDays
 	}
-	model.value = setDayOfYear(
-		new Date(selectedYear.value, 0, 1),
+
+	const tempDate = setDayOfYear(
+		new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
 		selectedDay.value,
 	)
+	model.value = new Date(
+		Date.UTC(
+			tempDate.getFullYear(),
+			tempDate.getMonth(),
+			tempDate.getDate(),
+			0,
+			0,
+			0,
+		),
+	)
+	console.log(
+		'dateutc',
+		setDayOfYear(
+			new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
+			selectedDay.value,
+		),
+	)
+	console.log('selectedDay', selectedDay.value, model.value)
 }
 
 const needleDrag = (event: MouseEvent) => {
@@ -104,7 +123,7 @@ const needleDrag = (event: MouseEvent) => {
 }
 
 function assignTimelinePositions(
-	events: { startTime: Date; endTime: Date, color: string, y: number }[],
+	events: { startTime: Date; endTime: Date; color: string; y: number }[],
 	targetYear: number,
 ) {
 	// console.log('assignTimelinePositions', events, targetYear)
@@ -163,10 +182,10 @@ function assignTimelinePositions(
 
 const scaleY = 0.025
 const positionY = (y: number) => {
-	if(y % 2 === 0) {
+	if (y % 2 === 0) {
 		return -0.025 * y
 	} else {
-		return 0.025 * (y+1)
+		return 0.025 * (y + 1)
 	}
 	return 0
 }
@@ -202,7 +221,10 @@ const positionY = (y: number) => {
 						pointer-events="none"
 					>
 						<rect
-							v-for="event in assignTimelinePositions(props.events as any[], year)"
+							v-for="event in assignTimelinePositions(
+								props.events as any[],
+								year,
+							)"
 							:x="event.startX"
 							:width="event.endX - event.startX"
 							:y="positionY(event.y)"

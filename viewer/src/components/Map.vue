@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import 'leaflet/dist/leaflet.css'
-import { onMounted, ref, Ref, watch } from 'vue'
+import { computed, ref, Ref, watch } from 'vue'
 import {
 	LMap,
 	LTileLayer,
@@ -46,6 +46,10 @@ watch(
 		}
 	},
 )
+
+const wmtsUrl = computed(() => {
+	return `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${store.isoDatetime}`
+})
 </script>
 
 <template>
@@ -68,7 +72,12 @@ watch(
 				:zIndex="1"
 			></LTileLayer>
 			<!-- url="https://era-explorer.ecmwf-development.f.ewcloud.host/geoserver/wms" -->
-			<LWmsTileLayer
+			<LTileLayer
+				:url="wmtsUrl"
+				:zIndex="2"
+				:opacity="0.75"
+				></LTileLayer>
+			<!-- <LWmsTileLayer
 				ref="wmsRef"
 				v-show="store.selectedTime"
 				:url="WMS_ROOT"
@@ -81,7 +90,7 @@ watch(
 				}"
 				:zIndex="2"
 				:opacity="0.75"
-			></LWmsTileLayer>
+			></LWmsTileLayer> -->
 			<LCircleMarker v-for="event in store.activeEvents" :lat-lng="event.centroid">
 				<LPopup>
 					<p>{{ event }}</p>
