@@ -7,7 +7,7 @@ from sklearn.cluster import DBSCAN
 
 # Constants
 TEMP_THRESHOLD = 28 + 273.15  # Kelvin
-TIME_SCALE = np.radians(0.1)  # radians per time step
+TIME_SCALE = np.radians(0.125)  # radians per time step
 EPS = np.radians(0.38)  # epsilon for DBSCAN
 MIN_SAMPLES = 30  # minimum samples for DBSCAN
 CHUNK_SIZE = 16  # size of each chunk to process
@@ -190,7 +190,7 @@ def main():
 
 
 
-    with open("/data/merged_clusters.json", "w") as f:
+    with open("/data/events_output.json", "w") as f:
         json.dump(all_clusters, f, indent=2)
 
 if __name__ == "__main__":
