@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { format, getDayOfYear, setDayOfYear } from 'date-fns'
-import { rectangle } from 'leaflet'
-import { ref, computed, defineModel, Ref, watch, onMounted } from 'vue'
+import { ref, computed, defineModel, Ref, watch } from 'vue'
 import { catScheme } from '@/store/store';
 
 const props = defineProps({
@@ -19,39 +18,39 @@ const props = defineProps({
 	},
 })
 
-const startYear = computed(() => props.start.getFullYear())
-const endYear = computed(() => props.end.getFullYear())
-const yearHeight = 128
-const totalYears = computed(() => endYear.value - startYear.value + 3)
-const totalDays = 366
-
 const model: Ref<Date> = defineModel({
 	type: Date,
 	default: new Date(),
 })
 
-const selectedDay = ref(getDayOfYear(model.value))
-watch(
-	() => model.value,
-	(newValue: Date) => {
-		selectedDay.value = getDayOfYear(newValue)
-		selectedYear.value = newValue.getFullYear()
-		const yearIndex = selectedYear.value - startYear.value
-		const targetScrollTop = yearIndex * yearHeight
-		if (containerRef.value) {
-			containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
-		}
-	},
-)
-const selectedYear = ref(model.value.getFullYear())
-console.log('selectedYear', selectedYear.value)
-
 const containerRef = ref<HTMLDivElement | null>(null)
 const needleRef = ref<HTMLDivElement | null>(null)
+
+const yearHeight = 128
+const totalDays = 366
+const selectedDay = ref(getDayOfYear(model.value))
+const selectedYear = ref(model.value.getFullYear())
+
+const startYear = computed(() => props.start.getFullYear())
+const endYear = computed(() => props.end.getFullYear())
+const totalYears = computed(() => endYear.value - startYear.value + 3)
 const years = computed(() =>
 	Array.from({ length: totalYears.value }, (_, i) => startYear.value - 1 + i),
 )
 const days = computed(() => Array.from({ length: totalDays }, (_, i) => i + 1))
+
+const dayStr = (day: number) => {
+	if (day < 1) day = 1
+	if (day > totalDays) day = totalDays
+	const date = setDayOfYear(new Date(selectedYear.value, 0, 1), day)
+	return format(date, 'do MMMM')
+}
+
+const isEvenMonth = (day: number) => {
+	const date = setDayOfYear(new Date(selectedYear.value, 0, 1), day)
+	return date.getMonth() % 2 !== 0
+}
+
 const onScrollEnd = () => {
 	// Snap to the nearest year and scroll to it
 	if (containerRef.value) {
@@ -60,7 +59,6 @@ const onScrollEnd = () => {
 		const targetScrollTop = yearIndex * yearHeight
 		containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
 
-		// TODO: Emit the selected date to the parent component
 		// +1 is because we are looking at 3 years and want the second one
 		selectedYear.value = years.value[yearIndex + 1]
 		model.value = setDayOfYear(
@@ -103,18 +101,6 @@ const needleDrag = (event: MouseEvent) => {
 
 		selectedDay.value = Math.max(Math.min(percentage, 1), 0) * totalDays
 	}
-}
-
-const dayStr = (day: number) => {
-	if (day < 1) day = 1
-	if (day > totalDays) day = totalDays
-	const date = setDayOfYear(new Date(selectedYear.value, 0, 1), day)
-	return format(date, 'do MMMM')
-}
-
-const isEvenMonth = (day: number) => {
-	const date = setDayOfYear(new Date(selectedYear.value, 0, 1), day)
-	return date.getMonth() % 2 !== 0
 }
 
 function assignTimelinePositions(
@@ -174,6 +160,16 @@ function assignTimelinePositions(
 
 	return result
 }
+
+const scaleY = 0.025
+const positionY = (y: number) => {
+	if(y % 2 === 0) {
+		return -0.025 * y
+	} else {
+		return 0.025 * (y+1)
+	}
+	return 0
+}
 </script>
 
 <template>
@@ -201,7 +197,7 @@ function assignTimelinePositions(
 					<svg
 						class="year-overlay"
 						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 366 1"
+						viewBox="0 -1 366 2"
 						preserveAspectRatio="none"
 						pointer-events="none"
 					>
@@ -209,7 +205,7 @@ function assignTimelinePositions(
 							v-for="event in assignTimelinePositions(props.events as any[], year)"
 							:x="event.startX"
 							:width="event.endX - event.startX"
-							:y="event.y * 0.025"
+							:y="positionY(event.y)"
 							:height="0.024"
 							:fill="event.color"
 						></rect>
@@ -419,7 +415,7 @@ $margin: 0 0.5rem;
 				margin: 0;
 				display: flex;
 				justify-content: center;
-				align-items: center;
+				align-items: flex-end;
 			}
 
 			.jan {
