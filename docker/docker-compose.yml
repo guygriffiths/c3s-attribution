@@ -1,13 +1,13 @@
 x-repo:
   &services-repo
   type: bind
-  source: "/Users/guy/Code/c3s-attribution"
+  source: "/home/guy/Code/c3s-attribution/"
   target: /code
 
 x-storage:
   &services-storage
   type: bind
-  source: "/Users/guy/Data/c3s-attribution/"
+  source: "/home/guy/Data/c3s-attribution/"
   target: /data
 
 

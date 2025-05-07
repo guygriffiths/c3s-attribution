@@ -22,8 +22,8 @@ onMounted(async () => {
 		<Map id="map"></Map>
 		<TimeReel
 			id="times"
-			:start="store.earliestDate"
-			:end="store.latestDate"
+			:start="store.startTime"
+			:end="store.endTime"
 			:events="store.events"
 			v-model="store.selectedTime"
 		></TimeReel>

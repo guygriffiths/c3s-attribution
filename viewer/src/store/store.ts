@@ -1,5 +1,5 @@
 import * as d3 from 'd3'
-import { formatISO, parseISO } from 'date-fns'
+import { addDays, format, formatISO, parseISO } from 'date-fns'
 import { defineStore } from 'pinia'
 
 type LayerDetails = any
@@ -9,9 +9,10 @@ interface State {
 	loadingCount: number
 	selectedTime: Date
 	layerDetails: LayerDetails | null
-	times: Date[]
+	startTime: Date
+	endTime: Date
 	events: any[]
-	eventsByDay: any[]
+	eventsByDay: Map<string, any[]>
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -25,30 +26,33 @@ export const useStore = defineStore('main', {
 			loadingCount: 0,
 			selectedTime: new Date(),
 			layerDetails: null,
-			times: [],
+			// times: [],
+			startTime: new Date(),
+			endTime: new Date(),
 			events: [],
-			eventsByDay: [],
+			eventsByDay: new Map(),
 		}
 	},
 	getters: {
 		isLoading: (state) => state.loadingCount > 0,
-		earliestDate: (state) => {
-			// return new Date(2022,0,1,0,0,0)
-			if (state.times.length > 0) {
-				return state.times[0]
-			}
-		},
-		latestDate: (state) => {
-			if (state.times.length > 0) {
-				return state.times[state.times.length - 1]
-			}
-		},
+		// earliestDate: (state) => {
+		// 	// return new Date(2022,0,1,0,0,0)
+		// 	if (state.times.length > 0) {
+		// 		return state.times[0]
+		// 	}
+		// },
+		// latestDate: (state) => {
+		// 	if (state.times.length > 0) {
+		// 		return state.times[state.times.length - 1]
+		// 	}
+		// },
 		isoDatetime: (state) => {
-			if (state.selectedTime) {
-				return formatISO(state.selectedTime)
-			}
-			return null
+			return formatISO(state.selectedTime)
 		},
+		activeEvents: (state) => {
+			const dateStr = format(state.selectedTime, 'yyyy-MM-dd')
+			return state.eventsByDay.get(dateStr)
+		}
 	},
 	actions: {
 		/* You can define actions here and just call then like normal methods */
@@ -59,7 +63,6 @@ export const useStore = defineStore('main', {
 			this.loadingCount--
 		},
 		setDate(date: Date) {
-			console.log('setDate', date)
 			this.selectedTime = date
 		},
 		init() {
@@ -87,13 +90,15 @@ export const useStore = defineStore('main', {
 								const days: any = monthEntry[1]
 								days.forEach((day: number) => {
 									// Don't need to subtract 1 from month, as the month is already 0-indexed
-									datesWithData.push(new Date(year, month, day, 0, 0, 0))
+									datesWithData.push(new Date(year, month, day, 12, 0, 0))
 								})
 							})
 						},
 					)
 					// TODO - this should probably contain every time in the range
-					this.times = datesWithData.sort((a, b) => a.getTime() - b.getTime())
+					datesWithData.sort((a, b) => a.getTime() - b.getTime())
+					this.startTime = datesWithData[0]
+					this.endTime = datesWithData[datesWithData.length - 1]
 					this.selectedTime = parseISO(this.layerDetails.nearestTimeIso)
 					this.setLoadingDone()
 				})
@@ -114,8 +119,19 @@ export const useStore = defineStore('main', {
 					this.events.forEach((event) => {
 						event.startTime = new Date(event.startTime)
 						event.endTime = new Date(event.endTime)
+						const startDate = new Date(event.startTime)
+						startDate.setHours(0, 0, 0, 0)
+						const endDate = new Date(event.endTime)
+						endDate.setHours(23, 59, 59, 999)
+						for (let d = startDate; d < endDate; d = addDays(d, 1)) {
+							const dateStr = format(d, 'yyyy-MM-dd')
+							if(!this.eventsByDay.has(dateStr)) {
+								this.eventsByDay.set(dateStr, [])
+							}
+							this.eventsByDay.get(dateStr)?.push(event)
+						}
 					})
-					console.log('events', this.events)
+					console.log('events', this.eventsByDay)
 				})
 				.catch((error) => {
 					console.error('There was a problem with the fetch operation:', error)

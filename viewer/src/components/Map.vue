@@ -8,6 +8,8 @@ import {
 	LControlScale,
 	LControlZoom,
 	LWmsTileLayer,
+	LCircleMarker,
+	LPopup
 } from '@vue-leaflet/vue-leaflet'
 import { LatLng, Map, Point } from 'leaflet'
 import { T2M_LAYER, useStore, WMS_ROOT } from '@/store/store'
@@ -80,6 +82,11 @@ watch(
 				:zIndex="2"
 				:opacity="0.75"
 			></LWmsTileLayer>
+			<LCircleMarker v-for="event in store.activeEvents" :lat-lng="event.centroid">
+				<LPopup>
+					<p>{{ event }}</p>
+				</LPopup>
+			</LCircleMarker>
 			<LControl position="bottomleft">
 				<div>
 					<p>
