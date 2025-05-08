@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { format, getDayOfYear, setDayOfYear } from 'date-fns'
-import { ref, computed, defineModel, Ref, watch } from 'vue'
+import {
+	ref,
+	computed,
+	defineModel,
+	Ref,
+	watch,
+	onMounted,
+	nextTick,
+} from 'vue'
 import { catScheme } from '@/store/store'
 
 const props = defineProps({
@@ -26,16 +34,25 @@ const model: Ref<Date> = defineModel({
 const containerRef = ref<HTMLDivElement | null>(null)
 const needleRef = ref<HTMLDivElement | null>(null)
 
-const yearHeight = 128
+const yearHeight = 96
+const rowsToShow = 3
 const totalDays = 366
 const selectedDay = ref(getDayOfYear(model.value))
-const selectedYear = ref(model.value.getFullYear())
+const selectedYear = ref(model.value.getUTCFullYear())
 
-const startYear = computed(() => props.start.getFullYear())
-const endYear = computed(() => props.end.getFullYear())
+const startYear = computed(() => props.start.getUTCFullYear())
+const endYear = computed(() => props.end.getUTCFullYear())
 const totalYears = computed(() => endYear.value - startYear.value + 3)
 const years = computed(() =>
 	Array.from({ length: totalYears.value }, (_, i) => startYear.value - 1 + i),
+)
+console.log(
+	props.start,
+	props.end,
+	startYear.value,
+	endYear.value,
+	totalYears.value,
+	model.value,
 )
 const days = computed(() => Array.from({ length: totalDays }, (_, i) => i + 1))
 
@@ -67,6 +84,23 @@ const onScrollEnd = () => {
 		)
 	}
 }
+
+watch(
+	() => [model.value, props.start, props.end],
+	() => {
+		nextTick(() =>{
+		selectedDay.value = getDayOfYear(model.value)
+		selectedYear.value = model.value.getUTCFullYear()
+		// Set the initial scroll position
+		if (containerRef.value) {
+			const yearIndex = years.value.findIndex(
+				(year) => year === model.value.getUTCFullYear(),
+			)
+			const targetScrollTop = (yearIndex - 1) * yearHeight
+			containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'auto' })
+		}})
+	},
+)
 
 const isDragging = ref(false)
 
@@ -101,14 +135,6 @@ const endDrag = () => {
 			0,
 		),
 	)
-	console.log(
-		'dateutc',
-		setDayOfYear(
-			new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
-			selectedDay.value,
-		),
-	)
-	console.log('selectedDay', selectedDay.value, model.value)
 }
 
 const needleDrag = (event: MouseEvent) => {
@@ -119,6 +145,20 @@ const needleDrag = (event: MouseEvent) => {
 		const percentage = offsetX / rect.width
 
 		selectedDay.value = Math.max(Math.min(percentage, 1), 0) * totalDays
+		const tempDate = setDayOfYear(
+			new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
+			selectedDay.value,
+		)
+		model.value = new Date(
+			Date.UTC(
+				tempDate.getFullYear(),
+				tempDate.getMonth(),
+				tempDate.getDate(),
+				0,
+				0,
+				0,
+			),
+		)
 	}
 }
 
@@ -183,11 +223,10 @@ function assignTimelinePositions(
 const scaleY = 0.025
 const positionY = (y: number) => {
 	if (y % 2 === 0) {
-		return -0.025 * y
+		return -scaleY * y
 	} else {
-		return 0.025 * (y + 1)
+		return scaleY * (y + 1)
 	}
-	return 0
 }
 </script>
 
@@ -196,7 +235,7 @@ const positionY = (y: number) => {
 		<div
 			class="time-reel-container"
 			ref="containerRef"
-			:style="{ height: `${yearHeight * 3}px` }"
+			:style="{ height: `${yearHeight * rowsToShow}px` }"
 			v-on:scrollend="onScrollEnd"
 		>
 			<div class="year-grid">
@@ -228,8 +267,10 @@ const positionY = (y: number) => {
 							:x="event.startX"
 							:width="event.endX - event.startX"
 							:y="positionY(event.y)"
-							:height="0.024"
+							:height="scaleY"
 							:fill="event.color"
+							:stroke="event.color"
+							:stroke-width="0.8 * scaleY"
 						></rect>
 					</svg>
 				</div>

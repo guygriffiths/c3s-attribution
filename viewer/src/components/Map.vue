@@ -34,19 +34,8 @@ const bgLayer = {
 		'&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
 }
 
-watch(
-	() => store.isoDatetime,
-	(newTime) => {
-		if (newTime) {
-			console.log('newTime', newTime, 'wmsRef', wmsRef.value)
-			wmsRef.value?.leafletObject?.setParams({
-				// @ts-ignore
-				time: newTime,
-			})
-		}
-	},
-)
-
+// TODO Can we add a delay before this gets updated? We probably want to use another variable, watch store.isoDatetime, and set a timeout.
+// OR convert to a ref instead, and use a watcher on store.isoDatetime to update the ref.
 const wmtsUrl = computed(() => {
 	return `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${store.isoDatetime}`
 })
@@ -71,26 +60,11 @@ const wmtsUrl = computed(() => {
 				layer-type="base"
 				:zIndex="1"
 			></LTileLayer>
-			<!-- url="https://era-explorer.ecmwf-development.f.ewcloud.host/geoserver/wms" -->
 			<LTileLayer
 				:url="wmtsUrl"
 				:zIndex="2"
 				:opacity="0.75"
 				></LTileLayer>
-			<!-- <LWmsTileLayer
-				ref="wmsRef"
-				v-show="store.selectedTime"
-				:url="WMS_ROOT"
-				:layers="T2M_LAYER"
-				format="image/png"
-				styles="default"
-				layer-type="base"
-				:options="{
-					time: store.isoDatetime,
-				}"
-				:zIndex="2"
-				:opacity="0.75"
-			></LWmsTileLayer> -->
 			<LCircleMarker v-for="event in store.activeEvents" :lat-lng="event.centroid">
 				<LPopup>
 					<p>{{ event }}</p>

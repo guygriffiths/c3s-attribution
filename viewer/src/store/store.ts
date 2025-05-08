@@ -1,5 +1,5 @@
 import * as d3 from 'd3'
-import { addDays, format, formatISO } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import { defineStore } from 'pinia'
 
 type LayerDetails = any
@@ -35,20 +35,8 @@ export const useStore = defineStore('main', {
 	},
 	getters: {
 		isLoading: (state) => state.loadingCount > 0,
-		// earliestDate: (state) => {
-		// 	// return new Date(2022,0,1,0,0,0)
-		// 	if (state.times.length > 0) {
-		// 		return state.times[0]
-		// 	}
-		// },
-		// latestDate: (state) => {
-		// 	if (state.times.length > 0) {
-		// 		return state.times[state.times.length - 1]
-		// 	}
-		// },
 		isoDatetime: (state) => {
-			console.log('isoDatetime', formatISO(state.selectedTime))
-			console.log('isoDatetime', state.selectedTime.toISOString())
+			// This always returns the datetime in UTC, which is what we need
 			return state.selectedTime.toISOString()
 		},
 		activeEvents: (state) => {
@@ -64,54 +52,8 @@ export const useStore = defineStore('main', {
 		setLoadingDone() {
 			this.loadingCount--
 		},
-		setDate(date: Date) {
-			this.selectedTime = date
-		},
 		init() {
 			this.setLoading()
-
-			// fetch(
-			// 	`${WMS_ROOT}?service=WMS&version=1.3.0&request=GetMetadata&item=layerDetails&layername=${T2M_LAYER}`,
-			// )
-			// 	.then((response) => {
-			// 		if (!response.ok) {
-			// 			throw new Error('Network response was not ok')
-			// 		}
-			// 		return response.json()
-			// 	})
-			// 	.then((data) => {
-			// 		this.layerDetails = data
-			// 		const datesWithData: Date[] = []
-			// 		Object.entries(this.layerDetails.datesWithData).forEach(
-			// 			(entry: [string, any]) => {
-			// 				const year: number = parseInt(entry[0])
-			// 				console.log('year', year, this.layerDetails)
-			// 				const months: any = entry[1]
-			// 				Object.entries(months).forEach((monthEntry: [string, any]) => {
-			// 					const month: number = parseInt(monthEntry[0])
-			// 					const days: any = monthEntry[1]
-			// 					days.forEach((day: number) => {
-			// 						// Don't need to subtract 1 from month, as the month is already 0-indexed
-			// 						datesWithData.push(new Date(year, month, day, 12, 0, 0))
-			// 					})
-			// 				})
-			// 			},
-			// 		)
-			// 		// TODO - this should probably contain every time in the range
-			// 		datesWithData.sort((a, b) => a.getTime() - b.getTime())
-			// 		if(datesWithData[0] < this.startTime) {
-			// 			this.startTime = new Date(datesWithData[0])
-			// 		}
-			// 		if(datesWithData[datesWithData.length - 1] > this.endTime) {
-			// 			this.endTime = new Date(datesWithData[datesWithData.length - 1])
-			// 		}
-			// 		this.selectedTime = parseISO(this.layerDetails.nearestTimeIso)
-			// 		this.setLoadingDone()
-			// 	})
-			// 	.catch((error) => {
-			// 		console.error('There was a problem with the fetch operation:', error)
-			// 		this.setLoadingDone()
-			// 	})
 
 			fetch('/events.json')
 				.then((response) => {
@@ -121,6 +63,7 @@ export const useStore = defineStore('main', {
 					return response.json()
 				})
 				.then((data) => {
+					this.endTime = new Date(0)
 					this.events = data
 					this.events.forEach((event) => {
 						event.startTime = new Date(event.startTime)
@@ -143,8 +86,6 @@ export const useStore = defineStore('main', {
 							this.eventsByDay.get(dateStr)?.push(event)
 						}
 					})
-					// this.selectedTime = new Date(this.endTime)
-					console.log('events', this.eventsByDay)
 					this.setLoadingDone()
 				})
 				.catch((error) => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
@@ -9,12 +9,10 @@ import TimeReel from './common/TimeReel.vue'
 const $l = useLabels()
 const store = useStore()
 
-const route = useRoute()
-
 onMounted(async () => {
-	console.log(import.meta.env)
-	console.log(route)
 })
+
+const selTime = ref(new Date('2013-10-01T00:00:00Z'))
 </script>
 
 <template>
@@ -42,8 +40,8 @@ onMounted(async () => {
 	}
 
 	#times {
-		flex: 0 0 100px;
-
+		flex-grow: 0;
+		flex-shrink: 0;
 	}
 }
 </style>

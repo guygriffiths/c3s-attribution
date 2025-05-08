@@ -7,13 +7,15 @@ from sklearn.cluster import DBSCAN
 
 # Constants
 TEMP_THRESHOLD = 28 + 273.15  # Kelvin
-TIME_SCALE = np.radians(0.25/4)  # radians per time step
-EPS = np.radians(0.44)  # epsilon for DBSCAN
-MIN_SAMPLES = 50  # minimum samples for DBSCAN
-CHUNK_SIZE = 16  # size of each chunk to process
+TIME_SCALE = np.radians(0.25 * 0.5)  # radians per time step - 12 hours (0.5 days) equals 0.25 degrees of lat/lon
+# epsilon for DBSCAN. With a regularly spaced (i.e. equally scaled in all directions) 0.25 degree grid
+# this is equivalent to a knights move away in any plane. This gives quite generous clusters, which we mitigate by upping the min_samples
+EPS = np.radians(0.56)
+MIN_SAMPLES = 100  # minimum samples for DBSCAN
+CHUNK_SIZE = 40  # size of each chunk to process
 # Make the chunks overlap by enough that no edges get missed
-CHUNK_OVERLAP = int(np.ceil(EPS / TIME_SCALE))
-MIN_CLUSTER_SIZE = 500
+CHUNK_OVERLAP = int(np.ceil(EPS / TIME_SCALE)) + 2
+# MIN_CLUSTER_SIZE = 100
 
 def to_radians(degrees):
     return degrees * np.pi / 180.0
@@ -35,7 +37,7 @@ def generate_chunks(n_timesteps, chunk_size, overlap):
             for start in range(0, n_timesteps, step)
             if start < n_timesteps]
 
-def extract_hot_coords(data, ref, time_idx_range, time_values):
+def extract_hot_coords(data, ref, time_idx_range):
     lat = data.latitude.values
     lon = data.longitude.values
     coords = []
@@ -77,29 +79,36 @@ def run_dbscan(coords, eps=EPS, min_samples=MIN_SAMPLES):
     return clustering.labels_
 
 def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
-    coords, metadata = extract_hot_coords(data, ref, time_idx_range, time_values)
+    '''
+    Warning - last_clusters is modified in place with clusters which extend it, and new clusters are returned
+    '''
+    coords, metadata = extract_hot_coords(data, ref, time_idx_range)
     labels = run_dbscan(coords)
 
     clusters = []
     if labels.size == 0:
         return clusters
 
+    def time_string(t):
+        return str(t.astype("M8[ms]"))+'Z'
+
     for label in set(labels):
         if label == -1:
             continue  # noise
 
         points = [m for i, m in enumerate(metadata) if labels[i] == label]
-        if len(points) < MIN_CLUSTER_SIZE:
-            continue
+        # if len(points) < MIN_CLUSTER_SIZE:
+        #     continue
         times = sorted(set([p[0] for p in points]))
         lats = [p[1] for p in points]
         lons = [p[2] for p in points]
-        sizes = [len([p for p in points if p[0] == t]) for t in times]
+        max_area = max([len([p for p in points if p[0] == t]) for t in times])
+        slices = [[p for (p, i) in points if p[0] == t and i != 0] for t in times]
 
         extended = False
         if last_clusters:
             for cluster in last_clusters:
-                overlap_times = set([t for t in times if t in cluster["timeIndices"]])
+                overlap_times = set([t for t in times if t in cluster["times"]])
                 cdist = np.linalg.norm(
                     np.array(cluster["centroid"]) - np.array([float(np.mean(lats)), float(np.mean(lons))])
                 )
@@ -109,41 +118,36 @@ def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
                     float(np.max(lats)),
                     float(np.max(lons)),
                 ]) and cdist < 2.0:
-                    #
-                    #
-                    # TODO
-                    #
-                    #
-                    # Do this better! Make sure the created cluster is good, and add it to the new list of clisters, take it out the of the old list
-                    #
-                    #
-
-                    # print(f"Cluster {times}, {sizes} is similar to previous cluster {cluster}. Merging.")
+                    # TODO - this is ok, but it could be more robust.
                     print(f"Similar clusters, centroid distance: {cdist}")
-                    # print(f"Last centroid: {cluster['centroid']}, new centroid: {[float(np.mean(lats)), float(np.mean(lons))]}")
-                    # print(f"Last {CHUNK_OVERLAP} times: {cluster['timeIndices'][-CHUNK_OVERLAP:]}, new times: {times[:CHUNK_OVERLAP]}")
-                    # print(f"Last {CHUNK_OVERLAP} sizes: {cluster['sizes'][-CHUNK_OVERLAP:]}, new sizes: {sizes[:CHUNK_OVERLAP]}")
+
+                    # We have a cluster that overlaps with the previous one
+                    # Merge this one into the previous one
+                    # This modifies last_clusters in places
                     cluster["size"] += len(points)
-                    cluster["timeIndices"] = sorted(set(cluster["timeIndices"] + times))
-                    cluster["startTime"] = str(time_values[cluster["timeIndices"][0]].astype("M8[ms]"))
-                    cluster["endTime"] = str(time_values[cluster["timeIndices"][-1]].astype("M8[ms]"))
+                    cluster["maxArea"] = max(max_area, cluster["maxArea"])
+                    cluster["times"] = sorted(set(cluster["timeIndices"] + [time_string(time_values[i]) for i in times]))
+                    cluster["startTime"] = time_string(time_values(cluster["timeIndices"][0]))
+                    cluster["endTime"] = time_string(time_values(cluster["timeIndices"][-1]))
                     cluster["bbox"] = [
                         float(min(cluster["bbox"][0], np.min(lats))),
                         float(min(cluster["bbox"][1], np.min(lons))),
                         float(max(cluster["bbox"][2], np.max(lats))),
                         float(max(cluster["bbox"][3], np.max(lons))),
                     ]
-                    cluster["sizes"].extend(sizes[CHUNK_OVERLAP:])
+                    cluster["slices"].extend(slices[CHUNK_OVERLAP:])
                     # print(f"Updated cluster {cluster} with new points.")
                     extended = True
                     break
         if not extended:
-            # print(f"Creating new cluster {times}, {sizes}, centroid: {np.mean(lats)}, {np.mean(lons)}")
+            # This cluster doesn't overlap with any previous clusters
+            # Create a new one to return
             clusters.append({
-                "timeIndices": times,
-                "startTime": str(time_values[times[0]].astype("M8[ms]"))+'Z',
-                "endTime": str(time_values[times[-1]].astype("M8[ms]"))+'Z',
-                "sizes": sizes,
+                "times": [time_string(time_values[i]) for i in times],
+                "startTime": time_string(time_values[times[0]]),
+                "endTime": time_string(time_values[times[-1]]),
+                "slices": slices,
+                "maxArea": max_area,
                 "bbox": [
                     float(np.min(lats)),
                     float(np.min(lons)),
@@ -162,9 +166,10 @@ def bboxes_overlap(b1, b2):
     return lat_overlap and lon_overlap
 
 def main():
-    t2m, ref = load_data("/data/era5_2*.nc", "/data/era5_ref98.nc")
+    t2m, ref = load_data("/data/era5_[12]*.nc", "/data/era5_ref98.nc")
     time_values = np.array([np.datetime64(t) for t in t2m.valid_time.values])
     n_timesteps = t2m.sizes["valid_time"]
+    # n_timesteps = min(240, n_timesteps)  # Limit to 100 for testing
     # n_timesteps = min(TIMESTEPS, n_timesteps)  # Limit to TIMESTEPS for testing
 
     chunk_ranges = generate_chunks(n_timesteps, CHUNK_SIZE, CHUNK_OVERLAP)
@@ -178,7 +183,7 @@ def main():
         if last_clusters is not None:
             all_clusters.extend(last_clusters)
         if last_clusters:
-            with open(f"/data/clusters_chunk_{idx}.json", "w") as f:
+            with open(f"/data/output/clusters_chunk_{idx}.json", "w") as f:
                 json.dump(last_clusters, f, indent=2)
         last_clusters = clusters
     all_clusters.extend(last_clusters)
@@ -190,7 +195,7 @@ def main():
 
 
 
-    with open("/data/events_output.json", "w") as f:
+    with open("/data/output/events_output.json", "w") as f:
         json.dump(all_clusters, f, indent=2)
 
 if __name__ == "__main__":
