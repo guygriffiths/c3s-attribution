@@ -7,9 +7,9 @@ from sklearn.cluster import DBSCAN
 
 # Constants
 TEMP_THRESHOLD = 28 + 273.15  # Kelvin
-TIME_SCALE = np.radians(0.125)  # radians per time step
-EPS = np.radians(0.38)  # epsilon for DBSCAN
-MIN_SAMPLES = 30  # minimum samples for DBSCAN
+TIME_SCALE = np.radians(0.25/4)  # radians per time step
+EPS = np.radians(0.44)  # epsilon for DBSCAN
+MIN_SAMPLES = 50  # minimum samples for DBSCAN
 CHUNK_SIZE = 16  # size of each chunk to process
 # Make the chunks overlap by enough that no edges get missed
 CHUNK_OVERLAP = int(np.ceil(EPS / TIME_SCALE))
