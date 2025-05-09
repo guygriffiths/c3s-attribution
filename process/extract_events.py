@@ -4,6 +4,7 @@ import xarray as xr
 import numpy as np
 import json
 from sklearn.cluster import DBSCAN
+from scipy.sparse import coo_matrix
 
 # Constants
 TEMP_THRESHOLD = 28 + 273.15  # Kelvin
@@ -12,9 +13,9 @@ TIME_SCALE = np.radians(0.25 * 0.5)  # radians per time step - 12 hours (0.5 day
 # this is equivalent to a knights move away in any plane. This gives quite generous clusters, which we mitigate by upping the min_samples
 EPS = np.radians(0.56)
 MIN_SAMPLES = 100  # minimum samples for DBSCAN
-CHUNK_SIZE = 40  # size of each chunk to process
+CHUNK_SIZE = 5  # size of each chunk to process
 # Make the chunks overlap by enough that no edges get missed
-CHUNK_OVERLAP = int(np.ceil(EPS / TIME_SCALE)) + 2
+CHUNK_OVERLAP = 0#int(np.ceil(EPS / TIME_SCALE)) + 2
 # MIN_CLUSTER_SIZE = 100
 
 def to_radians(degrees):
@@ -40,50 +41,108 @@ def generate_chunks(n_timesteps, chunk_size, overlap):
 def extract_hot_coords(data, ref, time_idx_range):
     lat = data.latitude.values
     lon = data.longitude.values
-    coords = []
     metadata = []
+    n_lons = data.sizes["longitude"]
+    points = []
+    total_counts = []
+    p1idx = []
+    p2idx = []
+    dists = []
 
+    total_count = 0
     for t in range(*time_idx_range):
         t2m_slice = data.isel(valid_time=t)
         mask = (t2m_slice > TEMP_THRESHOLD) & (t2m_slice > ref)
 
         if not np.any(mask):
             continue
+        indices = np.argwhere(mask.values)
+        print(f"Found {len(indices)} hot points at time {t}: {indices}")
+        points.append(indices)
+        print(f"points is now: {points} ({len(points)} points, {total_count} total)")
+        for i in range(len(indices)):
+            # First check distance from every other point here
+            i_lat, i_lon = indices[i]
+            # Append some metadata for this point
+            metadata.append((t, lat[i_lat], lon[i_lon]))
 
-        lat_grid, lon_grid = np.meshgrid(lat, lon, indexing="ij")
-        lats = lat_grid[mask]
-        lons = lon_grid[mask]
+            # print(f"Checking point {i_lat}, {i_lon} of {len(indices)}")
+            for j in range(i + 1, len(indices)):
+                j_lat, j_lon = indices[j]
 
-        times = np.full_like(lats, t, dtype=float)
-        points = np.column_stack([
-            times * TIME_SCALE,
-            to_radians(lats),
-            to_radians(lons),
-        ])
+                lat_diff = abs(i_lat - j_lat)
+                if lat_diff > 1:
+                    continue
 
-        coords.append(points)
-        metadata.extend([(t, lat_, lon_) for lat_, lon_ in zip(lats, lons)])
+                lon_diff = abs(i_lon - j_lon)
 
-    if coords:
-        return np.vstack(coords), metadata
-    else:
-        return np.empty((0, 3)), []
+                if lon_diff > n_lons / 2:
+                    # Wrap around the longitudes
+                    lon_diff = n_lons - lon_diff
+                    # if lon_diff < 3:
+                    #     print(f"Wrapped around {i_lon}, {j_lon} with difference: {lon_diff}")
+
+                if lon_diff > 1:
+                    continue
+                dist = 1#np.sqrt((lat[i_lat] - lat[j_lat]) ** 2 + (lon[i_lon] - lon[j_lon]) ** 2)
+                # if dist < EPS:
+                p1idx.append(i + total_count)
+                p2idx.append(j + total_count)
+                dists.append(dist)
+                # print(f"\tNear point {j_lat}, {j_lon}")
+            for oldt in range(max(0, t-2), t):
+                oldindices = points[oldt]
+                for j in range(len(oldindices)):
+                    j_lat, j_lon = oldindices[j]
+                    # We also consider nearest neighbours in the previous time step
+                    if abs(i_lat - j_lat) > 1 or abs(i_lon - j_lon) > 1:
+                        continue
+                    p1idx.append(i + total_count)
+                    p2idx.append(j + total_counts[oldt]) 
+                    dist = 1
+                    dists.append(dist)
+                    # print(f"\tNear point {j_lat}, {j_lon} in previous time step, p1idx, p2idx {p1idx[-1]} {p2idx[-1]}")
+        total_count += len(indices)
+        total_counts.append(total_count)
+
+        # metadata.extend([(t, lat_, lon_) for lat_, lon_ in zip([lats, lons)])
+
+    # Combine distances into sparse matrix
+    D = coo_matrix((dists, (p1idx, p2idx)), shape=(total_count, total_count))
+
+    # Make it symmetric (DBSCAN expects full pairwise distances)
+    D = D + D.T
+    return  D, metadata
+
+    
+    print(f"DBSCAN found {len(set(labels))} clusters")
+    print(f"Labels: {labels}")
+
+    # coords = np.vstack(coords) if coords else np.empty((0, 3))
+    # metadata = np.array(metadata) if metadata else  []
+    # print(f"Extracted {coords}")
+    # return coords, metadata
+
 
 def run_dbscan(coords, eps=EPS, min_samples=MIN_SAMPLES):
     if coords.size == 0:
         return np.array([])
 
     print(f"Running DBSCAN with eps={eps}, min_samples={min_samples} on {coords.shape[0]} points")
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    print(f"DBSCAN found {len(set(clustering.labels_))} clusters")
-    return clustering.labels_
+    # clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    db = DBSCAN(eps=1.5, min_samples=MIN_SAMPLES, metric='precomputed')
+    labels = db.fit_predict(D)  
+    print(f"DBSCAN found {len(set(labels))} clusters")
+    # return clustering.labels_
+    return labels
 
 def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
     '''
     Warning - last_clusters is modified in place with clusters which extend it, and new clusters are returned
     '''
-    coords, metadata = extract_hot_coords(data, ref, time_idx_range)
-    labels = run_dbscan(coords)
+    labels = extract_hot_coords(data, ref, time_idx_range)
+    # coords, metadata = extract_hot_coords(data, ref, time_idx_range)
+    # labels = run_dbscan(coords)
 
     clusters = []
     if labels.size == 0:
