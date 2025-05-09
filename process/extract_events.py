@@ -8,18 +8,16 @@ from scipy.sparse import coo_matrix
 
 # Constants
 TEMP_THRESHOLD = 28 + 273.15  # Kelvin
-TIME_SCALE = np.radians(0.25 * 0.5)  # radians per time step - 12 hours (0.5 days) equals 0.25 degrees of lat/lon
+TIME_SCALE = np.radians(0.25)  # radians per time step - 12 hours (0.5 days) equals 0.25 degrees of lat/lon
 # epsilon for DBSCAN. With a regularly spaced (i.e. equally scaled in all directions) 0.25 degree grid
 # this is equivalent to a knights move away in any plane. This gives quite generous clusters, which we mitigate by upping the min_samples
 EPS = np.radians(0.56)
-MIN_SAMPLES = 100  # minimum samples for DBSCAN
+MIN_SAMPLES = 50  # minimum samples for DBSCAN
 CHUNK_SIZE = 5  # size of each chunk to process
 # Make the chunks overlap by enough that no edges get missed
 CHUNK_OVERLAP = 0#int(np.ceil(EPS / TIME_SCALE)) + 2
-# MIN_CLUSTER_SIZE = 100
+MIN_CLUSTER_SIZE = 0
 
-def to_radians(degrees):
-    return degrees * np.pi / 180.0
 
 def load_data(data_path, ref_path):
     ds = xr.open_mfdataset(data_path, chunks={"valid_time": CHUNK_SIZE})
@@ -124,11 +122,12 @@ def extract_hot_coords(data, ref, time_idx_range):
     # return coords, metadata
 
 
-def run_dbscan(coords, eps=EPS, min_samples=MIN_SAMPLES):
-    if coords.size == 0:
+
+def run_dbscan(D, eps=EPS, min_samples=MIN_SAMPLES):
+    if D.size == 0:
         return np.array([])
 
-    print(f"Running DBSCAN with eps={eps}, min_samples={min_samples} on {coords.shape[0]} points")
+    print(f"Running DBSCAN with eps={eps}, min_samples={min_samples} on {D.shape[0]} points")
     # clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
     db = DBSCAN(eps=1.5, min_samples=MIN_SAMPLES, metric='precomputed')
     labels = db.fit_predict(D)  
@@ -156,13 +155,15 @@ def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
             continue  # noise
 
         points = [m for i, m in enumerate(metadata) if labels[i] == label]
-        # if len(points) < MIN_CLUSTER_SIZE:
-        #     continue
+        if len(points) < MIN_CLUSTER_SIZE:
+            continue
         times = sorted(set([p[0] for p in points]))
+        if len(times) < 3:
+            continue
         lats = [p[1] for p in points]
         lons = [p[2] for p in points]
         max_area = max([len([p for p in points if p[0] == t]) for t in times])
-        slices = [[p for (p, i) in points if p[0] == t and i != 0] for t in times]
+        slices = [[p for p in points if p[0] == t] for t in times]
 
         extended = False
         if last_clusters:
@@ -235,15 +236,17 @@ def main():
     all_clusters = []
     last_clusters = None
     for idx, time_range in enumerate(chunk_ranges):
+        # if idx < 0.85*len(chunk_ranges):
+        #     print(f"Skipping chunk {idx + 1} of {len(chunk_ranges)}: {time_range}")
+        #     continue
         print(f"Processing chunk {idx + 1} of {len(chunk_ranges)}: {time_range}")
         clusters = cluster_chunk(t2m, ref, time_range, time_values, last_clusters)
 
         print(f"Found {len(clusters)} clusters in chunk {idx + 1}")
         if last_clusters is not None:
             all_clusters.extend(last_clusters)
-        if last_clusters:
-            with open(f"/data/output/clusters_chunk_{idx}.json", "w") as f:
-                json.dump(last_clusters, f, indent=2)
+            with open(f"/data/output/events-partial-{idx}.json", "w") as f:
+                json.dump(all_clusters, f, indent=2)
         last_clusters = clusters
     all_clusters.extend(last_clusters)
     print(f"Total clusters found: {len(all_clusters)}")
