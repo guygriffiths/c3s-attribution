@@ -4,6 +4,17 @@ import { defineStore } from 'pinia'
 
 type LayerDetails = any
 
+interface Event {
+	times: string[]
+	startTime: Date
+	endTime: Date
+	slices: any[]
+	maxArea: number
+	bbox: [number, number, number, number]
+	centroid: [number, number]
+	size: number
+}
+
 interface State {
 	lang: Language
 	loadingCount: number
@@ -12,7 +23,7 @@ interface State {
 	startTime: Date
 	endTime: Date
 	events: any[]
-	eventsByDay: Map<string, any[]>
+	eventsByDay: Map<string, Event[]>
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -24,7 +35,7 @@ export const useStore = defineStore('main', {
 		return {
 			lang: 'en',
 			loadingCount: 0,
-			selectedTime: new Date(2024, 4, 28, 0 ,0 ,0),
+			selectedTime: new Date(2024, 4, 28, 0, 0, 0),
 			layerDetails: null,
 			// times: [],
 			startTime: new Date(),
@@ -40,9 +51,34 @@ export const useStore = defineStore('main', {
 			return state.selectedTime.toISOString()
 		},
 		activeEvents: (state) => {
-			const dateStr = format(state.selectedTime, 'yyyy-MM-dd')
-			return state.eventsByDay.get(dateStr)
-		}
+			return state.events.filter((event) => {
+				const startDate = new Date(event.startTime)
+				const endDate = new Date(event.endTime)
+				startDate.setHours(0, 0, 0, 0)
+				endDate.setHours(23, 59, 59, 999)
+				return (
+					state.selectedTime >= startDate &&
+					state.selectedTime <= endDate
+				)
+			})
+			// Once events support this...
+			// const dateStr = format(state.selectedTime, 'yyyy-MM-dd')
+			// state.eventsByDay.get(dateStr)?.map((event) => {
+			// 	const idx = event.times.indexOf(state.selectedTime.toISOString())
+			// 	const points = event.slices[idx].map(
+			// 		(slice: [number, number, number]) => turfPoint([slice[1], slice[2]]),
+			// 	)
+			// 	// Create a FeatureCollection
+			// 	const featureCollection = turfFeatureCollection(points)
+
+			// 	// Get the convex hull (the enclosing polygon)
+			// 	const hull = turfConvex(featureCollection)
+
+			// 	// Output the polygon coordinates (in GeoJSON format)
+			// 	console.log(hull?.geometry.coordinates)
+			// 	return hull?.geometry.coordinates
+			// })
+		},
 	},
 	actions: {
 		/* You can define actions here and just call then like normal methods */
@@ -69,18 +105,18 @@ export const useStore = defineStore('main', {
 						event.startTime = new Date(event.startTime)
 						event.endTime = new Date(event.endTime)
 						const startDate = new Date(event.startTime)
-						if(startDate < this.startTime) {
+						if (startDate < this.startTime) {
 							this.startTime = new Date(startDate)
 						}
 						startDate.setHours(0, 0, 0, 0)
 						const endDate = new Date(event.endTime)
-						if(endDate > this.endTime) {
+						if (endDate > this.endTime) {
 							this.endTime = new Date(endDate)
 						}
 						endDate.setHours(23, 59, 59, 999)
 						for (let d = startDate; d < endDate; d = addDays(d, 1)) {
 							const dateStr = format(d, 'yyyy-MM-dd')
-							if(!this.eventsByDay.has(dateStr)) {
+							if (!this.eventsByDay.has(dateStr)) {
 								this.eventsByDay.set(dateStr, [])
 							}
 							this.eventsByDay.get(dateStr)?.push(event)

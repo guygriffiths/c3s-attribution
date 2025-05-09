@@ -10,6 +10,9 @@ import {
 	nextTick,
 } from 'vue'
 import { catScheme } from '@/store/store'
+import { useLabels } from '@/lib/labels';
+
+const $l = useLabels()
 
 const props = defineProps({
 	start: {
@@ -228,6 +231,7 @@ const positionY = (y: number) => {
 		return scaleY * (y + 1)
 	}
 }
+
 </script>
 
 <template>
@@ -290,18 +294,18 @@ const positionY = (y: number) => {
 						<p>{{ dayStr(selectedDay) }}</p>
 					</div>
 				</div>
-				<p class="jan">Jan</p>
-				<p class="feb">Feb</p>
-				<p class="mar">Mar</p>
-				<p class="apr">Apr</p>
-				<p class="may">May</p>
-				<p class="jun">Jun</p>
-				<p class="jul">Jul</p>
-				<p class="aug">Aug</p>
-				<p class="sep">Sep</p>
-				<p class="oct">Oct</p>
-				<p class="nov">Nov</p>
-				<p class="dec">Dec</p>
+				<p class="jan">{{$l.months.jan}}</p>
+				<p class="feb">{{$l.months.feb}}</p>
+				<p class="mar">{{$l.months.mar}}</p>
+				<p class="apr">{{$l.months.apr}}</p>
+				<p class="may">{{$l.months.may}}</p>
+				<p class="jun">{{$l.months.jun}}</p>
+				<p class="jul">{{$l.months.jul}}</p>
+				<p class="aug">{{$l.months.aug}}</p>
+				<p class="sep">{{$l.months.sep}}</p>
+				<p class="oct">{{$l.months.oct}}</p>
+				<p class="nov">{{$l.months.nov}}</p>
+				<p class="dec">{{$l.months.dec}}</p>
 			</div>
 			<div class="highlight-row fade-bottom"></div>
 		</div>
@@ -392,8 +396,6 @@ $margin: 0 0.5rem;
 				rgba($fadeColor, 0.3),
 				rgba($fadeColor, 1)
 			);
-			// background: #aaaaaa;
-			// opacity: 0.5;
 		}
 		&.fade-bottom {
 			pointer-events: none;
@@ -402,8 +404,6 @@ $margin: 0 0.5rem;
 				rgba($fadeColor, 0.3),
 				rgba($fadeColor, 1)
 			);
-			// background: #aaaaaa;
-			// opacity: 0.5;
 		}
 		&.highlight {
 			position: relative;
@@ -474,7 +474,6 @@ $margin: 0 0.5rem;
 				user-select: none;
 				flex-grow: 1;
 				text-align: center;
-				// height: 100%;
 				margin: 0;
 				display: flex;
 				justify-content: center;

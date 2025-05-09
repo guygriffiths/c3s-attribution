@@ -36,9 +36,25 @@ const bgLayer = {
 
 // TODO Can we add a delay before this gets updated? We probably want to use another variable, watch store.isoDatetime, and set a timeout.
 // OR convert to a ref instead, and use a watcher on store.isoDatetime to update the ref.
-const wmtsUrl = computed(() => {
-	return `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${store.isoDatetime}`
-})
+const wmtsUrl = ref(`https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${store.isoDatetime}`)
+
+let debounceTimeout: NodeJS.Timeout | null = null
+const debounce = (func: () => void, delay: number) => {
+	if (debounceTimeout) {
+		clearTimeout(debounceTimeout)
+	}
+	debounceTimeout = setTimeout(() => {
+		func()
+	}, delay)
+}
+watch(
+	() => store.isoDatetime,
+	(newVal) => {
+		debounce(() => {
+			wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
+		}, 500)
+	}
+)
 </script>
 
 <template>

@@ -6,7 +6,21 @@ const langNames: Record<Language, string> = {
 }
 
 const labelsEn = {
-	title: 'Application title',
+	title: 'C3S Extreme Events Viewer',
+	months: {
+		jan: 'Jan',
+		feb: 'Feb',
+		mar: 'Mar',
+		apr: 'Apr',
+		may: 'May',
+		jun: 'Jun',
+		jul: 'Jul',
+		aug: 'Aug',
+		sep: 'Sep',
+		oct: 'Oct',
+		nov: 'Nov',
+		dec: 'Dec',
+	},
 	main: 'Main page',
 	mainTitle: 'Main content goes here',
 	e404Title: 'Page not found',
@@ -88,4 +102,5 @@ function createI18n(langFunc: () => Language) {
 		)
 }
 
-export { labels, locales, langNames, useLabels, createI18n }
+export { createI18n, labels, langNames, locales, useLabels }
+
