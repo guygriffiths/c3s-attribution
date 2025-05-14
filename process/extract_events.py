@@ -5,6 +5,7 @@ import numpy as np
 import json
 from sklearn.cluster import DBSCAN
 from scipy.sparse import coo_matrix
+import time
 
 # Constants
 TEMP_THRESHOLD = 28 + 273.15  # Kelvin
@@ -20,7 +21,7 @@ MIN_CLUSTER_SIZE = 0
 
 
 def load_data(data_path, ref_path):
-    ds = xr.open_mfdataset(data_path, chunks={"valid_time": CHUNK_SIZE})
+    ds = xr.open_mfdataset(data_path)
     ref = xr.open_dataset(ref_path)
 
     def shift_longitudes(da):
@@ -36,35 +37,46 @@ def generate_chunks(n_timesteps, chunk_size, overlap):
             for start in range(0, n_timesteps, step)
             if start < n_timesteps]
 
-def extract_hot_coords(data, ref, time_idx_range):
+def index_in_metadata(metadata, newt, lat, lon):
+    idx = 0
+    for (t,lt,ln) in metadata:
+        if lt == lat and ln == lon and t == newt:
+            return idx
+        idx += 1
+    return -1
+
+def extract_hot_coords(data, ref):
     lat = data.latitude.values
     lon = data.longitude.values
+    n_timesteps = 10 #data.sizes["valid_time"]
+
     metadata = []
     n_lons = data.sizes["longitude"]
     points = []
-    total_counts = []
+    # total_counts = []
     p1idx = []
     p2idx = []
     dists = []
 
-    total_count = 0
-    for t in range(*time_idx_range):
+    # total_count = 0
+    for t in range(n_timesteps):
         t2m_slice = data.isel(valid_time=t)
         mask = (t2m_slice > TEMP_THRESHOLD) & (t2m_slice > ref)
 
         if not np.any(mask):
             continue
         indices = np.argwhere(mask.values)
-        print(f"Found {len(indices)} hot points at time {t}: {indices}")
+        print(f"Found {len(indices)} hot points at time {t}")
         points.append(indices)
-        print(f"points is now: {points} ({len(points)} points, {total_count} total)")
+        # print(f"points is now: {points} ({len(points)} points, {total_count} total)")
+        matched_points = 0
         for i in range(len(indices)):
             # First check distance from every other point here
             i_lat, i_lon = indices[i]
-            # Append some metadata for this point
-            metadata.append((t, lat[i_lat], lon[i_lon]))
 
-            # print(f"Checking point {i_lat}, {i_lon} of {len(indices)}")
+            matchedI = False
+            i_index = -1
+            
             for j in range(i + 1, len(indices)):
                 j_lat, j_lon = indices[j]
 
@@ -77,17 +89,31 @@ def extract_hot_coords(data, ref, time_idx_range):
                 if lon_diff > n_lons / 2:
                     # Wrap around the longitudes
                     lon_diff = n_lons - lon_diff
-                    # if lon_diff < 3:
-                    #     print(f"Wrapped around {i_lon}, {j_lon} with difference: {lon_diff}")
 
                 if lon_diff > 1:
                     continue
-                dist = 1#np.sqrt((lat[i_lat] - lat[j_lat]) ** 2 + (lon[i_lon] - lon[j_lon]) ** 2)
-                # if dist < EPS:
-                p1idx.append(i + total_count)
-                p2idx.append(j + total_count)
+
+                # We have a match!
+                matched_points += 1
+                if not matchedI:
+                    # Check if this point is already in the metadata
+                    idx = index_in_metadata(metadata, t, lat[i_lat], lon[i_lon])
+                    if idx == -1:
+                        # Not in metadata, add it
+                        i_index = len(metadata)
+                        metadata.append((t, lat[i_lat], lon[i_lon]))
+                    else:
+                        # Already in metadata, use that index
+                        i_index = idx
+                    matchedI = True
+
+                dist = 1 #np.sqrt((lat[i_lat] - lat[j_lat]) ** 2 + (lon[i_lon] - lon[j_lon]) ** 2)
+                p1idx.append(i_index)
+
+                p2idx.append(len(metadata))
+                metadata.append((t, lat[j_lat], lon[j_lon]))
+
                 dists.append(dist)
-                # print(f"\tNear point {j_lat}, {j_lon}")
             for oldt in range(max(0, t-2), t):
                 oldindices = points[oldt]
                 for j in range(len(oldindices)):
@@ -95,26 +121,42 @@ def extract_hot_coords(data, ref, time_idx_range):
                     # We also consider nearest neighbours in the previous time step
                     if abs(i_lat - j_lat) > 1 or abs(i_lon - j_lon) > 1:
                         continue
-                    p1idx.append(i + total_count)
-                    p2idx.append(j + total_counts[oldt]) 
+
+                    # We have a match!
+                    matched_points += 1
+                    idx = index_in_metadata(metadata, t, lat[i_lat], lon[i_lon])
+                    if idx == -1:
+                        # Not in metadata, add it
+                        i_index = len(metadata)
+                        metadata.append((t, lat[i_lat], lon[i_lon]))
+                    else:
+                        # Already in metadata, use that index
+                        i_index = idx
+                        
+
+                    p1idx.append(i_index)
+
+                    idx = index_in_metadata(metadata, oldt, lat[j_lat], lon[j_lon])
+                    if idx == -1:
+                        # Not in metadata, add it
+                        idx = len(metadata)
+                        metadata.append((oldt, lat[j_lat], lon[j_lon]))
+                    p2idx.append(idx) 
                     dist = 1
                     dists.append(dist)
                     # print(f"\tNear point {j_lat}, {j_lon} in previous time step, p1idx, p2idx {p1idx[-1]} {p2idx[-1]}")
-        total_count += len(indices)
-        total_counts.append(total_count)
+        # total_count += len(indices)
+        print(f"Matched points {matched_points} in this time step {t} with {len(indices)} indices ({len(metadata)} metadata entries). len(p1idx) {len(p1idx)}")
+        # total_counts.append(total_count)
 
         # metadata.extend([(t, lat_, lon_) for lat_, lon_ in zip([lats, lons)])
 
     # Combine distances into sparse matrix
-    D = coo_matrix((dists, (p1idx, p2idx)), shape=(total_count, total_count))
+    D = coo_matrix((dists, (p1idx, p2idx)), shape=(matched_points, matched_points))
 
     # Make it symmetric (DBSCAN expects full pairwise distances)
     D = D + D.T
     return  D, metadata
-
-    
-    print(f"DBSCAN found {len(set(labels))} clusters")
-    print(f"Labels: {labels}")
 
     # coords = np.vstack(coords) if coords else np.empty((0, 3))
     # metadata = np.array(metadata) if metadata else  []
@@ -129,8 +171,12 @@ def run_dbscan(D, eps=EPS, min_samples=MIN_SAMPLES):
 
     print(f"Running DBSCAN with eps={eps}, min_samples={min_samples} on {D.shape[0]} points")
     # clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    # Time the DBSCAN function
+    t1 = time.time()
     db = DBSCAN(eps=1.5, min_samples=MIN_SAMPLES, metric='precomputed')
     labels = db.fit_predict(D)  
+    t2 = time.time()
+    print(f"DBSCAN took {t2 - t1:.2f} seconds")
     print(f"DBSCAN found {len(set(labels))} clusters")
     # return clustering.labels_
     return labels
@@ -139,9 +185,8 @@ def cluster_chunk(data, ref, time_idx_range, time_values, last_clusters=None):
     '''
     Warning - last_clusters is modified in place with clusters which extend it, and new clusters are returned
     '''
-    labels = extract_hot_coords(data, ref, time_idx_range)
-    # coords, metadata = extract_hot_coords(data, ref, time_idx_range)
-    # labels = run_dbscan(coords)
+    coords, metadata = extract_hot_coords(data, ref)
+    labels = run_dbscan(coords)
 
     clusters = []
     if labels.size == 0:
@@ -226,39 +271,45 @@ def bboxes_overlap(b1, b2):
     return lat_overlap and lon_overlap
 
 def main():
-    t2m, ref = load_data("/data/era5_[12]*.nc", "/data/era5_ref98.nc")
-    time_values = np.array([np.datetime64(t) for t in t2m.valid_time.values])
-    n_timesteps = t2m.sizes["valid_time"]
-    # n_timesteps = min(240, n_timesteps)  # Limit to 100 for testing
-    # n_timesteps = min(TIMESTEPS, n_timesteps)  # Limit to TIMESTEPS for testing
-
-    chunk_ranges = generate_chunks(n_timesteps, CHUNK_SIZE, CHUNK_OVERLAP)
-    all_clusters = []
-    last_clusters = None
-    for idx, time_range in enumerate(chunk_ranges):
-        # if idx < 0.85*len(chunk_ranges):
-        #     print(f"Skipping chunk {idx + 1} of {len(chunk_ranges)}: {time_range}")
-        #     continue
-        print(f"Processing chunk {idx + 1} of {len(chunk_ranges)}: {time_range}")
-        clusters = cluster_chunk(t2m, ref, time_range, time_values, last_clusters)
-
-        print(f"Found {len(clusters)} clusters in chunk {idx + 1}")
-        if last_clusters is not None:
-            all_clusters.extend(last_clusters)
-            with open(f"/data/output/events-partial-{idx}.json", "w") as f:
-                json.dump(all_clusters, f, indent=2)
-        last_clusters = clusters
-    all_clusters.extend(last_clusters)
-    print(f"Total clusters found: {len(all_clusters)}")
-
-    # print(f"Initial cluster count: {len(all_clusters)}")
-    # merged = merge_clusters(all_clusters)
-    # print(f"Merged cluster count: {len(merged)}")
-
-
-
+    t2m, ref = load_data("/data/era5_2024.nc", "/data/era5_ref98.nc")
+    time_values = np.array([np.datetime64(t) for t in t2m.valid_time.values[:int(t2m.sizes["valid_time"]/2)]])
+    clusters = cluster_chunk(t2m, ref, None, time_values, None)
     with open("/data/output/events_output.json", "w") as f:
-        json.dump(all_clusters, f, indent=2)
+        json.dump(clusters, f, indent=2)
+
+
+
+    # n_timesteps = t2m.sizes["valid_time"]
+    # # n_timesteps = min(240, n_timesteps)  # Limit to 100 for testing
+    # # n_timesteps = min(TIMESTEPS, n_timesteps)  # Limit to TIMESTEPS for testing
+
+    # chunk_ranges = generate_chunks(n_timesteps, CHUNK_SIZE, CHUNK_OVERLAP)
+    # all_clusters = []
+    # last_clusters = None
+    # for idx, time_range in enumerate(chunk_ranges):
+    #     # if idx < 0.85*len(chunk_ranges):
+    #     #     print(f"Skipping chunk {idx + 1} of {len(chunk_ranges)}: {time_range}")
+    #     #     continue
+    #     print(f"Processing chunk {idx + 1} of {len(chunk_ranges)}: {time_range}")
+    #     clusters = cluster_chunk(t2m, ref, time_range, time_values, last_clusters)
+
+    #     print(f"Found {len(clusters)} clusters in chunk {idx + 1}")
+    #     if last_clusters is not None:
+    #         all_clusters.extend(last_clusters)
+    #         with open(f"/data/output/events-partial-{idx}.json", "w") as f:
+    #             json.dump(all_clusters, f, indent=2)
+    #     last_clusters = clusters
+    # all_clusters.extend(last_clusters)
+    # print(f"Total clusters found: {len(all_clusters)}")
+
+    # # print(f"Initial cluster count: {len(all_clusters)}")
+    # # merged = merge_clusters(all_clusters)
+    # # print(f"Merged cluster count: {len(merged)}")
+
+
+
+    # with open("/data/output/events_output.json", "w") as f:
+    #     json.dump(all_clusters, f, indent=2)
 
 if __name__ == "__main__":
     main()
