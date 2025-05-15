@@ -1,12 +1,12 @@
 threshold temperature on percentile (98th) and min (28)
 
-TODO:
-Make quick tool for viewing clusters. Put t2m in BG from ERA explorer WMS calls(?)
-
 Use better method of joining clusters. Add more data to clusters.
 Pre-calculate metrics:
     Area covered (probably max 2d cell count?)
     Intensity (some function of exceedance)
     Mean Anomaly (is this intensity?)
     Length
+
+
+
 
