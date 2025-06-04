@@ -172,9 +172,10 @@ def main():
     n_timesteps = t2m.sizes["valid_time"]
     # n_timesteps = min(240, n_timesteps)  # Limit to 100 for testing
     # n_timesteps = min(TIMESTEPS, n_timesteps)  # Limit to TIMESTEPS for testing
-    for eps_deg in [0.46, 0.44, 0.36, 0.56]:
+    for eps_deg in [0.36, 0.56, 0.73, 0.9, 1.0]:
         eps = np.radians(eps_deg)
-        for i in range(50, 60, 1):
+        start = int((eps_deg - 0.06) * 100) - 10
+        for i in range(start, start+30, 1):
             min_samples = i
             chunk_ranges = generate_chunks(n_timesteps, CHUNK_SIZE, CHUNK_OVERLAP)
             all_clusters = []
@@ -199,6 +200,9 @@ def main():
 
             with open(f"/data/output/events-{eps_deg}-{min_samples}.json", "w") as f:
                 json.dump(all_clusters, f, indent=2)
+            if len(all_clusters) == 0:
+                print("No clusters found, skipping the rest parameter set.")
+                break
 
 if __name__ == "__main__":
     main()
