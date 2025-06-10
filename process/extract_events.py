@@ -6,18 +6,11 @@ import json
 from sklearn.cluster import DBSCAN
 from scipy.sparse import coo_matrix
 import time
+from collections import defaultdict
 
 # Constants
 TEMP_THRESHOLD = 28 + 273.15  # Kelvin
-TIME_SCALE = np.radians(0.25)  # radians per time step - 12 hours (0.5 days) equals 0.25 degrees of lat/lon
-# epsilon for DBSCAN. With a regularly spaced (i.e. equally scaled in all directions) 0.25 degree grid
-# this is equivalent to a knights move away in any plane. This gives quite generous clusters, which we mitigate by upping the min_samples
-EPS = np.radians(0.56)
-MIN_SAMPLES = 10  # minimum samples for DBSCAN
-CHUNK_SIZE = 5  # size of each chunk to process
-# Make the chunks overlap by enough that no edges get missed
-CHUNK_OVERLAP = 0#int(np.ceil(EPS / TIME_SCALE)) + 2
-MIN_CLUSTER_SIZE = 0
+MIN_SAMPLES = 100 # minimum samples for DBSCAN
 
 
 def load_data(data_path, ref_path):
@@ -30,24 +23,7 @@ def load_data(data_path, ref_path):
 
     return shift_longitudes(ds["t2m"]), shift_longitudes(ref["t2m"])
 
-
-def generate_chunks(n_timesteps, chunk_size, overlap):
-    step = chunk_size
-    return [(start, min(start + chunk_size + overlap, n_timesteps))
-            for start in range(0, n_timesteps, step)
-            if start < n_timesteps]
-
-def index_in_metadata(metadata, newt, lat, lon):
-    idx = 0
-    for (t,lt,ln) in metadata:
-        if lt == lat and ln == lon and t == newt:
-            return idx
-        idx += 1
-    return -1
-
-import numpy as np
-
-def extract_hot_coords(data, ref):
+def hot_pixel_distance_matrix(data, ref):
     lat = data.latitude.values
     lon = data.longitude.values
     n_timesteps = data.sizes["valid_time"]
@@ -84,8 +60,8 @@ def extract_hot_coords(data, ref):
                 tt = t + dt
                 if tt < 0 or tt >= n_timesteps:
                     continue
-                for dlat in [-1, 0, 1]:
-                    for dlon in [-1, 0, 1]:
+                for dlat in [-2, -1, 0, 1, 2]:
+                    for dlon in [-2, -1, 0, 1, 2]:
                         j_lat = i_lat + dlat
                         j_lon = (i_lon + dlon) % lon_len  # wrap around
 
@@ -93,13 +69,27 @@ def extract_hot_coords(data, ref):
                             continue
                         if dt == 0 and dlat == 0 and dlon == 0:
                             continue
+
+                        # This is where we decide if the point is part of the same event or not
                         if mask_3d[tt, j_lat, j_lon]:
                             j_idx = ensure_metadata(tt, j_lat, j_lon)
                             p1idx.append(i_idx)
                             p2idx.append(j_idx)
                             matched_points += 1
 
-        print(f"Matched points in timestep {t}: {len(p1idx)} edges, {len(metadata)} unique points")
+        # print(f"Matched points in timestep {t}: {len(p1idx)} edges, {len(metadata)} unique points")
+        # if t % 10 == 0:
+        #     print(f"Processed {t} timesteps, found {len(p1idx)} edges and {len(metadata)} unique points")
+        #     D = coo_matrix(([1] * len(p1idx), (p1idx, p2idx)), shape=(len(metadata), len(metadata)))
+        #     D = D + D.T
+
+        #     labels = run_dbscan(D)
+        #     events = extract_events_from_labels(labels, metadata, data.valid_time.values[:t + 1])
+        #     print(f"Extracted {len(events)} events after {t} timesteps")
+        #     if len(events) > 0:
+        #         with open(f"/data/output/events-partial-{t}.json", "w") as f:
+        #              json.dump(events, f, indent=2)
+
 
     dists = [1] * len(p1idx)
     D = coo_matrix((dists, (p1idx, p2idx)), shape=(len(metadata), len(metadata)))
@@ -107,36 +97,137 @@ def extract_hot_coords(data, ref):
 
     return D, metadata
 
+import numpy as np
+from scipy.sparse import coo_matrix
+
+def haversine(lat1, lon1, lat2, lon2):
+    """Haversine distance in degrees to km."""
+    R = 6371.0  # Earth radius in km
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return R * c
+
+from scipy.sparse import coo_matrix
+import numpy as np
+
+def eventlet_distance_matrix(eventlets, time_factor=100):
+    """
+    Returns a sparse symmetric matrix of distances between eventlets, where distance
+    is reduced based on the mean radius of each pair, and increased based on time dissimilarity.
+
+    Args:
+        eventlets: list of dicts, each with 'centroid' = (lat, lon), 'meanRadius', and 'times' (as indices)
+        radius_factor: float, factor to subtract size from distance (in km)
+        time_factor: float, km added per index step of time difference
+
+    Returns:
+        coo_matrix of distances
+        metadata list of (times, lat, lon, meanRadius)
+    """
+    n = len(eventlets)
+    p1 = []
+    p2 = []
+    dists = []
+    metadata = []
+
+    for i in range(n):
+        lat1, lon1 = eventlets[i]["centroid"]
+        r1 = eventlets[i]["meanRadius"]
+        ts1 = eventlets[i]["times"]
+        metadata.append((ts1, lat1, lon1, r1))
+
+        for j in range(i + 1, n):
+            lat2, lon2 = eventlets[j]["centroid"]
+            r2 = eventlets[j]["meanRadius"]
+            ts2 = eventlets[j]["times"]
+
+            # Geographic distance
+            dist = haversine(lat1, lon1, lat2, lon2)
+
+            # Time difference based on midpoint of index ranges
+            t1 = np.mean(ts1)
+            t2 = np.mean(ts2)
+            time_gap = abs(t1 - t2)
+
+            # Adjust distance
+            adjusted = dist + time_factor * time_gap
+
+            p1.append(i)
+            p2.append(j)
+            dists.append(adjusted)
+
+    print(f"Computed distances for {n} eventlets, found {len(dists)}, {sorted(dists)[:100]}...")
+
+    D = coo_matrix((dists + dists, (p1 + p2, p2 + p1)), shape=(n, n))
+    return D, metadata
 
 
 
-def run_dbscan(D, eps=EPS, min_samples=MIN_SAMPLES):
-    if D.size == 0:
-        return np.array([])
-
-    print(f"Running DBSCAN with eps={eps}, min_samples={min_samples} on {D.shape[0]} points")
-    # clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    # Time the DBSCAN function
-    t1 = time.time()
+def find_events(data, ref, eventlets_eps=100, features_eps=500):
+    D, metadata = hot_pixel_distance_matrix(data, ref)
     db = DBSCAN(eps=1.5, min_samples=MIN_SAMPLES, metric='precomputed')
-    labels = db.fit_predict(D)  
-    t2 = time.time()
-    print(f"DBSCAN took {t2 - t1:.2f} seconds")
-    print(f"DBSCAN found {len(set(labels))} clusters")
-    # return clustering.labels_
-    return labels
+    labels = db.fit_predict(D)
 
-def find_events(data, ref):
-    '''
-    Warning - last_clusters is modified in place with clusters which extend it, and new clusters are returned
-    '''
-    D, metadata = extract_hot_coords(data, ref)
+    eventlets = []
+    # Preprocess labels into groups
+    clusters = defaultdict(list)
+    for i, label in enumerate(labels):
+        if label != -1:
+            clusters[label].append(i)
+
+    for label, indices in clusters.items():
+        n_points = len(indices)
+        if n_points < 10:
+            continue
+
+        cluster_data = np.array([metadata[i] for i in indices])  # shape: (n_points, 4)
+        times = cluster_data[:, 0].astype(int)
+        lats = cluster_data[:, 1].astype(float)
+        lons = cluster_data[:, 2].astype(float)
+
+        centroid_lat = np.mean(lats)
+        centroid_lon = np.mean(lons)
+        centroid = [float(centroid_lat), float(centroid_lon)]
+
+        # Vectorised distance calc for mean radius
+        mean_rad = np.mean(np.sqrt((lats - centroid_lat) ** 2 + (lons - centroid_lon) ** 2))
+
+        eventlets.append({
+            "id": f"{label}",
+            "centroid": centroid,
+            "size": n_points,
+            "meanRadius": mean_rad,
+            "times": sorted(set(times.tolist())),
+            "bbox": [
+                float(np.min(lats)),
+                float(np.min(lons)),
+                float(np.max(lats)),
+                float(np.max(lons)),
+            ],
+        })
+
+        print(f"Found {n_points} points in cluster {label}")
+
+    E, metadata = eventlet_distance_matrix(eventlets)
+    db = DBSCAN(eps=eventlets_eps, min_samples=1, metric='precomputed')
+    labels = db.fit_predict(E)
+
     time_values = data.valid_time.values
-    labels = run_dbscan(D)
+    events = extract_events_from_labels(labels, metadata, time_values)
 
-    return extract_events_from_labels(labels, metadata, time_values)
+    F, metadata = eventlet_distance_matrix(events, 500)
+    db = DBSCAN(eps=features_eps, min_samples=1, metric='precomputed')
+    labels = db.fit_predict(F)
+    features = extract_events_from_labels(labels, metadata, time_values, feature=True)
 
-def extract_events_from_labels(labels, metadata, time_values):
+    return events+features
+
+def extract_events_from_labels(labels, metadata, time_values, feature=False):
     events = []
 
     def time_string(t):
@@ -152,22 +243,34 @@ def extract_events_from_labels(labels, metadata, time_values):
         points = [m for i, m in enumerate(metadata) if labels[i] == label]
         # if len(points) < MIN_CLUSTER_SIZE:
         #     continue
+        # print(f"Processing event {label} made up of {len(points)} eventlets")# points: {points[:5]}...")
 
-        times = sorted(set(p[0] for p in points))
+
+        times = sorted(set(t for p in points for t in p[0]))
         if len(times) < 3:
             continue
+        # print(f"Event {label} has {points} and times {times}")
 
         lats = [p[1] for p in points]
         lons = [p[2] for p in points]
-        max_area = max(len([p for p in points if p[0] == t]) for t in times)
-        slices = [[p for p in points if p[0] == t] for t in times]
+        slices = [[(p[2], p[1]) for p in points if t in p[0]] for t in times]
+        if slices is None or len(slices) < 2:
+            print(f"*******************Event {label} has no slices, skipping!")
+            continue
+        # print(f"Event {label} has {len(slices)} slices, with first slice: {slices[:5]}")
+        max_area = max(len(s) for s in slices)
+
+        regions = regions_from_slices(slices)
 
         events.append({
             "id": f"{label}",
-            "times": [time_string(time_values[i]) for i in times],
+            "times": [i for i in times],
+            # "times": [time_string(time_values[i]) for i in times],
+            "meanRadius": float(np.mean([p[3] for p in points])),
             "startTime": time_string(time_values[times[0]]),
             "endTime": time_string(time_values[times[-1]]),
-            "slices": slices,
+            # "slices": slices,
+            "regions": regions,
             "maxArea": max_area,
             "bbox": [
                 float(np.min(lats)),
@@ -177,9 +280,51 @@ def extract_events_from_labels(labels, metadata, time_values):
             ],
             "centroid": [float(np.mean(lats)), float(np.mean(lons))],
             "size": len(points),
+            "feature": feature,
         })
 
     return events
+
+def regions_from_slices(slices):
+    # print(f"Creating regions from {len(slices)} slices")
+    return [make_bounding_polygon(slice) for slice in slices]
+
+from shapely.geometry import MultiPoint
+import alphashape  # pip install alphashape
+import numpy as np
+
+def make_bounding_polygon(slice, concave=True, alpha=1.0):
+    """
+    Create a bounding polygon for a list of (lat, lon) coordinates.
+
+    Args:
+        slice: list of (lat, lon) tuples
+        concave: whether to use concave hull (via alphashape) or convex hull
+        alpha: alpha parameter for alphashape (lower = more concave)
+
+    Returns:
+        List of [lon, lat] coords forming the polygon (GeoJSON format)
+    """
+    if len(slice) < 3:
+        return [[lon, lat] for lat, lon in slice]  # not a polygon
+
+    points = [(lon, lat) for lat, lon in slice]
+
+    if concave:
+        try:
+            shape = alphashape.alphashape(points, alpha)
+            if shape.geom_type == 'Polygon':
+                return [[x, y] for x, y in np.array(shape.exterior.coords)]
+            else:
+                # In rare edge cases alphashape returns MultiPolygon
+                largest = max(shape.geoms, key=lambda g: g.area)
+                return [[x, y] for x, y in np.array(largest.exterior.coords)]
+        except Exception as e:
+            print(f"alphashape failed, falling back to convex: {e}")
+
+    shape = MultiPoint(points).convex_hull
+    return [[x, y] for x, y in np.array(shape.exterior.coords)]
+
 
 
 def bboxes_overlap(b1, b2):
@@ -189,43 +334,27 @@ def bboxes_overlap(b1, b2):
 
 def main():
     t2m, ref = load_data("/data/era5_2024.nc", "/data/era5_ref98.nc")
-    events = find_events(t2m, ref)
-    with open("/data/output/events_output.json", "w") as f:
-        json.dump(events, f, indent=2)
 
+    # n = t2m.sizes["valid_time"]
+    # start = n // 3
+    # end =  start + 8 #2 * n // 3
+    # t2m = t2m.isel(valid_time=slice(start, end))
 
+    all_events = []
+    years = 0
+    for eps in range(400, 1000, 100): #[40, 50, 60, 70, 80, 90, 100, 150, 200, 300]:
+        events = find_events(t2m, ref, eventlets_eps=eps, features_eps=eps * 5)
+        with open(f"/data/output/events_features_{eps}.json", "w") as f:
+            json.dump(events, f, indent=2)
+        for event in events:
+            event["startTime"] = event["startTime"].replace("2024", f"{2024+years}")
+            event["endTime"] = event["endTime"].replace("2024", f"{2024+years}")
+            event["eps"] = eps
+        all_events += events
+        years += 1
+    with open("/data/output/events_all.json", "w") as f:
+        json.dump(all_events, f, indent=2)
 
-    # n_timesteps = t2m.sizes["valid_time"]
-    # # n_timesteps = min(240, n_timesteps)  # Limit to 100 for testing
-    # # n_timesteps = min(TIMESTEPS, n_timesteps)  # Limit to TIMESTEPS for testing
-
-    # chunk_ranges = generate_chunks(n_timesteps, CHUNK_SIZE, CHUNK_OVERLAP)
-    # all_clusters = []
-    # last_clusters = None
-    # for idx, time_range in enumerate(chunk_ranges):
-    #     # if idx < 0.85*len(chunk_ranges):
-    #     #     print(f"Skipping chunk {idx + 1} of {len(chunk_ranges)}: {time_range}")
-    #     #     continue
-    #     print(f"Processing chunk {idx + 1} of {len(chunk_ranges)}: {time_range}")
-    #     clusters = cluster_chunk(t2m, ref, time_range, time_values, last_clusters)
-
-    #     print(f"Found {len(clusters)} clusters in chunk {idx + 1}")
-    #     if last_clusters is not None:
-    #         all_clusters.extend(last_clusters)
-    #         with open(f"/data/output/events-partial-{idx}.json", "w") as f:
-    #             json.dump(all_clusters, f, indent=2)
-    #     last_clusters = clusters
-    # all_clusters.extend(last_clusters)
-    # print(f"Total clusters found: {len(all_clusters)}")
-
-    # # print(f"Initial cluster count: {len(all_clusters)}")
-    # # merged = merge_clusters(all_clusters)
-    # # print(f"Merged cluster count: {len(merged)}")
-
-
-
-    # with open("/data/output/events_output.json", "w") as f:
-    #     json.dump(all_clusters, f, indent=2)
 
 if __name__ == "__main__":
     main()

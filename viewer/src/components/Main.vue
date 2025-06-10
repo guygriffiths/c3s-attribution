@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import Map from './Map.vue'
-import TimeReel from './common/TimeReel.vue'
+import TimeReel from './TimeReel.vue'
 
 const $l = useLabels()
 const store = useStore()

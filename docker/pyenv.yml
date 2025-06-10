@@ -17,6 +17,7 @@ dependencies:
   - geopy
   - beautifulsoup4
   - scikit-learn
+  - alphashape
   - pip
   - pip:
       - hdbscan
