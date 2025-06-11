@@ -89,7 +89,7 @@ watch(
 			</LCircleMarker>
 			<LPolygon
 				v-for="event in store.activeEvents"
-				:lat-lngs="event.regions[0]"
+				:lat-lngs="event.regions[event.times.indexOf(store.selectedTimeIndex)]"
 				:weight="2"
 				:fill="false"
 				:opacity="0.5"

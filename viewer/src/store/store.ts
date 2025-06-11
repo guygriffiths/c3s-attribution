@@ -1,11 +1,11 @@
 import * as d3 from 'd3'
-import { addDays, format } from 'date-fns'
+import { addDays, differenceInDays, format } from 'date-fns'
 import { defineStore } from 'pinia'
 
 type LayerDetails = any
 
 interface Event {
-	times: string[]
+	times: number[]
 	startTime: Date
 	endTime: Date
 	slices: any[]
@@ -49,6 +49,13 @@ export const useStore = defineStore('main', {
 		isoDatetime: (state) => {
 			// This always returns the datetime in UTC, which is what we need
 			return state.selectedTime.toISOString()
+		},
+		selectedTimeIndex: (state) => {
+			// Find the index of the selected time in the times array
+			return differenceInDays(
+				state.selectedTime,
+				state.startTime,
+			)
 		},
 		activeEvents: (state) => {
 			return state.events.filter((event) => {
