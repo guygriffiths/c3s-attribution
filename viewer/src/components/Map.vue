@@ -82,17 +82,19 @@ watch(
 				:zIndex="2"
 				:opacity="0.75"
 				></LTileLayer>
-			<LCircleMarker v-for="event in store.activeEvents" :lat-lng="event.centroid">
+			<!-- TODO Find out why these don't look like the centroid... -->
+			<!-- <LCircleMarker v-for="event in store.activeEvents" :lat-lng="event.centroid">
 				<LPopup>
 					<p>{{ event }}</p>
 				</LPopup>
-			</LCircleMarker>
+			</LCircleMarker> -->
 			<LPolygon
 				v-for="event in store.activeEvents"
 				:lat-lngs="event.regions[event.times.indexOf(store.selectedTimeIndex)]"
 				:weight="2"
 				:fill="false"
 				:opacity="0.5"
+				:color="event.feature ? 'red' : 'blue'"
 			>
 				<LPopup>
 					<p>{{ event.name }}</p>
