@@ -49,14 +49,6 @@ const totalYears = computed(() => endYear.value - startYear.value + 3)
 const years = computed(() =>
 	Array.from({ length: totalYears.value }, (_, i) => startYear.value - 1 + i),
 )
-console.log(
-	props.start,
-	props.end,
-	startYear.value,
-	endYear.value,
-	totalYears.value,
-	model.value,
-)
 const days = computed(() => Array.from({ length: totalDays }, (_, i) => i + 1))
 
 const dayStr = (day: number) => {

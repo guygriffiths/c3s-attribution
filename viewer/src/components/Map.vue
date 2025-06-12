@@ -14,6 +14,7 @@ import {
 } from '@vue-leaflet/vue-leaflet'
 import { LatLng, Map, Point } from 'leaflet'
 import { T2M_LAYER, useStore, WMS_ROOT } from '@/store/store'
+import { differenceInDays } from 'date-fns'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
@@ -85,19 +86,22 @@ watch(
 			<!-- TODO Find out why these don't look like the centroid... -->
 			<!-- <LCircleMarker v-for="event in store.activeEvents" :lat-lng="event.centroid">
 				<LPopup>
-					<p>{{ event }}</p>
+					<p>{{ event.startTime }} : {{ store.selectedTime }} </p>
+					<p>{{ event.times }}</p>
+					<p>{{ store.selectedTimeIndex }}</p>
+					<p>{{ event.times.indexOf(store.selectedTimeIndex )}}</p>
 				</LPopup>
 			</LCircleMarker> -->
 			<LPolygon
 				v-for="event in store.activeEvents"
-				:lat-lngs="event.regions[event.times.indexOf(store.selectedTimeIndex)]"
+				:lat-lngs="event.regions[event.times.indexOf(event.times[0]+differenceInDays(store.selectedTime, new Date(event.startTime)))]"
 				:weight="2"
 				:fill="false"
 				:opacity="0.5"
 				:color="event.feature ? 'red' : 'blue'"
 			>
 				<LPopup>
-					<p>{{ event.name }}</p>
+					<p>{{ event }}</p>
 				</LPopup>
 			</LPolygon>
 			<LControl position="bottomleft">

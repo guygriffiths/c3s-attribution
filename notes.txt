@@ -7,6 +7,11 @@ Pre-calculate metrics:
     Mean Anomaly (is this intensity?)
     Length
 
+Let's do this:
+* Click on event to select it
+* Zoom to a nice event view, framing event in a map hole
+* Zoom on the timeline at the same time
+
 
 
 
