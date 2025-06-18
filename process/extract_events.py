@@ -8,6 +8,8 @@ from scipy.sparse import coo_matrix
 from collections import defaultdict
 from shapely.geometry import MultiPoint
 import alphashape
+from collections import defaultdict
+from scipy.ndimage import label, find_objects
 
 # from scipy.spatial.qhull import Qh  ullError
 from scipy.spatial import QhullError
@@ -51,7 +53,7 @@ def hot_pixel_distance_matrix(data, ref):
         uid = get_uid(t, i_lat, i_lon)
         if uid not in metadata_index:
             metadata_index[uid] = len(metadata)
-            metadata.append((t, lat[i_lat], lon[i_lon]))
+            metadata.append(([t], [[(lat[i_lat], lon[i_lon])]]))
         return metadata_index[uid]
 
     for t in range(n_timesteps):
@@ -88,21 +90,102 @@ def hot_pixel_distance_matrix(data, ref):
 
     return D, metadata
 
+def min_spatial_dist(ts1, slices1, ts2, slices2):
+    tset1 = set(ts1)
+    tset2 = set(ts2)
+    common = sorted(tset1 & tset2)
+    if not common:
+        return np.inf
+    idx1 = {t: i for i, t in enumerate(ts1)}
+    idx2 = {t: i for i, t in enumerate(ts2)}
+    min_dist = np.inf
+    for t in common:
+        sl1 = slices1[idx1[t]]
+        sl2 = slices2[idx2[t]]
+        for lat1, lon1 in sl1:
+            for lat2, lon2 in sl2:
+                d = haversine(lat1, lon1, lat2, lon2)
+                min_dist = min(min_dist, d)
+    return min_dist
 
-def haversine(lat1, lon1, lat2, lon2):
-    """Haversine distance in degrees to km."""
-    R = 6371.0  # Earth radius in km
-    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+def extract_events_from_mask(data, ref, structure=None):
+    """
+    Extracts connected spatiotemporal events from a 3D thresholded data array.
 
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
+    Args:
+        data: 3D xarray DataArray (time, lat, lon)
+        ref: 3D xarray DataArray of same shape, for relative threshold
 
-    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
-    c = 2 * np.arcsin(np.sqrt(a))
-    return R * c
+    Returns:
+        List of event dicts with keys: 'times', 'slices', 'regions', 'featureLevel'
+    """
+
+    lats = data.latitude.values
+    lons = data.longitude.values
+    times = data.valid_time.values
+
+    mask = (data > TEMP_THRESHOLD) & (data > ref)
+
+    if structure is None:
+        structure = np.array([
+            [[0, 1, 0],
+            [1, 1, 1],
+            [0, 1, 0]],
+            [[1, 1, 1],
+            [1, 1, 1],
+            [1, 1, 1]],
+            [[0, 1, 0],
+            [1, 1, 1],
+            [0, 1, 0]]
+        ])
+    
+    print("Looking for features")
+    labels, num_features = label(mask, structure=structure)
+    label_slices = find_objects(labels)
+
+    print(f"Found {num_features} features in the mask.")
+    events = []
+
+    for label_id, slc in enumerate(label_slices, start=1):
+        if slc is None:
+            continue
+
+        sub_labels = labels[slc]
+        coords = np.argwhere(sub_labels == label_id)
+        if len(coords) < 20:
+            # print(f"Skipping feature {label_id} with only {len(coords)} coordinates.")
+            continue
+
+        # Shift local coords back to global
+        offsets = np.array([s.start for s in slc])
+        coords += offsets  # global (t, lat, lon)
+
+        time_to_slices = defaultdict(list)
+
+        for t_idx, lat_idx, lon_idx in coords:
+            lat = lats[lat_idx]
+            lon = lons[lon_idx]
+            time_to_slices[t_idx].append((lat, lon))
+
+        all_times = sorted(time_to_slices)
+        if len(all_times) < 3:
+            # print(f"Skipping feature with only {len(all_times)} time points. (total {len(coords)})")
+            continue
+        all_slices = [time_to_slices[t] for t in all_times]
+
+        events.append({
+            "times": all_times,
+            "slices": all_slices,
+            "regions": regions_from_slices(all_slices),
+            "featureLevel": 0,
+        })
+
+    return events
 
 
-def eventlet_distance_matrix(eventlets, time_factor=100):
+
+
+def eventlet_distance_matrix(eventlets):
     """
     Returns a sparse symmetric matrix of distances between eventlets, where distance
     is reduced based on the mean radius of each pair, and increased based on time dissimilarity.
@@ -123,35 +206,21 @@ def eventlet_distance_matrix(eventlets, time_factor=100):
     metadata = []
 
     for i in range(n):
-        lat1, lon1 = eventlets[i]["centroid"]
-        slices = eventlets[i]["slices"]
+        slices1 = eventlets[i]["regions"]
         ts1 = eventlets[i]["times"]
-        mean_radius1 = eventlets[i]["meanRadius"]
-        metadata.append((ts1, lat1, lon1, slices))
+        metadata.append((ts1, slices1))
 
         for j in range(i + 1, n):
-            lat2, lon2 = eventlets[j]["centroid"]
+            slices2 = eventlets[j]["regions"]
             ts2 = eventlets[j]["times"]
-            mean_radius2 = eventlets[j]["meanRadius"]
 
-            # TODO could compare every pair of slices co-ordinates, but this is probably too slow?
+            # print(f"Finding dist between \n{ts1}: {slices1} and\n{ts2}: {slices2}\n\n")
 
-            # Geographic distance
-            dist = haversine(lat1, lon1, lat2, lon2)
-
-            # Time difference based on midpoint of index ranges
-            t1 = np.mean(ts1)
-            t2 = np.mean(ts2)
-            time_gap = abs(t1 - t2)
-
-            # Adjust distance
-            adjusted = dist - mean_radius1 - mean_radius2 + time_factor * time_gap
-            if adjusted < 0:
-                adjusted = 0
-
-            p1.append(i)
-            p2.append(j)
-            dists.append(adjusted)
+            dist = min_spatial_dist(ts1, slices1, ts2, slices2)
+            if dist < np.inf:
+                p1.append(i)
+                p2.append(j)
+                dists.append(dist)
 
     print(
         f"Computed distances for {n} eventlets, found {len(dists)}, {sorted(dists)[:100]}..."
@@ -161,81 +230,89 @@ def eventlet_distance_matrix(eventlets, time_factor=100):
     return D, metadata
 
 
-def find_events(data, ref, eventlets_eps=100, features_eps=500):
-    D, metadata = hot_pixel_distance_matrix(data, ref)
-    db = DBSCAN(eps=1.5, min_samples=MIN_SAMPLES, metric="precomputed")
-    labels = db.fit_predict(D)
+def find_events(data, ref, tight=False, eventlets_eps=100, features_eps=500):
+    events = []
+    features = []
+    # D, metadata = hot_pixel_distance_matrix(data, ref)
+    # db = DBSCAN(eps=1.5, min_samples=30, metric="precomputed")
+    # labels = db.fit_predict(D)
+    
+    # eventlets = events_from_clusters(labels, metadata, 0)
 
-    eventlets = []
-    # Preprocess labels into groups
-    clusters = defaultdict(list)
-    for i, label in enumerate(labels):
-        if label != -1:
-            clusters[label].append(i)
+    if tight:
+        structure = np.array([
+            [[0, 0, 0],
+             [0, 1, 0],
+             [0, 0, 0]],
+            [[0, 1, 0],
+             [1, 1, 1],
+             [0, 1, 0]],
+            [[0, 0, 0],
+             [0, 1, 0],
+             [0, 0, 0]]
+        ])
+    else:
+        structure = np.array([
+            [[0, 1, 0],
+             [1, 1, 1],
+             [0, 1, 0]],
+            [[1, 1, 1],
+             [1, 1, 1],
+             [1, 1, 1]],
+            [[0, 1, 0],
+             [1, 1, 1],
+             [0, 1, 0]]
+        ])
+    structure = np.array([
+        [[0, 0, 0],
+         [0, 1, 0],
+         [0, 0, 0]],
+        [[0, 1, 0],
+         [1, 1, 1],
+         [0, 1, 0]],
+        [[0, 0, 0],
+         [0, 1, 0],
+         [0, 0, 0]]
+    ])
+    eventlets = extract_events_from_mask(data, ref, structure=structure)
 
-    for label, indices in clusters.items():
-        n_points = len(indices)
-        # if n_points < 10:
-        #     continue
+    # print(f"DBSCAN events: {len(eventlets)}")
+    print(f"scipy.laebl events: {len(eventlets)}")
+    # print(f"first set of events: {eventlets[:5]}")
 
-        cluster_data = np.array(
-            [metadata[i] for i in indices]
-        )  # shape: (n_points, 4)500
-        times = cluster_data[:, 0].astype(int)
-        lats = cluster_data[:, 1].astype(float)
-        lons = cluster_data[:, 2].astype(float)
-
-        centroid_lat = np.mean(lats)
-        centroid_lon = np.mean(lons)
-        centroid = [float(centroid_lat), float(centroid_lon)]
-
-        # Vectorised distance calc for mean radius
-        mean_rad = np.mean(
-            np.sqrt((lats - centroid_lat) ** 2 + (lons - centroid_lon) ** 2)
-        )
-
-        eventlets.append(
-            {
-                "id": f"{label}",
-                "centroid": centroid,
-                "size": n_points,
-                "times": sorted(set(times.tolist())),
-                "meanRadius": mean_rad,
-                "slices": [
-                    [(lons[i], lats[i]) for i in range(n_points) if times[i] == t]
-                    for t in sorted(set(times))
-                ],
-                "bbox": [
-                    float(np.min(lats)),
-                    float(np.min(lons)),
-                    float(np.max(lats)),
-                    float(np.max(lons)),
-                ],
-            }
-        )
-
-        # print(f"Found {n_points} points in cluster {label}")
-    print(f"Found {len(eventlets)} eventlets with {eventlets_eps} eps")
     E, metadata = eventlet_distance_matrix(eventlets)
     db = DBSCAN(eps=eventlets_eps, min_samples=1, metric="precomputed")
     labels = db.fit_predict(E)
 
+    events = events_from_clusters(labels, metadata, 1)
+    print(f"second set of events: {len(events)}")
+
+    # F, metadata = eventlet_distance_matrix(events)
+    # db = DBSCAN(eps=features_eps, min_samples=3, metric="precomputed")
+    # labels = db.fit_predict(F)
+    # features = events_from_clusters(labels, metadata, 2)
+    # print(f"third set of events: {len(features)}")
+
+
     time_values = data.valid_time.values
-    events = extract_events_from_labels(labels, metadata, time_values)
+    
+    for event in events:
+        # print(f"Event times: {event['times']}")
+        event["times"] = [time_string(time_values[t]) for t in event["times"]]
+        # event["regions"] = regions_from_slices(event["slices"])
+    for feature in features:
+        feature["times"] = [time_string(time_values[t]) for t in feature["times"]]
+        # feature["regions"] = regions_from_slices(feature["slices"])
+    for eventlet in eventlets:
+        eventlet["times"] = [time_string(time_values[t]) for t in eventlet["times"]]
+        # eventlet["regions"] = regions_from_slices(eventlet["slices"])
 
-    F, metadata = eventlet_distance_matrix(events, time_factor=250)
-    db = DBSCAN(eps=features_eps, min_samples=3, metric="precomputed")
-    labels = db.fit_predict(F)
-    features = extract_events_from_labels(labels, metadata, time_values, feature=True)
 
-    return events, features
+    return events, features, eventlets
 
 
-def extract_events_from_labels(labels, metadata, time_values, feature=False):
+def events_from_clusters(labels, metadata, feature_level=1):
     events = []
-
-    def time_string(t):
-        return str(t.astype("M8[ms]")) + "Z"
 
     if labels.size == 0:
         return events
@@ -245,173 +322,102 @@ def extract_events_from_labels(labels, metadata, time_values, feature=False):
             continue  # noise
 
         points = [m for i, m in enumerate(metadata) if labels[i] == label]
-        # if len(points) < MIN_CLUSTER_SIZE:
-        #     continue
-        # print(f"Processing event {label} made up of {len(points)} eventlets")# points: {points[:5]}...")
 
-        times = sorted(set(t for p in points for t in p[0]))
-        if len(times) < 3:
-            continue
-        # print(f"Event {label} has {points} and times {times}")
+        time_to_slices = defaultdict(list)
 
-        lats = [p[1] for p in points]
-        lons = [p[2] for p in points]
-        centroid = [float(np.mean(lats)), float(np.mean(lons))]
-        slices = [s for p in points for t, s in zip(p[0], p[3]) if t in times]
+        for times, slices in points:
+            for t, s in zip(times, slices):
+                time_to_slices[t].append(s)
+        
+        # for t in time_to_slices:
+        #     if len(time_to_slices[t]) > 1: 
+        #         print(f"Event {label} at time {t} has {len(time_to_slices[t])} slices, merging them.")
 
-        full_extent = set([(lat, lon) for lat, lon in zip(lats, lons)])
-        area = len(full_extent)  # number of unique points
-        max_area = max(len(s) for s in slices)
+        # Now get sorted arrays
+        all_times = sorted(time_to_slices)
+        all_slices = []
+        for t in all_times:
+            merged = []
+            for group in time_to_slices[t]:
+                merged.extend(group)
+            all_slices.append(merged)
 
-        regions = regions_from_slices(slices)
-
-        events.append(
-            {
-                "id": f"{label}",
-                "times": [i for i in times],
-                # "times": [time_string(time_values[i]) for i in times],
-                # "meanRadius": float(np.mean([p[3] for p in points])),
-                "startTime": time_string(time_values[times[0]]),
-                "endTime": time_string(time_values[times[-1]]),
-                "slices": slices,
-                "meanRadius": float(
-                    np.mean(
-                        [
-                            np.sqrt((lat - centroid[0]) ** 2 + (lon - centroid[1]) ** 2)
-                            for lat, lon in zip(lats, lons)
-                        ]
-                    )
-                ),
-                "regions": regions,
-                "maxArea": max_area,
-                "area": area,
-                "bbox": [
-                    float(np.min(lats)),
-                    float(np.min(lons)),
-                    float(np.max(lats)),
-                    float(np.max(lons)),
-                ],
-                "centroid": [float(np.mean(lats)), float(np.mean(lons))],
-                "size": len(points),
-                "feature": feature,
-            }
-        )
+        events.append({
+            "times": all_times,
+            "slices": all_slices,
+            "regions": regions_from_slices(all_slices),
+            "featureLevel": feature_level,
+        })
 
     return events
 
 
+
 def regions_from_slices(slices):
     # print(f"Creating regions from {len(slices)} slices: {slices[:5]}...")
-    return [make_bounding_polygon(slice) for slice in slices]
+    return [make_bounding_polygon(slice, False) for slice in slices]
 
 
-def make_bounding_polygon(slice, concave=True, alpha=1.0):
-    """
-    Create a bounding polygon for a list of (lat, lon) coordinates.
-
-    Args:
-        slice: list of (lat, lon) tuples
-        concave: whether to use concave hull (via alphashape) or convex hull
-        alpha: alpha parameter for alphashape (lower = more concave)
-
-    Returns:
-        List of [lon, lat] coords forming the polygon (GeoJSON format)
-    """
-    # print(f"Creating bounding polygon for slice with {len(slice)} points: {slice[:5]}...")
+def make_bounding_polygon(slice, concave=True, alpha=0.25, max_alpha=5.0, alpha_step=0.25):
     if len(slice) == 1:
-        lat = slice[0][0]
-        lon = slice[0][1]
+        lat, lon = slice[0]
         d_lon = 0.125
         d_lat = 0.125
-        # print("Not enough points to form a polygon, returning slice as is.")
         return [
-            [lon - d_lon, lat - d_lat],
-            [lon + d_lon, lat - d_lat],
-            [lon + d_lon, lat + d_lat],
-            [lon - d_lon, lat + d_lat],
-            [lon - d_lon, lat - d_lat],
+            [lat - d_lat, lon - d_lon],
+            [lat - d_lat, lon + d_lon],
+            [lat + d_lat, lon + d_lon],
+            [lat + d_lat, lon - d_lon],
+            [lat - d_lat, lon - d_lon],
         ]
     elif len(slice) == 2:
         lat1, lon1 = slice[0]
         lat2, lon2 = slice[1]
         d_lon = 0.125
         d_lat = 0.125
-        # print("Only two points, returning rectangle around them.")
         return [
-            [lon1 - d_lon, lat1 - d_lat],
-            [lon2 + d_lon, lat1 - d_lat],
-            [lon2 + d_lon, lat2 + d_lat],
-            [lon1 - d_lon, lat2 + d_lat],
-            [lon1 - d_lon, lat1 - d_lat],
+            [lat1 - d_lat, lon1 - d_lon],
+            [lat1 - d_lat, lon2 + d_lon],
+            [lat2 + d_lat, lon2 + d_lon],
+            [lat2 + d_lat, lon1 - d_lon],
+            [lat1 - d_lat, lon1 - d_lon],
         ]
 
     points = [(lon, lat) for lat, lon in slice]
 
     if concave:
-        try:
-            shape = alphashape.alphashape(points, alpha)
-            if shape.geom_type == "Polygon":
-                return [[x, y] for x, y in np.array(shape.exterior.coords)]
-            else:
-                # In rare edge cases alphashape returns MultiPolygon
-                largest = max(shape.geoms, key=lambda g: g.area)
-                return [[x, y] for x, y in np.array(largest.exterior.coords)]
-        except (QhullError, ValueError):
-            dlon = 0.125
-            dlat = 0.125
-            # We have a non-2d value - i.e. all points are collinear
-            lat1d = len(set(p[1] for p in points)) == 1
-            lon1d = len(set(p[0] for p in points)) == 1
-            if lat1d and lon1d:
-                lat = points[0][1]
-                lon = points[0][0]
-                return [
-                    [lon - dlon, lat - dlat],
-                    [lon + dlon, lat - dlat],
-                    [lon + dlon, lat + dlat],
-                    [lon - dlon, lat + dlat],
-                    [lon - dlon, lat - dlat],
-                ]
-            elif lat1d:
-                # All points have the same latitude, return a vertical line
-                lon_min = min(p[0] for p in points)
-                lon_max = max(p[0] for p in points)
-                lat = points[0][1]
-                return [
-                    [lon_min, lat - dlat],
-                    [lon_max, lat - dlat],
-                    [lon_max, lat + dlat],
-                    [lon_min, lat + dlat],
-                    [lon_min, lat - dlat],
-                ]
-            elif lon1d:
-                # All points have the same longitude, return a horizontal line
-                lat_min = min(p[1] for p in points)
-                lat_max = max(p[1] for p in points)
-                lon = points[0][0]
-                return [
-                    [lon - dlon, lat_min - dlat],
-                    [lon + dlon, lat_min - dlat],
-                    [lon + dlon, lat_max + dlat],
-                    [lon - dlon, lat_max + dlat],
-                    [lon - dlon, lat_min - dlat],
-                ]
-            return [[lon, lat] for lon, lat in points]  # fallback to original points
-        except Exception as e:
-            print(f"alphashape failed, falling back to convex: {e}")
+        current_alpha = alpha
+        while current_alpha <= max_alpha:
+            try:
+                shape = alphashape.alphashape(points, current_alpha)
+                if shape.geom_type == "Polygon":
+                    return [[y, x] for x, y in shape.exterior.coords]
+                elif shape.geom_type == "MultiPolygon":
+                    print(f"alpha={current_alpha} gave MultiPolygon; trying higher alpha…")
+                    current_alpha += alpha_step
+                else:
+                    print(f"Unexpected shape type: {shape.geom_type} at alpha={current_alpha}")
+                    break  # unexpected type
+            except Exception as e:
+                print(f"alphashape failed at alpha={current_alpha}: {e}")
+                break
+        print("Failed tae get single polygon wi alphashape, fallback tae convex")
 
     shape = MultiPoint(points).convex_hull
     if shape.geom_type == "Polygon":
-        return [[x, y] for x, y in shape.exterior.coords]
+        return [[y, x] for x, y in shape.exterior.coords]
     else:
-        # still not a polygon, last resort: return all points as-is, maybe duplicate first
-        print(
-            f"Still nae polygon: {shape.geom_type}. Returning degenerate closed line."
-        )
-        coords = list(shape.coords)
-        if coords[0] != coords[-1]:
-            coords.append(coords[0])
-        return [[x, y] for x, y in coords]
+        # print(f"Still nae polygon: {shape.geom_type}. Returning padded bounding box instead.")
+        minx, miny, maxx, maxy = shape.bounds
+        pad = 0.125
+        return [
+            [miny - pad, minx - pad],
+            [miny - pad, maxx + pad],
+            [maxy + pad, maxx + pad],
+            [maxy + pad, minx - pad],
+            [miny - pad, minx - pad],
+        ]
+
 
 
 def bboxes_overlap(b1, b2):
@@ -420,37 +426,80 @@ def bboxes_overlap(b1, b2):
     return lat_overlap and lon_overlap
 
 
+def haversine(lat1, lon1, lat2, lon2):
+    """Haversine distance in degrees to km."""
+    R = 6371.0  # Earth radius in km
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return R * c
+
+def time_string(t):
+    return str(t.astype("M8[ms]")) + "Z"
+
+
 def main():
     t2m, ref = load_data("/data/era5_2024.nc", "/data/era5_ref98.nc")
 
-    # n = t2m.sizes["valid_time"]
-    # start = n // 3
-    # end =  start + 120
-    # t2m = t2m.isel(valid_time=slice(start, end))
+    n = t2m.sizes["valid_time"]
+    start = 0 # 1st May
+    end =  start + 100
+    t2m = t2m.isel(valid_time=slice(start, end))
+
+    # Define India bounds wi' a buffer
+    lat_min = 5    # a wee bit south o’ Tamil Nadu
+    lat_max = 40   # up past Kashmir
+    lon_min = 65   # includes bits o’ Pakistan
+    lon_max = 105  # over tae Myanmar
+
+    # Subset spatially
+    t2m = t2m.sel(
+        latitude=slice(lat_max, lat_min),  # lat usually runs north tae south
+        longitude=slice(lon_min, lon_max)
+    )
 
     all_events = []
     years = 0
-    for eps in [
-        500
-    ]:  # range(500, 1000, 100): #[40, 50, 60, 70, 80, 90, 100, 150, 200, 300]:
-        events, features = find_events(
-            t2m, ref, eventlets_eps=eps, features_eps=eps * 5
+    for eps in [100]:#[15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 300]:
+        # events, features, eventlets = find_events(
+        #     t2m, ref, tight=True, eventlets_eps=eps, features_eps=eps * 5
+        # )
+        # with open(f"/data/output/events_all_tight_{eps}.json", "w") as f:
+        #     json.dump(eventlets+events+features, f, indent=2)
+        # with open(f"/data/output/eventlets_tight_{eps}.json", "w") as f:
+        #     json.dump(eventlets, f, indent=2)
+        # with open(f"/data/output/events_tight_{eps}.json", "w") as f:
+        #     json.dump(events, f, indent=2)
+        # with open(f"/data/output/features_tight_{eps}.json", "w") as f:
+        #     json.dump(features, f, indent=2)
+
+        events, features, eventlets = find_events(
+            t2m, ref, tight=False, eventlets_eps=eps, features_eps=eps * 5
         )
+        with open(f"/data/output/events_all_{eps}.json", "w") as f:
+            json.dump(eventlets+events+features, f, indent=2)
+        with open(f"/data/output/eventlets_{eps}.json", "w") as f:
+            json.dump(eventlets, f, indent=2)
         with open(f"/data/output/events_{eps}.json", "w") as f:
             json.dump(events, f, indent=2)
         with open(f"/data/output/features_{eps}.json", "w") as f:
             json.dump(features, f, indent=2)
-        with open(f"/data/output/events_features_{eps}.json", "w") as f:
-            json.dump(events + features, f, indent=2)
-        for event in events:
-            event["startTime"] = event["startTime"].replace("2024", f"{2024-years}")
-            event["endTime"] = event["endTime"].replace("2024", f"{2024-years}")
-            event["eps"] = eps
-        all_events += events
-        years += 1
-    with open("/data/output/events_all.json", "w") as f:
-        json.dump(all_events, f, indent=2)
+        # with open(f"/data/output/events_features_{eps}.json", "w") as f:
+        #     json.dump(events + features, f, indent=2)
+        # for event in events:
+        #     event["startTime"] = event["startTime"].replace("2024", f"{2024-years}")
+        #     event["endTime"] = event["endTime"].replace("2024", f"{2024-years}")
+        #     event["eps"] = eps
+        # all_events += events
+        # years += 1
+    # with open("/data/output/events_all.json", "w") as f:
+    #     json.dump(all_events, f, indent=2)
 
 
 if __name__ == "__main__":
     main()
+
