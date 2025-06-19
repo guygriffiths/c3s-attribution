@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { format, getDayOfYear, setDayOfYear } from 'date-fns'
+import { format, getDayOfYear, setDayOfYear, addHours, subHours } from 'date-fns'
 import {
 	ref,
 	computed,
@@ -7,10 +7,11 @@ import {
 	Ref,
 	watch,
 	onMounted,
+	onBeforeUnmount,
 	nextTick,
 } from 'vue'
 import { catScheme } from '@/store/store'
-import { useLabels } from '@/lib/labels';
+import { useLabels } from '@/lib/labels'
 
 const $l = useLabels()
 
@@ -83,19 +84,36 @@ const onScrollEnd = () => {
 watch(
 	() => [model.value, props.start, props.end],
 	() => {
-		nextTick(() =>{
-		selectedDay.value = getDayOfYear(model.value)
-		selectedYear.value = model.value.getUTCFullYear()
-		// Set the initial scroll position
-		if (containerRef.value) {
-			const yearIndex = years.value.findIndex(
-				(year) => year === model.value.getUTCFullYear(),
-			)
-			const targetScrollTop = (yearIndex - 1) * yearHeight
-			containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'auto' })
-		}})
+		nextTick(() => {
+			selectedDay.value = getDayOfYear(model.value)
+			selectedYear.value = model.value.getUTCFullYear()
+			// Set the initial scroll position
+			if (containerRef.value) {
+				const yearIndex = years.value.findIndex(
+					(year) => year === model.value.getUTCFullYear(),
+				)
+				const targetScrollTop = (yearIndex - 1) * yearHeight
+				containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'auto' })
+			}
+		})
 	},
 )
+
+onMounted(() => {
+	const handleKey = (e: KeyboardEvent) => {
+		if (e.key === 'PageUp') {
+			model.value = subHours(model.value, 24)
+		} else if (e.key === 'PageDown') {
+			model.value = addHours(model.value, 24)
+		}
+	}
+
+	window.addEventListener('keydown', handleKey)
+	
+	onBeforeUnmount(() => {
+		window.removeEventListener('keydown', handleKey)
+	})
+})
 
 const isDragging = ref(false)
 
@@ -130,6 +148,7 @@ const endDrag = () => {
 			0,
 		),
 	)
+	console.log(`Just set model to ${model.value.toISOString()}`)
 }
 
 const needleDrag = (event: MouseEvent) => {
@@ -158,29 +177,29 @@ const needleDrag = (event: MouseEvent) => {
 }
 
 function assignTimelinePositions(
-	events: { startTime: Date; endTime: Date; color: string; y: number }[],
+	events: { times: Date[]; color: string; y: number }[],
 	targetYear: number,
 ) {
 	// console.log('assignTimelinePositions', events, targetYear)
 	// Filter to events active at any point in the target year
 	const filtered = events.filter((e) => {
 		return (
-			e.startTime.getFullYear() <= targetYear &&
-			e.endTime.getFullYear() >= targetYear
+			e.times[0].getFullYear() <= targetYear &&
+			e.times[e.times.length - 1].getFullYear() >= targetYear
 		)
 	})
 
 	// Convert to day-of-year bounds within the year
 	const sliced = filtered.map((e) => {
 		const startDay =
-			e.startTime.getFullYear() < targetYear ? 1 : getDayOfYear(e.startTime)
+			e.times[0].getFullYear() < targetYear ? 1 : getDayOfYear(e.times[0])
 
 		const endDay =
-			e.endTime.getFullYear() > targetYear
+			e.times[e.times.length - 1].getFullYear() > targetYear
 				? (new Date(targetYear, 11, 31).getTime() -
 						new Date(targetYear, 0, 0).getTime()) /
 					86400000
-				: getDayOfYear(e.endTime)
+				: getDayOfYear(e.times[e.times.length - 1])
 
 		return {
 			...e,
@@ -223,7 +242,6 @@ const positionY = (y: number) => {
 		return scaleY * (y + 1)
 	}
 }
-
 </script>
 
 <template>
@@ -286,18 +304,18 @@ const positionY = (y: number) => {
 						<p>{{ dayStr(selectedDay) }}</p>
 					</div>
 				</div>
-				<p class="jan">{{$l.months.jan}}</p>
-				<p class="feb">{{$l.months.feb}}</p>
-				<p class="mar">{{$l.months.mar}}</p>
-				<p class="apr">{{$l.months.apr}}</p>
-				<p class="may">{{$l.months.may}}</p>
-				<p class="jun">{{$l.months.jun}}</p>
-				<p class="jul">{{$l.months.jul}}</p>
-				<p class="aug">{{$l.months.aug}}</p>
-				<p class="sep">{{$l.months.sep}}</p>
-				<p class="oct">{{$l.months.oct}}</p>
-				<p class="nov">{{$l.months.nov}}</p>
-				<p class="dec">{{$l.months.dec}}</p>
+				<p class="jan">{{ $l.months.jan }}</p>
+				<p class="feb">{{ $l.months.feb }}</p>
+				<p class="mar">{{ $l.months.mar }}</p>
+				<p class="apr">{{ $l.months.apr }}</p>
+				<p class="may">{{ $l.months.may }}</p>
+				<p class="jun">{{ $l.months.jun }}</p>
+				<p class="jul">{{ $l.months.jul }}</p>
+				<p class="aug">{{ $l.months.aug }}</p>
+				<p class="sep">{{ $l.months.sep }}</p>
+				<p class="oct">{{ $l.months.oct }}</p>
+				<p class="nov">{{ $l.months.nov }}</p>
+				<p class="dec">{{ $l.months.dec }}</p>
 			</div>
 			<div class="highlight-row fade-bottom"></div>
 		</div>

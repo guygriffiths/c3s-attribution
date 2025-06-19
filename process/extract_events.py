@@ -29,86 +29,40 @@ def load_data(data_path, ref_path):
 
     return shift_longitudes(ds["t2m"]), shift_longitudes(ref["t2m"])
 
-
-def hot_pixel_distance_matrix(data, ref):
-    lat = data.latitude.values
-    lon = data.longitude.values
-    n_timesteps = data.sizes["valid_time"]
-    lat_len = data.sizes["latitude"]
-    lon_len = data.sizes["longitude"]
-
-    # Mark hot points
-    mask_3d = (data > TEMP_THRESHOLD) & (data > ref)
-    mask_3d = mask_3d.transpose("valid_time", "latitude", "longitude").values
-
-    metadata = []
-    metadata_index = {}
-    p1idx = []
-    p2idx = []
-
-    def get_uid(t, i_lat, i_lon):
-        return (t * lat_len + i_lat) * lon_len + i_lon
-
-    def ensure_metadata(t, i_lat, i_lon):
-        uid = get_uid(t, i_lat, i_lon)
-        if uid not in metadata_index:
-            metadata_index[uid] = len(metadata)
-            metadata.append(([t], [[(lat[i_lat], lon[i_lon])]]))
-        return metadata_index[uid]
-
-    for t in range(n_timesteps):
-        hot_indices = np.argwhere(mask_3d[t])
-        print(f"Found {len(hot_indices)} hot points at time {t}")
-        matched_points = 0
-
-        for i_lat, i_lon in hot_indices:
-            i_idx = ensure_metadata(t, i_lat, i_lon)
-            for dt in range(-2, 1):  # look at current and up to 2 timesteps back
-                tt = t + dt
-                if tt < 0 or tt >= n_timesteps:
-                    continue
-                for dlat in [-2, -1, 0, 1, 2]:
-                    for dlon in [-2, -1, 0, 1, 2]:
-                        j_lat = i_lat + dlat
-                        j_lon = (i_lon + dlon) % lon_len  # wrap around
-
-                        if j_lat < 0 or j_lat >= lat_len:
-                            continue
-                        if dt == 0 and dlat == 0 and dlon == 0:
-                            continue
-
-                        # This is where we decide if the point is part of the same event or not
-                        if mask_3d[tt, j_lat, j_lon]:
-                            j_idx = ensure_metadata(tt, j_lat, j_lon)
-                            p1idx.append(i_idx)
-                            p2idx.append(j_idx)
-                            matched_points += 1
-
-    dists = [1] * len(p1idx)
-    D = coo_matrix((dists, (p1idx, p2idx)), shape=(len(metadata), len(metadata)))
-    D = D + D.T  # ensure symmetry
-
-    return D, metadata
-
 def min_spatial_dist(ts1, slices1, ts2, slices2):
-    tset1 = set(ts1)
-    tset2 = set(ts2)
-    common = sorted(tset1 & tset2)
-    if not common:
-        return np.inf
     idx1 = {t: i for i, t in enumerate(ts1)}
     idx2 = {t: i for i, t in enumerate(ts2)}
+
     min_dist = np.inf
-    for t in common:
-        sl1 = slices1[idx1[t]]
-        sl2 = slices2[idx2[t]]
-        for lat1, lon1 in sl1:
-            for lat2, lon2 in sl2:
-                d = haversine(lat1, lon1, lat2, lon2)
-                min_dist = min(min_dist, d)
+
+    for t1 in ts1:
+        i1 = idx1[t1]
+        sl1 = slices1[i1]
+
+        for offset in [0]:#[-1, 0, 1]:
+            t2 = t1 + offset
+            i2 = idx2.get(t2)
+            if i2 is None:
+                continue
+
+            sl2 = slices2[i2]
+
+            # Skip empty slices just in case
+            if not sl1 or not sl2:
+                continue
+
+            hull1 = MultiPoint(sl1).convex_hull
+            hull2 = MultiPoint(sl2).convex_hull
+
+            if hull1.intersects(hull2):
+                return 0.0  # Direct intersection or containment
+
+            dist = hull1.distance(hull2)
+            min_dist = min(min_dist, dist)
+
     return min_dist
 
-def extract_events_from_mask(data, ref, structure=None):
+def extract_eventlets(data, ref, structure=None, threshold=1.0):
     """
     Extracts connected spatiotemporal events from a 3D thresholded data array.
 
@@ -124,26 +78,36 @@ def extract_events_from_mask(data, ref, structure=None):
     lons = data.longitude.values
     times = data.valid_time.values
 
-    mask = (data > TEMP_THRESHOLD) & (data > ref)
+    raw_mask = (data > TEMP_THRESHOLD) & (data > ref)
+    mask = raw_mask.values.astype(float)
 
     if structure is None:
         structure = np.array([
             [[0, 1, 0],
-            [1, 1, 1],
-            [0, 1, 0]],
+             [1, 1, 1],
+             [0, 1, 0]],
             [[1, 1, 1],
-            [1, 1, 1],
-            [1, 1, 1]],
+             [1, 1, 1],
+             [1, 1, 1]],
             [[0, 1, 0],
-            [1, 1, 1],
-            [0, 1, 0]]
-        ])
-    
-    print("Looking for features")
-    labels, num_features = label(mask, structure=structure)
+             [1, 1, 1],
+             [0, 1, 0]]
+        ], dtype=float)
+    print(f"Using structure:\n{structure}")
+
+    # Accumulate neighbour weights
+    from scipy.ndimage import convolve, label, find_objects
+    votes = convolve(mask, structure, mode='constant', cval=0.0)
+
+    # Threshold to keep only strongly-connected voxels
+    connected = votes >= threshold  # adjust this threshold as needed
+
+    # Use binary structure to define adjacency (nonzero = connected)
+    binary_structure = (structure > 0).astype(int)
+
+    labels, num_features = label(connected, structure=binary_structure)
     label_slices = find_objects(labels)
 
-    print(f"Found {num_features} features in the mask.")
     events = []
 
     for label_id, slc in enumerate(label_slices, start=1):
@@ -153,12 +117,10 @@ def extract_events_from_mask(data, ref, structure=None):
         sub_labels = labels[slc]
         coords = np.argwhere(sub_labels == label_id)
         if len(coords) < 20:
-            # print(f"Skipping feature {label_id} with only {len(coords)} coordinates.")
             continue
 
-        # Shift local coords back to global
         offsets = np.array([s.start for s in slc])
-        coords += offsets  # global (t, lat, lon)
+        coords += offsets
 
         time_to_slices = defaultdict(list)
 
@@ -169,7 +131,6 @@ def extract_events_from_mask(data, ref, structure=None):
 
         all_times = sorted(time_to_slices)
         if len(all_times) < 3:
-            # print(f"Skipping feature with only {len(all_times)} time points. (total {len(coords)})")
             continue
         all_slices = [time_to_slices[t] for t in all_times]
 
@@ -181,8 +142,6 @@ def extract_events_from_mask(data, ref, structure=None):
         })
 
     return events
-
-
 
 
 def eventlet_distance_matrix(eventlets):
@@ -206,12 +165,12 @@ def eventlet_distance_matrix(eventlets):
     metadata = []
 
     for i in range(n):
-        slices1 = eventlets[i]["regions"]
+        slices1 = eventlets[i]["slices"]
         ts1 = eventlets[i]["times"]
         metadata.append((ts1, slices1))
 
         for j in range(i + 1, n):
-            slices2 = eventlets[j]["regions"]
+            slices2 = eventlets[j]["slices"]
             ts2 = eventlets[j]["times"]
 
             # print(f"Finding dist between \n{ts1}: {slices1} and\n{ts2}: {slices2}\n\n")
@@ -222,15 +181,15 @@ def eventlet_distance_matrix(eventlets):
                 p2.append(j)
                 dists.append(dist)
 
-    print(
-        f"Computed distances for {n} eventlets, found {len(dists)}, {sorted(dists)[:100]}..."
-    )
+    # print(
+    #     f"Computed distances for {n} eventlets, found {len(dists)}, {sorted(dists)[:100]}..."
+    # )
 
     D = coo_matrix((dists + dists, (p1 + p2, p2 + p1)), shape=(n, n))
     return D, metadata
 
 
-def find_events(data, ref, tight=False, eventlets_eps=100, features_eps=500):
+def find_events(data, ref, tight=True, eventlets_eps=100, features_eps=500):
     events = []
     features = []
     # D, metadata = hot_pixel_distance_matrix(data, ref)
@@ -241,51 +200,39 @@ def find_events(data, ref, tight=False, eventlets_eps=100, features_eps=500):
 
     if tight:
         structure = np.array([
-            [[0, 0, 0],
-             [0, 1, 0],
-             [0, 0, 0]],
-            [[0, 1, 0],
-             [1, 1, 1],
-             [0, 1, 0]],
-            [[0, 0, 0],
-             [0, 1, 0],
-             [0, 0, 0]]
+            [[0, 0.05, 0],
+             [0.05, 0.15, 0.05],
+             [0, 0.05, 0]],
+            [[0.11, 0.15, 0.11],
+             [0.15, 0, 0.15],
+             [0.11, 0.15, 0.11]],
+            [[0, 0.05, 0],
+             [0.05, 0.15, 0.05],
+             [0, 0.05, 0]]
         ])
     else:
         structure = np.array([
-            [[0, 1, 0],
-             [1, 1, 1],
-             [0, 1, 0]],
             [[1, 1, 1],
              [1, 1, 1],
              [1, 1, 1]],
-            [[0, 1, 0],
+            [[1, 1, 1],
              [1, 1, 1],
-             [0, 1, 0]]
+             [1, 1, 1]],
+            [[1, 1, 1],
+             [1, 1, 1],
+             [1, 1, 1]]
         ])
-    structure = np.array([
-        [[0, 0, 0],
-         [0, 1, 0],
-         [0, 0, 0]],
-        [[0, 1, 0],
-         [1, 1, 1],
-         [0, 1, 0]],
-        [[0, 0, 0],
-         [0, 1, 0],
-         [0, 0, 0]]
-    ])
-    eventlets = extract_events_from_mask(data, ref, structure=structure)
+  
+    eventlets = extract_eventlets(data, ref, structure=structure, threshold=1.7)
 
-    # print(f"DBSCAN events: {len(eventlets)}")
-    print(f"scipy.laebl events: {len(eventlets)}")
-    # print(f"first set of events: {eventlets[:5]}")
+    print(f"Convolve method events: {len(eventlets)}")
 
     E, metadata = eventlet_distance_matrix(eventlets)
     db = DBSCAN(eps=eventlets_eps, min_samples=1, metric="precomputed")
     labels = db.fit_predict(E)
 
     events = events_from_clusters(labels, metadata, 1)
-    print(f"second set of events: {len(events)}")
+    print(f"DBSCAN of convolved eventlets: {len(events)}")
 
     # F, metadata = eventlet_distance_matrix(events)
     # db = DBSCAN(eps=features_eps, min_samples=3, metric="precomputed")
@@ -293,20 +240,13 @@ def find_events(data, ref, tight=False, eventlets_eps=100, features_eps=500):
     # features = events_from_clusters(labels, metadata, 2)
     # print(f"third set of events: {len(features)}")
 
-
     time_values = data.valid_time.values
     
-    for event in events:
-        # print(f"Event times: {event['times']}")
+    id = 0
+    for event in eventlets+events+features:
         event["times"] = [time_string(time_values[t]) for t in event["times"]]
-        # event["regions"] = regions_from_slices(event["slices"])
-    for feature in features:
-        feature["times"] = [time_string(time_values[t]) for t in feature["times"]]
-        # feature["regions"] = regions_from_slices(feature["slices"])
-    for eventlet in eventlets:
-        eventlet["times"] = [time_string(time_values[t]) for t in eventlet["times"]]
-        # eventlet["regions"] = regions_from_slices(eventlet["slices"])
-
+        event["id"] = id
+        id += 1
 
     return events, features, eventlets
 
@@ -328,10 +268,6 @@ def events_from_clusters(labels, metadata, feature_level=1):
         for times, slices in points:
             for t, s in zip(times, slices):
                 time_to_slices[t].append(s)
-        
-        # for t in time_to_slices:
-        #     if len(time_to_slices[t]) > 1: 
-        #         print(f"Event {label} at time {t} has {len(time_to_slices[t])} slices, merging them.")
 
         # Now get sorted arrays
         all_times = sorted(time_to_slices)
@@ -354,7 +290,6 @@ def events_from_clusters(labels, metadata, feature_level=1):
 
 
 def regions_from_slices(slices):
-    # print(f"Creating regions from {len(slices)} slices: {slices[:5]}...")
     return [make_bounding_polygon(slice, False) for slice in slices]
 
 
@@ -443,42 +378,30 @@ def time_string(t):
 
 
 def main():
-    t2m, ref = load_data("/data/era5_2024.nc", "/data/era5_ref98.nc")
+    t2m, ref = load_data("/data/era5_2024.nc", "/data/era5_ref99.nc")
 
-    n = t2m.sizes["valid_time"]
-    start = 0 # 1st May
-    end =  start + 100
-    t2m = t2m.isel(valid_time=slice(start, end))
+    # n = t2m.sizes["valid_time"]
+    # start = 121 # 1st May
+    # end =  start + 50
+    # t2m = t2m.isel(valid_time=slice(start, end))
 
     # Define India bounds wi' a buffer
-    lat_min = 5    # a wee bit south o’ Tamil Nadu
-    lat_max = 40   # up past Kashmir
-    lon_min = 65   # includes bits o’ Pakistan
-    lon_max = 105  # over tae Myanmar
+    # lat_min = 5    # a wee bit south o’ Tamil Nadu
+    # lat_max = 40   # up past Kashmir
+    # lon_min = 45   
+    # lon_max = 125  
 
     # Subset spatially
-    t2m = t2m.sel(
-        latitude=slice(lat_max, lat_min),  # lat usually runs north tae south
-        longitude=slice(lon_min, lon_max)
-    )
+    # t2m = t2m.sel(
+    #     latitude=slice(lat_max, lat_min),  # lat usually runs north tae south
+    #     longitude=slice(lon_min, lon_max)
+    # )
 
     all_events = []
     years = 0
-    for eps in [100]:#[15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 300]:
-        # events, features, eventlets = find_events(
-        #     t2m, ref, tight=True, eventlets_eps=eps, features_eps=eps * 5
-        # )
-        # with open(f"/data/output/events_all_tight_{eps}.json", "w") as f:
-        #     json.dump(eventlets+events+features, f, indent=2)
-        # with open(f"/data/output/eventlets_tight_{eps}.json", "w") as f:
-        #     json.dump(eventlets, f, indent=2)
-        # with open(f"/data/output/events_tight_{eps}.json", "w") as f:
-        #     json.dump(events, f, indent=2)
-        # with open(f"/data/output/features_tight_{eps}.json", "w") as f:
-        #     json.dump(features, f, indent=2)
-
+    for eps in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]:
         events, features, eventlets = find_events(
-            t2m, ref, tight=False, eventlets_eps=eps, features_eps=eps * 5
+            t2m, ref, tight=True, eventlets_eps=eps, features_eps=eps * 5
         )
         with open(f"/data/output/events_all_{eps}.json", "w") as f:
             json.dump(eventlets+events+features, f, indent=2)
@@ -486,18 +409,10 @@ def main():
             json.dump(eventlets, f, indent=2)
         with open(f"/data/output/events_{eps}.json", "w") as f:
             json.dump(events, f, indent=2)
-        with open(f"/data/output/features_{eps}.json", "w") as f:
-            json.dump(features, f, indent=2)
-        # with open(f"/data/output/events_features_{eps}.json", "w") as f:
-        #     json.dump(events + features, f, indent=2)
-        # for event in events:
-        #     event["startTime"] = event["startTime"].replace("2024", f"{2024-years}")
-        #     event["endTime"] = event["endTime"].replace("2024", f"{2024-years}")
-        #     event["eps"] = eps
-        # all_events += events
-        # years += 1
-    # with open("/data/output/events_all.json", "w") as f:
-    #     json.dump(all_events, f, indent=2)
+        # with open(f"/data/output/features_{eps}.json", "w") as f:
+        #     json.dump(features, f, indent=2)
+
+        
 
 
 if __name__ == "__main__":

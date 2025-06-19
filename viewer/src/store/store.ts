@@ -5,10 +5,9 @@ import { defineStore } from 'pinia'
 type LayerDetails = any
 
 interface Event {
-	times: number[]
-	startTime: Date
-	endTime: Date
+	times: Date[]
 	slices: any[]
+	featureLevel?: number
 	regions: any[]
 	maxArea: number
 	bbox: [number, number, number, number]
@@ -25,6 +24,8 @@ interface State {
 	startTime: Date
 	endTime: Date
 	events: Event[]
+	eventlets: Event[]
+	features: Event[]
 	selectedEvent?: Event | null
 }
 
@@ -43,6 +44,8 @@ export const useStore = defineStore('main', {
 			startTime: new Date(),
 			endTime: new Date(),
 			events: [],
+			eventlets: [],
+			features: [],
 			selectedEvent: null,
 		}
 	},
@@ -61,8 +64,8 @@ export const useStore = defineStore('main', {
 		},
 		activeEvents: (state) => {
 			return state.events.filter((event) => {
-				const startDate = new Date(event.startTime)
-				const endDate = new Date(event.endTime)
+				const startDate = new Date(event.times[0])
+				const endDate = new Date(event.times[event.times.length - 1])
 				startDate.setHours(0, 0, 0, 0)
 				endDate.setHours(23, 59, 59, 999)
 				return (
@@ -92,21 +95,26 @@ export const useStore = defineStore('main', {
 				})
 				.then((data) => {
 					this.endTime = new Date(0)
-					this.events = data
-					this.events.forEach((event) => {
-						event.startTime = new Date(event.startTime)
-						event.endTime = new Date(event.endTime)
-						const startDate = new Date(event.startTime)
+					data.forEach((event: any) => {
+						event.times = event.times.map((time: string) => new Date(time))
+						const startDate = new Date(event.times[0])
 						if (startDate < this.startTime) {
 							this.startTime = new Date(startDate)
 						}
 						startDate.setHours(0, 0, 0, 0)
-						const endDate = new Date(event.endTime)
+						const endDate = new Date(event.times[event.times.length - 1])
 						if (endDate > this.endTime) {
 							this.endTime = new Date(endDate)
 						}
 						endDate.setHours(23, 59, 59, 999)
 					})
+
+					this.events = data
+					console.log('Events loaded:', this.events)
+					// this.events.forEach((event) => {
+					// 	event.times = event.times.map((time: string) => new Date(time))
+						
+					// })
 					this.setLoadingDone()
 				})
 				.catch((error) => {
