@@ -9,9 +9,7 @@ from collections import defaultdict
 from shapely.geometry import MultiPoint
 import alphashape
 from collections import defaultdict
-from scipy.ndimage import label, find_objects
-
-# from scipy.spatial.qhull import Qh  ullError
+from scipy.ndimage import convolve, label, find_objects, binary_dilation, generate_binary_structure
 from scipy.spatial import QhullError
 
 # Constants
@@ -95,24 +93,41 @@ def extract_eventlets(data, ref, structure=None, threshold=1.0):
         ], dtype=float)
     print(f"Using structure:\n{structure}")
 
+    structure = generate_binary_structure(mask.ndim, 1)
+    padded_mask = binary_dilation(mask, structure=structure, iterations=1)
+
+    # Get bounding box of the region
+    coords = np.argwhere(padded_mask)
+    min_coords = coords.min(axis=0)
+    max_coords = coords.max(axis=0) + 1  # slice end is exclusive
+
+    # Crop all arrays
+    slices = tuple(slice(start, end) for start, end in zip(min_coords, max_coords))
+    cropped_mask = mask[slices]
+
     # Accumulate neighbour weights
-    from scipy.ndimage import convolve, label, find_objects
-    votes = convolve(mask, structure, mode='constant', cval=0.0)
+
+    votes = convolve(cropped_mask, structure, mode='constant', cval=0.0)
+    print(f"Convolved matrix:\n{votes}")
 
     # Threshold to keep only strongly-connected voxels
     connected = votes >= threshold  # adjust this threshold as needed
 
     # Use binary structure to define adjacency (nonzero = connected)
     binary_structure = (structure > 0).astype(int)
+    print(f"Filtered connected and got structure:\n{binary_structure}")
 
     labels, num_features = label(connected, structure=binary_structure)
+    print(f"Got {num_features} connected components.")
     label_slices = find_objects(labels)
+    print(f"Found objects")
 
     events = []
 
     for label_id, slc in enumerate(label_slices, start=1):
         if slc is None:
             continue
+        # print(f"Processing label {label_id} with slice {slc}")
 
         sub_labels = labels[slc]
         coords = np.argwhere(sub_labels == label_id)
@@ -164,7 +179,7 @@ def eventlet_distance_matrix(eventlets):
     dists = []
     metadata = []
 
-    for i in range(n):
+    for i in range(n):Things to do
         slices1 = eventlets[i]["slices"]
         ts1 = eventlets[i]["times"]
         metadata.append((ts1, slices1))
@@ -223,7 +238,7 @@ def find_events(data, ref, tight=True, eventlets_eps=100, features_eps=500):
              [1, 1, 1]]
         ])
   
-    eventlets = extract_eventlets(data, ref, structure=structure, threshold=1.7)
+    eventlets = extract_eventlets(data, ref, structure=structure, threshold=1.8)
 
     print(f"Convolve method events: {len(eventlets)}")
 
@@ -278,9 +293,21 @@ def events_from_clusters(labels, metadata, feature_level=1):
                 merged.extend(group)
             all_slices.append(merged)
 
+        centroids = [
+            (np.mean([s[0] for s in region]), np.mean([s[1] for s in region]))
+            for region in all_slices
+        ]
+
         events.append({
             "times": all_times,
             "slices": all_slices,
+            "centroids": centroids,
+            "bbox": [
+                [np.min([s[0] for region in all_slices for s in region]),
+                np.min([s[1] for region in all_slices for s in region])],
+                [np.max([s[0] for region in all_slices for s in region]),
+                np.max([s[1] for region in all_slices for s in region])],
+            ],
             "regions": regions_from_slices(all_slices),
             "featureLevel": feature_level,
         })
@@ -380,10 +407,10 @@ def time_string(t):
 def main():
     t2m, ref = load_data("/data/era5_2024.nc", "/data/era5_ref99.nc")
 
-    # n = t2m.sizes["valid_time"]
-    # start = 121 # 1st May
-    # end =  start + 50
-    # t2m = t2m.isel(valid_time=slice(start, end))
+    n = t2m.sizes["valid_time"]
+    start = 121 # 1st May
+    end =  start + 150
+    t2m = t2m.isel(valid_time=slice(start, end))
 
     # Define India bounds wi' a buffer
     # lat_min = 5    # a wee bit south o’ Tamil Nadu
@@ -391,7 +418,7 @@ def main():
     # lon_min = 45   
     # lon_max = 125  
 
-    # Subset spatially
+    # # Subset spatially
     # t2m = t2m.sel(
     #     latitude=slice(lat_max, lat_min),  # lat usually runs north tae south
     #     longitude=slice(lon_min, lon_max)
@@ -399,7 +426,7 @@ def main():
 
     all_events = []
     years = 0
-    for eps in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]:
+    for eps in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.5, 3.0, 3.5, 4.0]:
         events, features, eventlets = find_events(
             t2m, ref, tight=True, eventlets_eps=eps, features_eps=eps * 5
         )
