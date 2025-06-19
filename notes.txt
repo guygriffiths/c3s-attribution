@@ -13,5 +13,8 @@ Let's do this:
 * Zoom on the timeline at the same time
 
 
+Issues:
+* Map scroll wraps but events don't
+
 
 

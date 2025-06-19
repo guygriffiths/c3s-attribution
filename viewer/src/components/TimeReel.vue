@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { format, getDayOfYear, setDayOfYear, addHours, subHours } from 'date-fns'
+import {
+	format,
+	getDayOfYear,
+	setDayOfYear,
+	addHours,
+	subHours,
+} from 'date-fns'
 import {
 	ref,
 	computed,
@@ -28,6 +34,10 @@ const props = defineProps({
 		type: Array,
 		default: () => [] as { startDate: Date; endDate: Date }[],
 	},
+	zoom: {
+		type: Boolean,
+		default: false,
+	},
 })
 
 const model: Ref<Date> = defineModel({
@@ -38,17 +48,34 @@ const model: Ref<Date> = defineModel({
 const containerRef = ref<HTMLDivElement | null>(null)
 const needleRef = ref<HTMLDivElement | null>(null)
 
-const yearHeight = 96
-const rowsToShow = 3
+const yearHeight = computed(() => {
+	if (props.zoom) {
+		return 3 * 96 // Height for zoomed-in view
+	} else {
+		return 96 // Height for normal view
+	}
+})
+const rowsToShow = computed(() => {
+	if (props.zoom) {
+		return 1
+	} else {
+		return 3
+	}
+})
 const totalDays = 366
 const selectedDay = ref(getDayOfYear(model.value))
 const selectedYear = ref(model.value.getUTCFullYear())
 
 const startYear = computed(() => props.start.getUTCFullYear())
 const endYear = computed(() => props.end.getUTCFullYear())
-const totalYears = computed(() => endYear.value - startYear.value + 3)
+const totalYears = computed(
+	() => endYear.value - startYear.value + 3,
+)
 const years = computed(() =>
-	Array.from({ length: totalYears.value }, (_, i) => startYear.value - 1 + i),
+	Array.from(
+		{ length: totalYears.value },
+		(_, i) => startYear.value - 1 + i,
+	),
 )
 const days = computed(() => Array.from({ length: totalDays }, (_, i) => i + 1))
 
@@ -68,12 +95,12 @@ const onScrollEnd = () => {
 	// Snap to the nearest year and scroll to it
 	if (containerRef.value) {
 		const scrollTop = containerRef.value.scrollTop
-		const yearIndex = Math.round(scrollTop / yearHeight)
-		const targetScrollTop = yearIndex * yearHeight
+		const yearIndex = Math.round(scrollTop / yearHeight.value)
+		const targetScrollTop = yearIndex * yearHeight.value
 		containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
 
-		// +1 is because we are looking at 3 years and want the second one
-		selectedYear.value = years.value[yearIndex + 1]
+		const offset = Math.floor(rowsToShow.value / 2)
+		selectedYear.value = years.value[yearIndex + offset]
 		model.value = setDayOfYear(
 			new Date(Date.UTC(selectedYear.value, 0, 1)),
 			selectedDay.value,
@@ -92,7 +119,7 @@ watch(
 				const yearIndex = years.value.findIndex(
 					(year) => year === model.value.getUTCFullYear(),
 				)
-				const targetScrollTop = (yearIndex - 1) * yearHeight
+				const targetScrollTop = (yearIndex - 1) * yearHeight.value
 				containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'auto' })
 			}
 		})
@@ -109,7 +136,7 @@ onMounted(() => {
 	}
 
 	window.addEventListener('keydown', handleKey)
-	
+
 	onBeforeUnmount(() => {
 		window.removeEventListener('keydown', handleKey)
 	})
@@ -177,7 +204,7 @@ const needleDrag = (event: MouseEvent) => {
 }
 
 function assignTimelinePositions(
-	events: { times: Date[]; color: string; y: number }[],
+	events: { times: Date[]; color: string; y: number; id: number }[],
 	targetYear: number,
 ) {
 	// console.log('assignTimelinePositions', events, targetYear)
@@ -227,7 +254,7 @@ function assignTimelinePositions(
 			while (usedYs.has(y)) y++
 			activeRows.push({ endX: event.endX, y })
 			event.y = y
-			event.color = catScheme[idx % catScheme.length]
+			event.color = catScheme[event.id % catScheme.length]
 			return event
 		})
 
@@ -247,7 +274,7 @@ const positionY = (y: number) => {
 <template>
 	<div class="time-reel">
 		<div
-			class="time-reel-container"
+			class="year-grid-container"
 			ref="containerRef"
 			:style="{ height: `${yearHeight * rowsToShow}px` }"
 			v-on:scrollend="onScrollEnd"
@@ -257,6 +284,7 @@ const positionY = (y: number) => {
 					v-for="year in years"
 					:key="year"
 					class="year-row"
+					:class="{ zoom: props.zoom }"
 					:style="{ height: `${yearHeight}px` }"
 				>
 					<div class="year-label">{{ year }}</div>
@@ -290,9 +318,16 @@ const positionY = (y: number) => {
 				</div>
 			</div>
 		</div>
-		<div class="year-highlights">
-			<div class="highlight-row fade-top"></div>
-			<div class="highlight-row highlight">
+		<div class="year-highlights" >
+			<div
+				class="highlight-row fade-top"
+				:class="{ zoom: props.zoom }"
+				:style="`flex: 0 0 calc( 0.5 * ( 100% - ( 100% / ${rowsToShow} ) )`"
+			></div>
+			<div
+				class="highlight-row highlight"
+				:style="`flex: 0 0 calc(100% / ${rowsToShow});`"
+			>
 				<div
 					class="needle"
 					ref="needleRef"
@@ -317,7 +352,10 @@ const positionY = (y: number) => {
 				<p class="nov">{{ $l.months.nov }}</p>
 				<p class="dec">{{ $l.months.dec }}</p>
 			</div>
-			<div class="highlight-row fade-bottom"></div>
+			<div
+				class="highlight-row fade-bottom"
+				:style="`flex: 0 0 calc( 0.5 * ( 100% - ( 100% / ${rowsToShow} ) )`"
+			></div>
 		</div>
 	</div>
 </template>
@@ -330,11 +368,13 @@ $margin: 0 0.5rem;
 	position: relative;
 }
 
-.time-reel-container {
+.year-grid-container {
 	margin: $margin;
 	border: 1px solid #ccc;
 	position: relative;
 	overflow-y: scroll;
+	width: 100%;
+	padding: 0;
 }
 
 .year-grid {
@@ -344,7 +384,12 @@ $margin: 0 0.5rem;
 	.year-row {
 		display: flex;
 		position: relative;
-		// border: 1px solid black;
+		transition: all $animTime ease-in-out;
+		// border: 1px solid red;
+
+		&.zoom {
+			transform: translateY(-100%);
+		}
 
 		.year-label {
 			position: absolute;
@@ -379,6 +424,11 @@ $margin: 0 0.5rem;
 	height: 100%;
 	pointer-events: none;
 	z-index: 1;
+	transition: all $animTime ease-in-out;
+
+	svg {
+		transition: all $animTime ease-in-out;
+	}
 }
 
 .year-highlights {
@@ -393,12 +443,13 @@ $margin: 0 0.5rem;
 	justify-content: space-between;
 	z-index: 2;
 	pointer-events: none;
+	transition: all $animTime ease-in-out;
 
+	
 	$fadeColor: #aaaaaa;
-
+	
 	.highlight-row {
-		flex: 0 0 33.33%;
-
+		transition: all $animTime ease-in-out;
 		&.fade-top {
 			pointer-events: none;
 			background: linear-gradient(
@@ -437,7 +488,7 @@ $margin: 0 0.5rem;
 				height: 100%;
 				box-sizing: border-box;
 				cursor: ew-resize;
-				border-top: 7px solid red;
+				border-top: 7px solid $c3sred;
 				border-right: 7px solid transparent;
 				border-left: 7px solid transparent;
 				border-bottom: none;
@@ -448,7 +499,7 @@ $margin: 0 0.5rem;
 					// left: 8px;
 					width: 1px;
 					height: 100%;
-					background-color: red;
+					background-color: $c3sred;
 				}
 
 				.label {
@@ -464,7 +515,7 @@ $margin: 0 0.5rem;
 					z-index: 1;
 					pointer-events: none;
 					user-select: none;
-					transition: opacity 0.5s ease-in-out;
+					transition: opacity $animTime ease-in-out;
 
 					&.hidden {
 						opacity: 0;

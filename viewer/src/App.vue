@@ -32,6 +32,7 @@ onMounted(() => {
 	height: 100vh;
 	max-width: 100vw;
 	max-height: 100vh;
+	overflow: hidden;
 	// display: grid;
 	// grid-template-columns: 100%;
 	// grid-template-rows: $headerHeight + $gap 1fr $footerHeight + $gap;
@@ -54,6 +55,7 @@ onMounted(() => {
 		// max-height: calc(100vh - $headerHeight - $footerHeight - 2 * $gap);
 		// padding: 1rem;
 		height: 100vh;
+		max-height: 100vh;
 	}
 
 	#footer {

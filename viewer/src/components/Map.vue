@@ -13,11 +13,11 @@ import {
 	LPopup,
 	LPolygon,
 } from '@vue-leaflet/vue-leaflet'
-import { LatLng, Map, Point, icon } from 'leaflet'
-import { T2M_LAYER, useStore, WMS_ROOT } from '@/store/store'
+import { LatLng, LatLngBounds, Map, Point, icon } from 'leaflet'
+import { T2M_LAYER, useStore, WMS_ROOT, catScheme } from '@/store/store'
 import { differenceInDays } from 'date-fns'
-import { schemeCategory10 } from 'd3'
 import markerIconImg from '@/assets/img/marker-icon-2x-c3sred.png'
+import gridpointIconImg from '@/assets/img/gridpoint-icon.png'
 import { markRaw } from 'vue'
 
 const store = useStore()
@@ -31,7 +31,7 @@ const mapOptions = {
 	wheelPxPerZoomLevel: 240,
 }
 const centerPoint: Ref<Point> = ref(new LatLng(30, 0) as unknown as Point)
-const zoom = ref(2)
+const zoom = ref(3)
 
 const bgLayer = {
 	name: 'Stadia OSM Bright',
@@ -65,6 +65,26 @@ watch(
 	},
 )
 
+watch(
+	() => store.selectedEvent,
+	(newVal) => {
+		if (newVal && mapRef.value) {
+			const map: Map = mapRef.value.leafletObject as Map
+			console.log('fitting bounds', newVal.bbox)
+			try {
+				map.fitBounds(newVal.bbox, {
+					// paddingTopLeft: [0, 0],
+					paddingBottomRight: [map.getSize().x * 0.5, map.getSize().y * 0.5],
+					maxZoom: 12,
+					duration: 1.25,
+				})
+			} catch (e) {
+				console.error('Error fitting bounds:', e)
+			}
+		}
+	},
+)
+
 const getEventRegion = (event: any) => {
 	const idx = event.times.findIndex(
 		(t: Date) =>
@@ -77,11 +97,29 @@ const getEventRegion = (event: any) => {
 	return event.regions[idx]
 }
 
+const lastBbox = ref<LatLngBounds | null>(null)
+const selectEvent = (event: any) => {
+	if (!store.eventSelected) {
+		lastBbox.value = mapRef.value?.leafletObject.getBounds()
+	} else if (event == store.selectedEvent) {
+		if (lastBbox.value && mapRef.value) {
+			mapRef.value.leafletObject.fitBounds(lastBbox.value)
+		}
+	}
+	store.selectEvent(event)
+}
+
 const markerIcon = icon({
 	iconUrl: markerIconImg, // or a URL string
 	iconSize: [25, 41], // width and height
 	iconAnchor: [13, 41], // point of the icon which will correspond to marker's location
 	popupAnchor: [0, -41], // point from which the popup should open
+})
+const gridpointIcon = icon({
+	iconUrl: gridpointIconImg, // or a URL string
+	iconSize: [7, 7], // width and height
+	iconAnchor: [4, 4], // point of the icon which will correspond to marker's location
+	popupAnchor: [4, 4], // point from which the popup should open
 })
 </script>
 
@@ -104,35 +142,32 @@ const markerIcon = icon({
 				layer-type="base"
 				:zIndex="1"
 			></LTileLayer>
-			<l-marker :lat-lng="[51.437576, -0.941099]" :icon="markerIcon" />
+
+			<!-- <l-marker :lat-lng="[51.437576, -0.941099]" :icon="markerIcon" /> -->
 			<LTileLayer :url="wmtsUrl" :zIndex="2" :opacity="0.75"></LTileLayer>
-			<!-- TODO Find out why these don't look like the centroid... -->
-			<!-- <div v-for="(event, idx) in store.activeEvents">
-				<LCircleMarker
-					v-for="point in event.slices[
-						event.times.findIndex(
-							(t) =>
-								new Date(t).getTime() ===
-								new Date(store.selectedTime).getTime(),
-						)
-					]"
-					:lat-lng="point"
-					:radius="2"
-					:color="schemeCategory10[event.id % 10]"
-				>
-				</LCircleMarker>
-			</div> -->
+			<LMarker
+				v-for="point in store.selectedEvent?.slices[
+					store.selectedEvent?.times.findIndex(
+						(t: Date) =>
+							new Date(t).getTime() === new Date(store.selectedTime).getTime(),
+					)
+				]"
+				:lat-lng="point"
+				:icon="gridpointIcon"
+			>
+			</LMarker>
 			<LPolygon
 				v-for="(event, idx) in store.activeEvents"
 				:lat-lngs="getEventRegion(event)"
-				:weight="2"
-				:fill="false"
-				:opacity="0.5"
-				:color="schemeCategory10[idx % 10]"
+				:weight="3"
+				:fill="true"
+				:opacity="1"
+				:color="catScheme[event.id % catScheme.length]"
+				@click="selectEvent(event)"
 			>
-				<LPopup>
+				<!-- <LPopup>
 					<p>{{ event }}</p>
-				</LPopup>
+				</LPopup> -->
 			</LPolygon>
 			<LControl position="bottomleft">
 				<div>
@@ -165,6 +200,15 @@ const markerIcon = icon({
 	:deep(.leaflet-control-zoom-in) {
 		background-color: $bg;
 		border-color: $bgContrast;
+	}
+
+	:deep(.leaflet-tile) {
+		image-rendering: pixelated; /* or auto/smooth depending on your preference */
+		transform-origin: center center;
+	}
+	.leaflet-tile {
+		image-rendering: pixelated; /* or auto/smooth depending on your preference */
+		transform-origin: center center;
 	}
 }
 </style>

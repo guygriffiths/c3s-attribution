@@ -27,6 +27,8 @@ interface State {
 	eventlets: Event[]
 	features: Event[]
 	selectedEvent?: Event | null
+
+	timePanelExpanded: boolean
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -38,7 +40,7 @@ export const useStore = defineStore('main', {
 		return {
 			lang: 'en',
 			loadingCount: 0,
-			selectedTime: new Date(2024, 4, 28, 0, 0, 0),
+			selectedTime: new Date(Date.UTC(2024, 4, 28, 0, 0, 0)),
 			layerDetails: null,
 			// times: [],
 			startTime: new Date(),
@@ -47,9 +49,13 @@ export const useStore = defineStore('main', {
 			eventlets: [],
 			features: [],
 			selectedEvent: null,
+			timePanelExpanded: true,
 		}
 	},
 	getters: {
+		eventSelected: (state) => {
+			return state.selectedEvent !== null && state.selectedEvent !== undefined
+		},
 		isLoading: (state) => state.loadingCount > 0,
 		isoDatetime: (state) => {
 			// This always returns the datetime in UTC, which is what we need
@@ -57,10 +63,7 @@ export const useStore = defineStore('main', {
 		},
 		selectedTimeIndex: (state) => {
 			// Find the index of the selected time in the times array
-			return differenceInDays(
-				state.selectedTime,
-				state.startTime,
-			)
+			return differenceInDays(state.selectedTime, state.startTime)
 		},
 		activeEvents: (state) => {
 			return state.events.filter((event) => {
@@ -68,15 +71,25 @@ export const useStore = defineStore('main', {
 				const endDate = new Date(event.times[event.times.length - 1])
 				startDate.setHours(0, 0, 0, 0)
 				endDate.setHours(23, 59, 59, 999)
-				return (
-					state.selectedTime >= startDate &&
-					state.selectedTime <= endDate
-				)
+				return state.selectedTime >= startDate && state.selectedTime <= endDate
 			})
 		},
 	},
 	actions: {
-		/* You can define actions here and just call then like normal methods */
+		selectEvent(event: Event, bbox?: [[number, number], [number, number]]) {
+			if (this.selectedEvent === event) {
+				this.selectedEvent = null
+			} else {
+				this.selectedEvent = event
+				this.timePanelExpanded = true
+			}
+		},
+		toggleTimePanel() {
+			this.timePanelExpanded = !this.timePanelExpanded
+		},
+		toggleEventSelectedDebug() {
+			this.selectedEvent = this.selectedEvent === null ? new Object() as Event : null
+		},
 		setLoading() {
 			this.loadingCount++
 		},
@@ -113,7 +126,7 @@ export const useStore = defineStore('main', {
 					console.log('Events loaded:', this.events)
 					// this.events.forEach((event) => {
 					// 	event.times = event.times.map((time: string) => new Date(time))
-						
+
 					// })
 					this.setLoadingDone()
 				})

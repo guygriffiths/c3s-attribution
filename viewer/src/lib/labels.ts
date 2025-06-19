@@ -7,6 +7,8 @@ const langNames: Record<Language, string> = {
 
 const labelsEn = {
 	title: 'C3S Extreme Events Viewer',
+	showTimePanel: 'Show time panel',
+	hideTimePanel: 'Hide time panel',
 	months: {
 		jan: 'Jan',
 		feb: 'Feb',
