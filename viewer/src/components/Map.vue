@@ -9,13 +9,16 @@ import {
 	LControlZoom,
 	LWmsTileLayer,
 	LCircleMarker,
+	LMarker,
 	LPopup,
 	LPolygon,
 } from '@vue-leaflet/vue-leaflet'
-import { LatLng, Map, Point } from 'leaflet'
+import { LatLng, Map, Point, icon } from 'leaflet'
 import { T2M_LAYER, useStore, WMS_ROOT } from '@/store/store'
 import { differenceInDays } from 'date-fns'
 import { schemeCategory10 } from 'd3'
+import markerIconImg from '@/assets/img/marker-icon-2x-c3sred.png'
+import { markRaw } from 'vue'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
@@ -73,6 +76,13 @@ const getEventRegion = (event: any) => {
 
 	return event.regions[idx]
 }
+
+const markerIcon = icon({
+	iconUrl: markerIconImg, // or a URL string
+	iconSize: [25, 41], // width and height
+	iconAnchor: [13, 41], // point of the icon which will correspond to marker's location
+	popupAnchor: [0, -41], // point from which the popup should open
+})
 </script>
 
 <template>
@@ -94,6 +104,7 @@ const getEventRegion = (event: any) => {
 				layer-type="base"
 				:zIndex="1"
 			></LTileLayer>
+			<l-marker :lat-lng="[51.437576, -0.941099]" :icon="markerIcon" />
 			<LTileLayer :url="wmtsUrl" :zIndex="2" :opacity="0.75"></LTileLayer>
 			<!-- TODO Find out why these don't look like the centroid... -->
 			<!-- <div v-for="(event, idx) in store.activeEvents">

@@ -45,6 +45,18 @@ button {
 	}
 }
 
+.panel {
+	display: flex;
+    border-radius: 6px;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 3px;
+    margin-right: 3px;
+    margin-top: 1px;
+    box-shadow: rgba(0, 0, 0, 0.5) 1px 1px 3px 1px;
+    background-color: $panelBg;
+}
+
 @keyframes fadeIn {
 	0% {
 		background-color: rgba($primary, 0);
