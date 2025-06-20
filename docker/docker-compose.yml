@@ -27,6 +27,7 @@ services:
     - *services-repo
     - *services-storage
     command: bash
+    mem_limit: 0
   
   # ncwms:
   #   image: ncwms

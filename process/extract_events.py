@@ -179,7 +179,7 @@ def eventlet_distance_matrix(eventlets):
     dists = []
     metadata = []
 
-    for i in range(n):Things to do
+    for i in range(n):
         slices1 = eventlets[i]["slices"]
         ts1 = eventlets[i]["times"]
         metadata.append((ts1, slices1))
