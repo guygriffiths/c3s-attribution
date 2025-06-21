@@ -48,6 +48,15 @@ class Eventlet:
         lat_mean = np.mean(target_slice[:, 0])
         lon_mean = np.mean(target_slice[:, 1])
         return (lat_mean, lon_mean)
+    
+    def hull(self, n):
+        if not self.slices:
+            return None
+        target_slice = self.slices[n] if n < len(self.slices) else self.slices[-1]
+        if len(target_slice) == 0:
+            return None
+        from shapely.geometry import MultiPoint
+        return MultiPoint(target_slice).convex_hull
 
     def overlaps(self, coords, eps=1e-6):
         # coords: list of (lat, lon)
@@ -115,6 +124,7 @@ class EventletFactory:
         self.output_queue = deque()
         self.neighbor_weight_fn = neighbor_weight_fn or (lambda dx, dy: 1)
         self.oldest_active_time = None
+        self.id = 0
 
     def process_slice(self, time, data_slice):
         print(f"Processing slice at {time}")
@@ -123,6 +133,8 @@ class EventletFactory:
                       [1,1,1],
                       [0,1,0]], dtype=bool)  # 4-connectivity
         eroded_mask = binary_erosion(hot_mask, structure=structure)
+        # eroded_mask = binary_erosion(eroded_mask, structure=structure)
+
         # print(f"Masked data")
         blobs = self._label_connected_blobs(eroded_mask)
         # print(f"Processing slice at {time}")
@@ -165,25 +177,22 @@ class EventletFactory:
                     self.output_queue.append(ev)
                 # drop otherwise
         self.active = [ev for ev in self.active if not ev.is_expired(time, self.expiry_days)]
-        print(f"Active events after expiry check: {len(self.active)}, {self.active[0].times if self.active else 'None'}")
+        # print(f"Active events after expiry check: {len(self.active)}, {self.active[0].times if self.active else 'None'}")
 
 
         
-        for i, blob in enumerate(blobs):
-            if i not in used_blobs:
-                new_ev = Eventlet(time, blob)
-                self.active.append(new_ev)
+        # for i, blob in enumerate(blobs):
+        #     if i not in used_blobs:
+        #         new_ev = Eventlet(time, blob)
+        #         self.active.append(new_ev)
         
-
-
-        with open("/data/events_to_plot.json", "w") as f:
-            events = []
-            for ev in self.active:
-                events.append({
-                    "times": [t.isoformat() for t in ev.times],
-                    "regions": [get_region(region) for region in ev.slices],
-                })
-            json.dump(events, f, indent=2)
+        #         with open("/data/output/eventlets.jsonl", "a") as f:
+        #             f.write(json.dumps({
+        #                 "id": self.id,
+        #                 "times": time.isoformat(),
+        #                 "coords": blob
+        #             }) + "\n")
+        #         self.id += 1
 
         self.oldest_active_time = min((ev.earliest_time() for ev in self.active), default=None)
 
@@ -235,7 +244,7 @@ class EventletFactory:
 
 
 class EventletClusterer:
-    def __init__(self, dist_threshold, factory_ref, time_threshold=timedelta(days=1), output_path="final_events.jsonl"):
+    def __init__(self, dist_threshold, factory_ref, time_threshold=timedelta(days=1), output_path="/data/output/final_events.jsonl"):
         self.dist_threshold = dist_threshold
         self.factory = factory_ref
         self.time_threshold = time_threshold
@@ -249,13 +258,11 @@ class EventletClusterer:
         idx1 = {t: i for i, t in enumerate(ts1)}
         idx2 = {t: i for i, t in enumerate(ts2)}
 
-        # print(f"Calculating distance between eventlets with {len(ts1)} and {len(ts2)} times\nWith hulls {len(hulls1)} and {len(hulls2)}\n")
-
         min_dist = np.inf
 
         for t1 in ts1:
             i1 = idx1[t1]
-            centroid1 = ev1.centroid(i1)
+            hull1 = ev1.hull(i1)
 
             for offset in [0]:#[-1, 0, 1]:
                 t2 = t1 + timedelta(days=offset)
@@ -263,21 +270,12 @@ class EventletClusterer:
                 if i2 is None:
                     continue
 
-                centroid2 = ev2.centroid(i2)
+                hull2 = ev2.hull(i2)
 
-                min_dist = min(min_dist, np.sqrt(
-                    (centroid1[0] - centroid2[0]) ** 2 +
-                    (centroid1[1] - centroid2[1]) ** 2
-                ))
+                if hull1.intersects(hull2):
+                    return 0.0  # Direct intersection or containment
 
-                # if min_dist == 0.0:
-                #     print(f"Exact match found between {hull1.centroid} and {hull2.centroid} at distance 0.0\n")
-
-                # if hull1.intersects(hull2):
-                #     return 0.0  # Direct intersection or containment
-
-                # dist = hull1.distance(hull2)
-                # min_dist = min(min_dist, dist)
+                min_dist = min(min_dist, hull1.distance(hull2))
 
         return min_dist
 
@@ -364,15 +362,14 @@ def main():
     print(f"Reference data shape: {ref_data.shape}")
 
     factory = EventletFactory(threshold=28 + 273.15, ref_data=ref_data)
-    downstream = EventletClusterer(dist_threshold=1.75, factory_ref=factory, time_threshold=timedelta(days=1), output_path="/data/final_events.jsonl")
+    downstream = EventletClusterer(dist_threshold=1.75, factory_ref=factory, time_threshold=timedelta(days=1), output_path="/data/output/final_events.jsonl")
     print("Processing slices...")
 
 
-    # for i in range(time_dim.size):
-    for i in range(121, 150):
+    for i in range(time_dim.size):
+    # for i in range(121, 150):
         time_val = pd.to_datetime(time_dim[i].values)
         slice_data = data_var.isel(valid_time=i).load()
-        print(f"Loaded slice for time {time_val}")
 
         factory.process_slice(time_val, slice_data)
         for ev in factory.yield_completed():

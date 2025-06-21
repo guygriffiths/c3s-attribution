@@ -12,16 +12,16 @@ from datetime import datetime
 
 THRESHOLD_K = 28 + 273.15
 OUTPUT_DIR = "/data/output"
-# CLUSTER_JSON = "/data/final_events.jsonl"
-CLUSTER_JSON = "/data/events_to_plot.json"
+CLUSTER_JSON = "/data/output/final_events.jsonl"
+# CLUSTER_JSON = "/data/events_to_plot.json"
 DATA_PATH = "/data/era5_2024.nc"
 REF_PATH = "/data/era5_ref98.nc"
 
 def load_data():
-    with open(CLUSTER_JSON) as f:
-        clusters = json.load(f)
     # with open(CLUSTER_JSON) as f:
-    #     clusters = [json.loads(line) for line in f]
+    #     clusters = json.load(f)
+    with open(CLUSTER_JSON) as f:
+        clusters = [json.loads(line) for line in f]
     ds = xr.open_dataset(DATA_PATH)
     t2m = ds["t2m"]
     t2m_ref = xr.open_dataset(REF_PATH)["t2m"]
@@ -58,12 +58,12 @@ def plot_frame(ax, t2m_day, t2m_ref, clusters, day_str):
     print(f"Plotting {len(clusters)} clusters for {day_str}")
     for cl in clusters:
         flippedcoords = [
-            (lon, lat) for lat, lon in cl
+            (lat, lon) for lat, lon in cl
         ]
         rect = patches.Polygon(
             flippedcoords,
             linewidth=2,
-            edgecolor=cmap(len(cl) % 20),  # Use size for color
+            edgecolor='black',#cmap(len(cl) % 20),  # Use size for color
             facecolor="none"
         )
         ax.add_patch(rect)
@@ -74,7 +74,7 @@ def save_frames(t2m, t2m_ref, cluster_by_day, valid_times):
         day_str = str(t_val.date())
         t2m_day = t2m.sel(valid_time=t_val)
 
-        fig, ax = plt.subplots(figsize=(50, 30))
+        fig, ax = plt.subplots(figsize=(25, 15))
         plot_frame(ax, t2m_day, t2m_ref, cluster_by_day.get(day_str, []), day_str)
         plt.savefig(f"{OUTPUT_DIR}/cluster_overlay_{day_str}.png")
         plt.close()
@@ -107,7 +107,7 @@ def generate_video_from_frames(frame_dir=OUTPUT_DIR, output_file="cluster_overla
 
 def main(animate=False):
     clusters, t2m, t2m_ref = load_data()
-    valid_times = pd.to_datetime(t2m["valid_time"].values[121:150])
+    valid_times = pd.to_datetime(t2m["valid_time"].values)
     cluster_by_day = group_clusters_by_day(clusters, valid_times)
     save_frames(t2m, t2m_ref, cluster_by_day, valid_times)
     if animate:
@@ -118,4 +118,4 @@ def main(animate=False):
     #     create_animation(t2m, t2m_ref, cluster_by_day, valid_times)
 
 if __name__ == "__main__":
-    main(False)
+    main(True)
