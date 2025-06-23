@@ -86,15 +86,27 @@ watch(
 )
 
 const getEventRegion = (event: any) => {
+	console.log('getEventRegion', event, store.selectedTime)
 	const idx = event.times.findIndex(
 		(t: Date) =>
 			new Date(t).getTime() === new Date(store.selectedTime).getTime(),
 	)
 	if (idx < 0) {
+		console.warn('No matching time found for event', event.times, store.selectedTime)
 		return []
 	}
 
-	return event.regions[idx]
+	return event.regions[idx].map((point: any) => {
+		// Convert point to LatLng
+		if (Array.isArray(point)) {
+			return new LatLng(point[1], point[0]) // Assuming point is [lon, lat]
+		} else if (point instanceof LatLng) {
+			return point
+		} else {
+			console.warn('Unexpected point format:', point)
+			return new LatLng(0, 0) // Fallback to a default value
+		}
+	})
 }
 
 const lastBbox = ref<LatLngBounds | null>(null)

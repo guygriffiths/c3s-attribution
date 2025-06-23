@@ -88,7 +88,8 @@ export const useStore = defineStore('main', {
 			this.timePanelExpanded = !this.timePanelExpanded
 		},
 		toggleEventSelectedDebug() {
-			this.selectedEvent = this.selectedEvent === null ? new Object() as Event : null
+			this.selectedEvent =
+				this.selectedEvent === null ? (new Object() as Event) : null
 		},
 		setLoading() {
 			this.loadingCount++
@@ -98,17 +99,22 @@ export const useStore = defineStore('main', {
 		},
 		init() {
 			this.setLoading()
-
-			fetch('/events.json')
+			fetch('/events.jsonl')
 				.then((response) => {
 					if (!response.ok) {
 						throw new Error('Network response was not ok')
 					}
-					return response.json()
+					return response.text()
+				})
+				.then((text) => {
+					const lines = text.trim().split('\n')
+					const objects = lines.map((line) => JSON.parse(line))
+					return objects
 				})
 				.then((data) => {
 					this.endTime = new Date(0)
 					data.forEach((event: any) => {
+						// console.log('Processing event:', event)
 						event.times = event.times.map((time: string) => new Date(time))
 						const startDate = new Date(event.times[0])
 						if (startDate < this.startTime) {

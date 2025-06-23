@@ -13,16 +13,16 @@ import json
 def get_region(points):
     shape = MultiPoint(points).convex_hull
     if shape.geom_type == "Polygon":
-        return [[y, x] for x, y in shape.exterior.coords]
+        return [[x, y] for x, y in shape.exterior.coords]
     else:
         minx, miny, maxx, maxy = shape.bounds
         pad = 0.125
         return [
-            [miny - pad, minx - pad],
-            [miny - pad, maxx + pad],
-            [maxy + pad, maxx + pad],
-            [maxy + pad, minx - pad],
-            [miny - pad, minx - pad],
+            [minx - pad, miny - pad],
+            [minx - pad, maxy + pad],
+            [maxx + pad, maxy + pad],
+            [maxx + pad, miny - pad],
+            [minx - pad, miny - pad],
         ]
 
 import numpy as np
@@ -340,7 +340,7 @@ class EventletClusterer:
 
         event_dict = {
             "id": self.current_id,
-            "times": [t.isoformat() for t in all_times],
+            "times": [t.isoformat()+"Z" for t in all_times],
             "regions": [get_region(region) for region in ev.slices],
             "centroids": centroids,
             "bbox": bbox
@@ -354,7 +354,7 @@ class EventletClusterer:
 
 
 def main():
-    ds = xr.open_dataset("/data/era5_2024.nc")
+    ds = xr.open_mfdataset("/data/era5_202*.nc")
     data_var = ds["t2m"]
     print(f"Data shape: {data_var.shape}")
     time_dim = data_var["valid_time"]

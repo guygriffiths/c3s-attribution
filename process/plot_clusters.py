@@ -14,7 +14,7 @@ THRESHOLD_K = 28 + 273.15
 OUTPUT_DIR = "/data/output"
 CLUSTER_JSON = "/data/output/final_events.jsonl"
 # CLUSTER_JSON = "/data/events_to_plot.json"
-DATA_PATH = "/data/era5_2024.nc"
+DATA_PATH = "/data/era5_202*.nc"
 REF_PATH = "/data/era5_ref98.nc"
 
 def load_data():
@@ -22,7 +22,7 @@ def load_data():
     #     clusters = json.load(f)
     with open(CLUSTER_JSON) as f:
         clusters = [json.loads(line) for line in f]
-    ds = xr.open_dataset(DATA_PATH)
+    ds = xr.open_mfdataset(DATA_PATH)
     t2m = ds["t2m"]
     t2m_ref = xr.open_dataset(REF_PATH)["t2m"]
     return clusters, t2m, t2m_ref
@@ -58,7 +58,7 @@ def plot_frame(ax, t2m_day, t2m_ref, clusters, day_str):
     print(f"Plotting {len(clusters)} clusters for {day_str}")
     for cl in clusters:
         flippedcoords = [
-            (lat, lon) for lat, lon in cl
+            (lon, lat) for lat, lon in cl
         ]
         rect = patches.Polygon(
             flippedcoords,
