@@ -133,7 +133,7 @@ class EventletFactory:
                       [1,1,1],
                       [0,1,0]], dtype=bool)  # 4-connectivity
         eroded_mask = binary_erosion(hot_mask, structure=structure)
-        # eroded_mask = binary_erosion(eroded_mask, structure=structure)
+        eroded_mask = binary_erosion(eroded_mask, structure=structure)
 
         # print(f"Masked data")
         blobs = self._label_connected_blobs(eroded_mask)
@@ -162,7 +162,6 @@ class EventletFactory:
         # Convert blobs to lat/lon coordinates
         blobs = [list(map(to_latlon, blob)) for blob in blobs]
 
-        new_eventlets = []
         used_blobs = set()
 
         for ev in self.active:
@@ -172,6 +171,7 @@ class EventletFactory:
                     ev.extend(time, blob)
                     used_blobs.add(i)
                     matched = True
+
             if not matched and ev.is_expired(time, self.expiry_days):
                 if ev.is_valid(self.min_length):
                     self.output_queue.append(ev)
@@ -181,18 +181,18 @@ class EventletFactory:
 
 
         
-        # for i, blob in enumerate(blobs):
-        #     if i not in used_blobs:
-        #         new_ev = Eventlet(time, blob)
-        #         self.active.append(new_ev)
+        for i, blob in enumerate(blobs):
+            if i not in used_blobs:
+                new_ev = Eventlet(time, blob)
+                self.active.append(new_ev)
         
-        #         with open("/data/output/eventlets.jsonl", "a") as f:
-        #             f.write(json.dumps({
-        #                 "id": self.id,
-        #                 "times": time.isoformat(),
-        #                 "coords": blob
-        #             }) + "\n")
-        #         self.id += 1
+                # with open("/data/output/eventlets.jsonl", "a") as f:
+                #     f.write(json.dumps({
+                #         "id": self.id,
+                #         "times": [time.isoformat()+"Z"],
+                #         "coords": blob
+                #     }) + "\n")
+                # self.id += 1
 
         self.oldest_active_time = min((ev.earliest_time() for ev in self.active), default=None)
 
@@ -280,7 +280,7 @@ class EventletClusterer:
         return min_dist
 
     def process_eventlet(self, eventlet):
-        # print(f"Processing eventlet with {len(eventlet.times)} times\n")
+        print(f"Processing eventlet with {len(eventlet.times)} times\n")
         matched_eventlet = None
 
         for existing_ev in self.eventlets:

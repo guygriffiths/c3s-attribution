@@ -33,13 +33,13 @@ const toggleLabel = computed(() =>
 			>
 				{{ toggleLabel }}
 			</button>
-			<button
+			<!-- <button
 				class="panel-sideline"
 				@click="store.toggleEventSelectedDebug"
 				:aria-label="toggleLabel"
 			>
 				{{ toggleLabel }}
-			</button>
+			</button> -->
 			<TimeReel
 				id="times"
 				:start="store.startTime"

@@ -72,7 +72,7 @@ watch(
 			const map: Map = mapRef.value.leafletObject as Map
 			console.log('fitting bounds', newVal.bbox)
 			try {
-				map.fitBounds(newVal.bbox, {
+				map.fitBounds([[newVal.bbox[0], newVal.bbox[1]], [newVal.bbox[2], newVal.bbox[3]]], {
 					// paddingTopLeft: [0, 0],
 					paddingBottomRight: [map.getSize().x * 0.5, map.getSize().y * 0.5],
 					maxZoom: 12,
@@ -86,35 +86,24 @@ watch(
 )
 
 const getEventRegion = (event: any) => {
-	console.log('getEventRegion', event, store.selectedTime)
 	const idx = event.times.findIndex(
 		(t: Date) =>
 			new Date(t).getTime() === new Date(store.selectedTime).getTime(),
 	)
 	if (idx < 0) {
-		console.warn('No matching time found for event', event.times, store.selectedTime)
 		return []
 	}
-
-	return event.regions[idx].map((point: any) => {
-		// Convert point to LatLng
-		if (Array.isArray(point)) {
-			return new LatLng(point[1], point[0]) // Assuming point is [lon, lat]
-		} else if (point instanceof LatLng) {
-			return point
-		} else {
-			console.warn('Unexpected point format:', point)
-			return new LatLng(0, 0) // Fallback to a default value
-		}
-	})
+	return event.regions[idx] || [] // Fallback to empty array if no region found
 }
 
 const lastBbox = ref<LatLngBounds | null>(null)
 const selectEvent = (event: any) => {
 	if (!store.eventSelected) {
+		// @ts-ignore
 		lastBbox.value = mapRef.value?.leafletObject.getBounds()
 	} else if (event == store.selectedEvent) {
 		if (lastBbox.value && mapRef.value) {
+			// @ts-ignore
 			mapRef.value.leafletObject.fitBounds(lastBbox.value)
 		}
 	}

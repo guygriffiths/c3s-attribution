@@ -1,11 +1,3 @@
-threshold temperature on percentile (98th) and min (28)
-
-Use better method of joining clusters. Add more data to clusters.
-Pre-calculate metrics:
-    Area covered (probably max 2d cell count?)
-    Intensity (some function of exceedance)
-    Mean Anomaly (is this intensity?)
-    Length
 
 Let's do this:
 * Click on event to select it
@@ -16,5 +8,17 @@ Let's do this:
 Issues:
 * Map scroll wraps but events don't
 
+
+TODO at some point:
+* Get docker working properly with UID/GID
+* Use a land-sea mask to mark events which are land-only/sea-only
+* Split event into individual days (easy? very easy?) when zoomed for time axis
+* Colour events by chooser
+* Settings? Show help, unlock things, etc?
+* Big filter. Filter should be an important part - we should have too many events by default, and filter them sensibly to start with
+    - intensity
+    - size
+    - duration
+    - area affected
 
 
