@@ -9,6 +9,8 @@ from scipy.ndimage import label, binary_erosion
 from datetime import timedelta
 from shapely.geometry import MultiPoint
 import json
+import queue
+import threading
 
 def get_region(points):
     shape = MultiPoint(points).convex_hull
@@ -353,6 +355,14 @@ class EventletClusterer:
 
 
 
+def downstream_worker(q, clusterer):
+    while True:
+        ev = q.get()
+        if ev is None:
+            break  # shutdown signal
+        clusterer.process_eventlet(ev)
+        q.task_done()
+
 def main():
     ds = xr.open_mfdataset("/data/era5_202*.nc")
     data_var = ds["t2m"]
@@ -362,18 +372,39 @@ def main():
     print(f"Reference data shape: {ref_data.shape}")
 
     factory = EventletFactory(threshold=28 + 273.15, ref_data=ref_data)
-    downstream = EventletClusterer(dist_threshold=1.75, factory_ref=factory, time_threshold=timedelta(days=1), output_path="/data/output/final_events.jsonl")
+    downstream = EventletClusterer(
+        dist_threshold=1.75,
+        factory_ref=factory,
+        time_threshold=timedelta(days=1),
+        output_path="/data/output/final_events.jsonl"
+    )
+
+    eventlet_queue = queue.Queue(maxsize=500)
+
+    # Launch downstream thread
+    downstream_thread = threading.Thread(
+        target=downstream_worker,
+        args=(eventlet_queue, downstream),
+        daemon=True
+    )
+    downstream_thread.start()
+
     print("Processing slices...")
 
-
     for i in range(time_dim.size):
-    # for i in range(121, 150):
         time_val = pd.to_datetime(time_dim[i].values)
         slice_data = data_var.isel(valid_time=i).load()
 
         factory.process_slice(time_val, slice_data)
         for ev in factory.yield_completed():
-            downstream.process_eventlet(ev)
+            eventlet_queue.put(ev)
+
+    print("All slices processed. Waiting for downstream to finish...")
+
+    # Tell downstream to shut down after queue is empty
+    eventlet_queue.put(None)
+    downstream_thread.join()
+    print("All done.")
 
 
     # for i in range(len(time_dim)):
