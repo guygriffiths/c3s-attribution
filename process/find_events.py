@@ -341,7 +341,7 @@ class EventletClusterer:
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
         event_dict = {
-            "id": self.current_id,
+            "id": int(`{all_times[0].format("%Y%m%d")}{int(centroids[0][0]*100):4d}int({centroids[0][1]*100):4d}`),
             "times": [t.isoformat()+"Z" for t in all_times],
             "regions": [get_region(region) for region in ev.slices],
             "centroids": centroids,
@@ -363,10 +363,18 @@ def downstream_worker(q, clusterer):
         clusterer.process_eventlet(ev)
         q.task_done()
 
+def load_data(data_path, ref_path):
+    ds = xr.open_mfdataset(data_path)
+    ref = xr.open_dataset(ref_path)
+
+    def shift_longitudes(da):
+        da = da.assign_coords(longitude=(((da.longitude + 180) % 360) - 180))
+        return da.sortby("longitude")
+
+    return shift_longitudes(ds["t2m"]), shift_longitudes(ref["t2m"])        
+
 def main():
-    ds = xr.open_mfdataset("/data/era5_202*.nc")
-    data_var = ds["t2m"]
-    print(f"Data shape: {data_var.shape}")
+    data_var, ref_data = load_data("/data/era5_202*.nc", "/data/era5_ref98.nc")
     time_dim = data_var["valid_time"]
     ref_data = xr.open_dataset("/data/era5_ref98.nc")["t2m"].values
     print(f"Reference data shape: {ref_data.shape}")

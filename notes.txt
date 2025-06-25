@@ -20,5 +20,6 @@ TODO at some point:
     - size
     - duration
     - area affected
+* Download the data - look on Bertha, do it on the VM.
 
 

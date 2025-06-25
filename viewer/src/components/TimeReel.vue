@@ -261,7 +261,7 @@ function assignTimelinePositions(
 	return result
 }
 
-const scaleY = 0.025
+const scaleY = 0.05
 const positionY = (y: number) => {
 	if (y % 2 === 0) {
 		return -scaleY * y

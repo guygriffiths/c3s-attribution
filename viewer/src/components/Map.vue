@@ -146,7 +146,7 @@ const gridpointIcon = icon({
 
 			<!-- <l-marker :lat-lng="[51.437576, -0.941099]" :icon="markerIcon" /> -->
 			<LTileLayer :url="wmtsUrl" :zIndex="2" :opacity="0.75"></LTileLayer>
-			<LMarker
+			<!-- <LMarker
 				v-for="point in store.selectedEvent?.slices[
 					store.selectedEvent?.times.findIndex(
 						(t: Date) =>
@@ -157,6 +157,7 @@ const gridpointIcon = icon({
 				:icon="gridpointIcon"
 			>
 			</LMarker>
+			 -->
 			<LPolygon
 				v-for="(event, idx) in store.activeEvents"
 				:lat-lngs="getEventRegion(event)"

@@ -14,6 +14,7 @@ interface Event {
 	centroid: [number, number]
 	size: number
 	feature: boolean
+	id: number
 }
 
 interface State {
@@ -33,7 +34,7 @@ interface State {
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
 export const T2M_LAYER = 'era5/t2m'
-export const catScheme = [...d3.schemePaired, ...d3.schemeSet3]
+export const catScheme = [...d3.schemeDark2, ...d3.schemeCategory10]
 
 export const useStore = defineStore('main', {
 	state: (): State => {
