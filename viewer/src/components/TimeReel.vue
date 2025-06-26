@@ -5,6 +5,7 @@ import {
 	setDayOfYear,
 	addHours,
 	subHours,
+	set,
 } from 'date-fns'
 import {
 	ref,
@@ -34,6 +35,10 @@ const props = defineProps({
 		type: Array,
 		default: () => [] as { startDate: Date; endDate: Date }[],
 	},
+	selectedEvent: {
+		type: Object as () => { startDate: Date; endDate: Date } | null,
+		default: null,
+	},
 	zoom: {
 		type: Boolean,
 		default: false,
@@ -47,10 +52,11 @@ const model: Ref<Date> = defineModel({
 
 const containerRef = ref<HTMLDivElement | null>(null)
 const needleRef = ref<HTMLDivElement | null>(null)
+const svgZoomWrapperRefs: Record<number, HTMLElement> = {}
 
 const yearHeight = computed(() => {
 	if (props.zoom) {
-		return 3 * 96 // Height for zoomed-in view
+		return 96 // Height for zoomed-in view
 	} else {
 		return 96 // Height for normal view
 	}
@@ -68,14 +74,9 @@ const selectedYear = ref(model.value.getUTCFullYear())
 
 const startYear = computed(() => props.start.getUTCFullYear())
 const endYear = computed(() => props.end.getUTCFullYear())
-const totalYears = computed(
-	() => endYear.value - startYear.value + 3,
-)
+const totalYears = computed(() => endYear.value - startYear.value + 3)
 const years = computed(() =>
-	Array.from(
-		{ length: totalYears.value },
-		(_, i) => startYear.value - 1 + i,
-	),
+	Array.from({ length: totalYears.value }, (_, i) => startYear.value - 1 + i),
 )
 const days = computed(() => Array.from({ length: totalDays }, (_, i) => i + 1))
 
@@ -93,6 +94,7 @@ const isEvenMonth = (day: number) => {
 
 const onScrollEnd = () => {
 	// Snap to the nearest year and scroll to it
+	console.log('Snapping to nearest year')
 	if (containerRef.value) {
 		const scrollTop = containerRef.value.scrollTop
 		const yearIndex = Math.round(scrollTop / yearHeight.value)
@@ -101,9 +103,19 @@ const onScrollEnd = () => {
 
 		const offset = Math.floor(rowsToShow.value / 2)
 		selectedYear.value = years.value[yearIndex + offset]
-		model.value = setDayOfYear(
-			new Date(Date.UTC(selectedYear.value, 0, 1)),
+		const newValue = setDayOfYear(
+			new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
 			selectedDay.value,
+		)
+		model.value = new Date(
+			Date.UTC(
+				newValue.getFullYear(),
+				newValue.getMonth(),
+				newValue.getDate(),
+				0,
+				0,
+				0,
+			),
 		)
 	}
 }
@@ -119,10 +131,26 @@ watch(
 				const yearIndex = years.value.findIndex(
 					(year) => year === model.value.getUTCFullYear(),
 				)
-				const targetScrollTop = (yearIndex - 1) * yearHeight.value
+				const targetScrollTop =
+					(yearIndex - Math.floor(rowsToShow.value / 2)) * yearHeight.value
 				containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'auto' })
 			}
 		})
+	},
+)
+
+watch(
+	() => props.selectedEvent,
+	(newVal) => {
+		console.log('Selected event changed:', newVal)
+		if (newVal) {
+			const event = newVal
+			const startDay = getDayOfYear(event.startDate)
+			const endDay = getDayOfYear(event.endDate)
+			zoomToDays(startDay, endDay, selectedYear.value)
+		} else {
+			zoomToDays(1, totalDays, selectedYear.value)
+		}
 	},
 )
 
@@ -200,6 +228,28 @@ const needleDrag = (event: MouseEvent) => {
 				0,
 			),
 		)
+	}
+}
+
+const zoomToDays = (startDay: number, endDay: number, year: number) => {
+	// TODO - get these right once the other zooming is working
+	const totalDays = 366
+	const span = endDay - startDay + 3
+	const scale = totalDays / span
+	const translate = -startDay - 3
+
+	const wrapper = svgZoomWrapperRefs[year] // get this from `ref`
+	console.log('zoomToDays', wrapper, wrapper.style)
+	wrapper!.style.transform = `scaleX(${scale}) translateX(${translate}px)`
+}
+
+const isInZoomRange = (day: number) => {
+	if (props.selectedEvent) {
+		const zoomStart = getDayOfYear(props.selectedEvent.startDate)
+		const zoomEnd = getDayOfYear(props.selectedEvent.endDate)
+		return day >= zoomStart && day <= zoomEnd
+	} else {
+		return true
 	}
 }
 
@@ -292,33 +342,39 @@ const positionY = (y: number) => {
 						class="day-cell"
 						v-for="day in days"
 						:key="day"
-						:class="{ even: isEvenMonth(day) }"
+						:class="{ even: isEvenMonth(day), shrunk: !isInZoomRange(day) }"
 					></div>
-					<svg
-						class="year-overlay"
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 -1 366 2"
-						preserveAspectRatio="none"
-						pointer-events="none"
+					<div
+						class="svg-zoom-wrapper"
+						:ref="(el) => (el ? svgZoomWrapperRefs[year] = el as HTMLElement : null)"
+						style=""
 					>
-						<rect
-							v-for="event in assignTimelinePositions(
-								props.events as any[],
-								year,
-							)"
-							:x="event.startX"
-							:width="event.endX - event.startX"
-							:y="positionY(event.y)"
-							:height="scaleY"
-							:fill="event.color"
-							:stroke="event.color"
-							:stroke-width="0.8 * scaleY"
-						></rect>
-					</svg>
+						<svg
+							class="year-overlay"
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 -1 366 2"
+							preserveAspectRatio="none"
+							pointer-events="none"
+						>
+							<rect
+								v-for="event in assignTimelinePositions(
+									props.events as any[],
+									year,
+								)"
+								:x="event.startX"
+								:width="event.endX - event.startX"
+								:y="positionY(event.y)"
+								:height="scaleY"
+								:fill="event.color"
+								:stroke="event.color"
+								:stroke-width="0.8 * scaleY"
+							></rect>
+						</svg>
+					</div>
 				</div>
 			</div>
 		</div>
-		<div class="year-highlights" >
+		<div class="year-highlights">
 			<div
 				class="highlight-row fade-top"
 				:class="{ zoom: props.zoom }"
@@ -416,6 +472,13 @@ $margin: 0 0.5rem;
 	}
 }
 
+.svg-zoom-wrapper {
+	overflow: hidden;
+	width: 100%;
+	transform-origin: left center;
+	transition: transform 0.3s ease;
+}
+
 .year-overlay {
 	position: absolute;
 	top: 0;
@@ -445,9 +508,8 @@ $margin: 0 0.5rem;
 	pointer-events: none;
 	transition: all $animTime ease-in-out;
 
-	
 	$fadeColor: #aaaaaa;
-	
+
 	.highlight-row {
 		transition: all $animTime ease-in-out;
 		&.fade-top {

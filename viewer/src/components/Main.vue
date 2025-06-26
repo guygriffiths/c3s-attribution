@@ -46,6 +46,10 @@ const toggleLabel = computed(() =>
 				:end="store.endTime"
 				:events="store.events"
 				:zoom="store.eventSelected"
+				:selected-event="store.selectedEvent ? {
+					startDate: store.selectedEvent!.times[0],
+					endDate: store.selectedEvent!.times[store.selectedEvent!.times.length - 1]
+				} : null"
 				v-model="store.selectedTime"
 			></TimeReel>
 		</Panel>
@@ -61,7 +65,8 @@ const toggleLabel = computed(() =>
 
 		<div id="buttons-debug">
 			<!-- <h2>{{ store.selectedEvent }}</h2> -->
-			<button @click="store.toggleEventSelectedDebug">Click</button>
+			<button @click="store.toggleEventSelectedDebug">selectevent</button>
+			<button @click="store.selectedTime=new Date(Date.UTC(2022,4,28,0,0,0))">selecttime</button>
 		</div>
 
 		<!-- 
@@ -83,6 +88,10 @@ const toggleLabel = computed(() =>
 	max-width: 100vw;
 	max-height: 100vh;
 	position: relative;
+
+	.panel {
+		opacity: 0.5;
+	}
 
 	#buttons-debug {
 		position: absolute;

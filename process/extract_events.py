@@ -76,8 +76,33 @@ def extract_eventlets(data, ref, structure=None, threshold=1.0):
     lons = data.longitude.values
     times = data.valid_time.values
 
+    # raw_mask: (T, Y, X)
     raw_mask = (data > TEMP_THRESHOLD) & (data > ref)
-    mask = raw_mask.values.astype(float)
+    mask = raw_mask.values  # boolean
+
+    # First we want to filter out any pixels which are not hot for at least 3 consecutive time steps.
+    T, Y, X = mask.shape
+    # First, reshape so time is first axis, and flatten space for easy processing
+    flat_mask = mask.reshape(T, -1)  # (T, Y*X)
+
+    # Prepare output
+    filtered_flat = np.zeros_like(flat_mask, dtype=bool)
+
+    for idx in range(flat_mask.shape[1]):
+        ts = flat_mask[:, idx]
+        if not ts.any():
+            continue
+        # Find changes in ts
+        diff = np.diff(np.concatenate(([0], ts.view(np.int8), [0])))
+        run_starts = np.where(diff == 1)[0]
+        run_ends = np.where(diff == -1)[0]
+        for start, end in zip(run_starts, run_ends):
+            length = end - start
+            if length >= 3:
+                filtered_flat[start:end, idx] = True
+
+    # Reshape back
+    mask = filtered_flat.reshape(T, Y, X)
 
     if structure is None:
         structure = np.array([

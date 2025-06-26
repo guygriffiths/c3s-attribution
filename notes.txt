@@ -22,4 +22,10 @@ TODO at some point:
     - area affected
 * Download the data - look on Bertha, do it on the VM.
 
+* Explore by geo - point location. See all events ever at this pixel.
+* Explore by (event) - similar events?
+* Explore by similar time
+
+What info do we return for a selected location?
+
 

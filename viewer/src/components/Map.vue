@@ -70,11 +70,12 @@ watch(
 	(newVal) => {
 		if (newVal && mapRef.value) {
 			const map: Map = mapRef.value.leafletObject as Map
-			console.log('fitting bounds', newVal.bbox)
+			console.log('fitting bounds', newVal.bbox, newVal.regions)
 			try {
+				// TODO - 32px is hardcoded padding, yuck
 				map.fitBounds([[newVal.bbox[0], newVal.bbox[1]], [newVal.bbox[2], newVal.bbox[3]]], {
-					// paddingTopLeft: [0, 0],
-					paddingBottomRight: [map.getSize().x * 0.5, map.getSize().y * 0.5],
+					paddingTopLeft: [32, 32],
+					paddingBottomRight: [map.getSize().x * 0.5+32, map.getSize().y * 0.5+32],
 					maxZoom: 12,
 					duration: 1.25,
 				})
@@ -160,6 +161,7 @@ const gridpointIcon = icon({
 			 -->
 			<LPolygon
 				v-for="(event, idx) in store.activeEvents"
+				:key="event.id"
 				:lat-lngs="getEventRegion(event)"
 				:weight="3"
 				:fill="true"
@@ -171,10 +173,10 @@ const gridpointIcon = icon({
 					<p>{{ event }}</p>
 				</LPopup> -->
 			</LPolygon>
-			<LControl position="bottomleft">
+			<LControl position="topright">
 				<div>
 					<p>
-						{{ store.selectedTime }}
+						{{ store.isoDatetime }}
 					</p>
 				</div>
 			</LControl>

@@ -41,7 +41,7 @@ export const useStore = defineStore('main', {
 		return {
 			lang: 'en',
 			loadingCount: 0,
-			selectedTime: new Date(Date.UTC(2024, 4, 28, 0, 0, 0)),
+			selectedTime: new Date(Date.UTC(2024, 6, 28, 0, 0, 0)),
 			layerDetails: null,
 			// times: [],
 			startTime: new Date(),
