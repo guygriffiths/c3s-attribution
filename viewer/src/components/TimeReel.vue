@@ -33,10 +33,10 @@ const props = defineProps({
 	},
 	events: {
 		type: Array,
-		default: () => [] as { startDate: Date; endDate: Date }[],
+		default: () => [] as { id: number; startDate: Date; endDate: Date }[],
 	},
 	selectedEvent: {
-		type: Object as () => { startDate: Date; endDate: Date } | null,
+		type: Object as () => { id: number; startDate: Date; endDate: Date } | null,
 		default: null,
 	},
 	zoom: {
@@ -51,23 +51,24 @@ const model: Ref<Date> = defineModel({
 })
 
 const containerRef = ref<HTMLDivElement | null>(null)
-const needleRef = ref<HTMLDivElement | null>(null)
-const svgZoomWrapperRefs: Record<number, HTMLElement> = {}
-
-const yearHeight = computed(() => {
-	if (props.zoom) {
-		return 96 // Height for zoomed-in view
-	} else {
-		return 96 // Height for normal view
-	}
-})
-const rowsToShow = computed(() => {
-	if (props.zoom) {
-		return 1
-	} else {
-		return 3
-	}
-})
+	const needleRef = ref<HTMLDivElement | null>(null)
+		
+const yearHeight = ref(96) // Default height for each year row
+// const yearHeight = computed(() => {
+// 	if (props.zoom) {
+// 		return 3 * 96 // Height for zoomed-in view
+// 	} else {
+// 		return 96 // Height for normal view
+// 	}
+// })
+const rowsToShow = ref(3)
+// const rowsToShow = computed(() => {
+// 	if (props.zoom) {
+// 		return 3//1
+// 	} else {
+// 		return 3
+// 	}
+// })
 const totalDays = 366
 const selectedDay = ref(getDayOfYear(model.value))
 const selectedYear = ref(model.value.getUTCFullYear())
@@ -92,32 +93,47 @@ const isEvenMonth = (day: number) => {
 	return date.getMonth() % 2 !== 0
 }
 
+const scrollToYear = (year: number) => {
+	if (false && containerRef.value) {
+		const yearIndex = years.value.indexOf(year)
+		const targetScrollTop =
+			(yearIndex + Math.floor(rowsToShow.value / 2)) * yearHeight.value
+		containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
+	}
+}
+
+const snapping = ref(false)
+
 const onScrollEnd = () => {
 	// Snap to the nearest year and scroll to it
 	console.log('Snapping to nearest year')
-	if (containerRef.value) {
-		const scrollTop = containerRef.value.scrollTop
-		const yearIndex = Math.round(scrollTop / yearHeight.value)
-		const targetScrollTop = yearIndex * yearHeight.value
-		containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
+	// if (snapping.value) {
+	// 	snapping.value = false
+	// 	return
+	// }
+	// if (containerRef.value) {
+	// 	const scrollTop = containerRef.value.scrollTop
+	// 	const yearIndex = Math.round(scrollTop / yearHeight.value)
+	// 	snapping.value = true
+	// 	scrollToYear(years.value[yearIndex])
 
-		const offset = Math.floor(rowsToShow.value / 2)
-		selectedYear.value = years.value[yearIndex + offset]
-		const newValue = setDayOfYear(
-			new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
-			selectedDay.value,
-		)
-		model.value = new Date(
-			Date.UTC(
-				newValue.getFullYear(),
-				newValue.getMonth(),
-				newValue.getDate(),
-				0,
-				0,
-				0,
-			),
-		)
-	}
+	// 	const offset = Math.floor(rowsToShow.value / 2)
+	// 	selectedYear.value = years.value[yearIndex + offset]
+	// 	const newValue = setDayOfYear(
+	// 		new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
+	// 		selectedDay.value,
+	// 	)
+	// 	model.value = new Date(
+	// 		Date.UTC(
+	// 			newValue.getFullYear(),
+	// 			newValue.getMonth(),
+	// 			newValue.getDate(),
+	// 			0,
+	// 			0,
+	// 			0,
+	// 		),
+	// 	)
+	// }
 }
 
 watch(
@@ -142,18 +158,28 @@ watch(
 watch(
 	() => props.selectedEvent,
 	(newVal) => {
-		console.log('Selected event changed:', newVal)
 		if (newVal) {
 			const event = newVal
 			const startDay = getDayOfYear(event.startDate)
 			const endDay = getDayOfYear(event.endDate)
-			zoomToDays(startDay, endDay, selectedYear.value)
+			zoomToDays(startDay, endDay)
 		} else {
-			zoomToDays(1, totalDays, selectedYear.value)
+			resetZoom()
 		}
 	},
 )
 
+watch(
+	() => props.events,
+	() => {
+		cachedEvents.value = years.value.map((year) =>
+			assignTimelinePositions(props.events, year),
+		)
+		console.log('Cached events:', cachedEvents.value)
+	},
+)
+
+const cachedEvents = ref<any[]>([])
 onMounted(() => {
 	const handleKey = (e: KeyboardEvent) => {
 		if (e.key === 'PageUp') {
@@ -164,6 +190,11 @@ onMounted(() => {
 	}
 
 	window.addEventListener('keydown', handleKey)
+
+	cachedEvents.value = years.value.map((year) =>
+		assignTimelinePositions(props.events, year),
+	)
+	console.log('Cached events:', cachedEvents.value)
 
 	onBeforeUnmount(() => {
 		window.removeEventListener('keydown', handleKey)
@@ -231,16 +262,43 @@ const needleDrag = (event: MouseEvent) => {
 	}
 }
 
-const zoomToDays = (startDay: number, endDay: number, year: number) => {
-	// TODO - get these right once the other zooming is working
-	const totalDays = 366
-	const span = endDay - startDay + 3
-	const scale = totalDays / span
-	const translate = -startDay - 3
+const needleOffset = computed(() => {
+	if (!props.zoom) {
+		const offset = (selectedDay.value / totalDays) * 100
+		return Math.max(Math.min(offset, 100), 0)
+	} else {
+		// In zoom mode, we want to center the needle on the selected event
+		if (props.selectedEvent) {
+			const startDay = getDayOfYear(props.selectedEvent.startDate)
+			const endDay = getDayOfYear(props.selectedEvent.endDate)
+			const totalDays = endDay - startDay + 4
+			const midDay = (startDay + endDay) / 2
+			return ((midDay / totalDays) * 100).toFixed(2)
+		} else {
+			return ((selectedDay.value / totalDays) * 100).toFixed(2)
+		}
+	}
+})
 
-	const wrapper = svgZoomWrapperRefs[year] // get this from `ref`
-	console.log('zoomToDays', wrapper, wrapper.style)
-	wrapper!.style.transform = `scaleX(${scale}) translateX(${translate}px)`
+const zoomToDays = (start: number, end: number) => {
+	zoomState.value = { start, end }
+}
+
+const zoomState = ref<{ start: number; end: number } | null>(null)
+
+const zoomTransform = () => {
+	const zoom = zoomState.value
+	if (!zoom) return 'scale(1,1) translate(0,0)'
+
+	const total = 366
+	const span = zoom.end - zoom.start + 1
+	const scale = total / span
+	const translate = -zoom.start + 0.5 //-(zoom.start + zoom.end) / 2
+
+	return `scale(${scale},1) translate(${translate},0)`
+}
+const resetZoom = () => {
+	zoomState.value = null
 }
 
 const isInZoomRange = (day: number) => {
@@ -311,6 +369,14 @@ function assignTimelinePositions(
 	return result
 }
 
+const eventIsSelected = (event: {
+	id?: number
+	startX: number
+	endX: number
+}) => {
+	return event.id === props.selectedEvent?.id
+}
+
 const scaleY = 0.05
 const positionY = (y: number) => {
 	if (y % 2 === 0) {
@@ -318,6 +384,14 @@ const positionY = (y: number) => {
 	} else {
 		return scaleY * (y + 1)
 	}
+}
+
+const testFocusX = () => {
+	zoomToDays(100, 200)
+}
+
+const resetFocus = () => {
+	zoomToDays(1, 366)
 }
 </script>
 
@@ -344,33 +418,28 @@ const positionY = (y: number) => {
 						:key="day"
 						:class="{ even: isEvenMonth(day), shrunk: !isInZoomRange(day) }"
 					></div>
-					<div
-						class="svg-zoom-wrapper"
-						:ref="(el) => (el ? svgZoomWrapperRefs[year] = el as HTMLElement : null)"
-						style=""
+					<svg
+						class="year-overlay"
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 -1 366 2"
+						preserveAspectRatio="none"
+						pointer-events="none"
 					>
-						<svg
-							class="year-overlay"
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 -1 366 2"
-							preserveAspectRatio="none"
-							pointer-events="none"
-						>
+						<g :data-whatever="`${year}`" :transform="year == selectedYear ? zoomTransform() : ''">
 							<rect
-								v-for="event in assignTimelinePositions(
-									props.events as any[],
-									year,
-								)"
+								v-for="event in cachedEvents[year - startYear]"
+								:key="event.id ?? event.startX + '-' + event.endX"
 								:x="event.startX"
 								:width="event.endX - event.startX"
-								:y="positionY(event.y)"
-								:height="scaleY"
+								:y="eventIsSelected(event) ? -1 : positionY(event.y)"
+								:height="eventIsSelected(event) ? 4 * scaleY : scaleY"
 								:fill="event.color"
 								:stroke="event.color"
+								:opacity="!props.zoom || eventIsSelected(event) ? 1.0 : 0.5"
 								:stroke-width="0.8 * scaleY"
-							></rect>
-						</svg>
-					</div>
+							/>
+						</g>
+					</svg>
 				</div>
 			</div>
 		</div>
@@ -387,7 +456,7 @@ const positionY = (y: number) => {
 				<div
 					class="needle"
 					ref="needleRef"
-					:style="`left: ${(100 * selectedDay) / 366.0}%;`"
+					:style="`left: ${needleOffset}%;`"
 					@mousedown="startDrag"
 				>
 					<div class="line" />
@@ -395,23 +464,28 @@ const positionY = (y: number) => {
 						<p>{{ dayStr(selectedDay) }}</p>
 					</div>
 				</div>
-				<p class="jan">{{ $l.months.jan }}</p>
-				<p class="feb">{{ $l.months.feb }}</p>
-				<p class="mar">{{ $l.months.mar }}</p>
-				<p class="apr">{{ $l.months.apr }}</p>
-				<p class="may">{{ $l.months.may }}</p>
-				<p class="jun">{{ $l.months.jun }}</p>
-				<p class="jul">{{ $l.months.jul }}</p>
-				<p class="aug">{{ $l.months.aug }}</p>
-				<p class="sep">{{ $l.months.sep }}</p>
-				<p class="oct">{{ $l.months.oct }}</p>
-				<p class="nov">{{ $l.months.nov }}</p>
-				<p class="dec">{{ $l.months.dec }}</p>
+				<p v-show="!props.zoom" class="jan">{{ $l.months.jan }}</p>
+				<p v-show="!props.zoom" class="feb">{{ $l.months.feb }}</p>
+				<p v-show="!props.zoom" class="mar">{{ $l.months.mar }}</p>
+				<p v-show="!props.zoom" class="apr">{{ $l.months.apr }}</p>
+				<p v-show="!props.zoom" class="may">{{ $l.months.may }}</p>
+				<p v-show="!props.zoom" class="jun">{{ $l.months.jun }}</p>
+				<p v-show="!props.zoom" class="jul">{{ $l.months.jul }}</p>
+				<p v-show="!props.zoom" class="aug">{{ $l.months.aug }}</p>
+				<p v-show="!props.zoom" class="sep">{{ $l.months.sep }}</p>
+				<p v-show="!props.zoom" class="oct">{{ $l.months.oct }}</p>
+				<p v-show="!props.zoom" class="nov">{{ $l.months.nov }}</p>
+				<p v-show="!props.zoom" class="dec">{{ $l.months.dec }}</p>
 			</div>
 			<div
 				class="highlight-row fade-bottom"
 				:style="`flex: 0 0 calc( 0.5 * ( 100% - ( 100% / ${rowsToShow} ) )`"
 			></div>
+		</div>
+		<div class="debug">
+			<button @click="testFocusY">testFocusY</button>
+			<button @click="testFocusX">testFocusX</button>
+			<button @click="resetFocus">Reset Zoom</button>
 		</div>
 	</div>
 </template>
@@ -441,10 +515,12 @@ $margin: 0 0.5rem;
 		display: flex;
 		position: relative;
 		transition: all $animTime ease-in-out;
+
 		// border: 1px solid red;
 
 		&.zoom {
 			transform: translateY(-100%);
+			overflow: hidden;
 		}
 
 		.year-label {
@@ -457,11 +533,16 @@ $margin: 0 0.5rem;
 		}
 
 		.day-cell {
-			flex: 1 0 auto;
+			transition: all $animTime ease-in-out;
+			flex: 1 1 100%;
 			min-width: 0;
 			background-color: #f9f9f9;
+			border: none;
 			height: 100%;
 			overflow: visible;
+			&.shrunk {
+				flex: 0 0 0;
+			}
 			&.even {
 				background-color: #f0f0f0;
 			}
@@ -472,13 +553,6 @@ $margin: 0 0.5rem;
 	}
 }
 
-.svg-zoom-wrapper {
-	overflow: hidden;
-	width: 100%;
-	transform-origin: left center;
-	transition: transform 0.3s ease;
-}
-
 .year-overlay {
 	position: absolute;
 	top: 0;
@@ -487,10 +561,13 @@ $margin: 0 0.5rem;
 	height: 100%;
 	pointer-events: none;
 	z-index: 1;
-	transition: all $animTime ease-in-out;
+	transition: all $animTime linear;
 
-	svg {
-		transition: all $animTime ease-in-out;
+	g {
+		transition: all $animTime linear;
+		rect {
+			transition: all $animTime ease-in-out $animTime;
+		}
 	}
 }
 
@@ -512,6 +589,7 @@ $margin: 0 0.5rem;
 
 	.highlight-row {
 		transition: all $animTime ease-in-out;
+		overflow: hidden;
 		&.fade-top {
 			pointer-events: none;
 			background: linear-gradient(

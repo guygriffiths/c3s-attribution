@@ -129,7 +129,8 @@ export const useStore = defineStore('main', {
 						endDate.setHours(23, 59, 59, 999)
 					})
 
-					this.events = data
+					// this.events = data.filter((_, i) => i % 4 === 0) as Event[]
+					this.events = data as Event[]
 					console.log('Events loaded:', this.events)
 					// this.events.forEach((event) => {
 					// 	event.times = event.times.map((time: string) => new Date(time))

@@ -65,6 +65,8 @@ watch(
 	},
 )
 
+import scssVars from '@/assets/styles/scssVars.scss'
+
 watch(
 	() => store.selectedEvent,
 	(newVal) => {
@@ -73,12 +75,13 @@ watch(
 			console.log('fitting bounds', newVal.bbox, newVal.regions)
 			try {
 				// TODO - 32px is hardcoded padding, yuck
-				map.fitBounds([[newVal.bbox[0], newVal.bbox[1]], [newVal.bbox[2], newVal.bbox[3]]], {
-					paddingTopLeft: [32, 32],
-					paddingBottomRight: [map.getSize().x * 0.5+32, map.getSize().y * 0.5+32],
-					maxZoom: 12,
-					duration: 1.25,
-				})
+				// map.fitBounds([[newVal.bbox[0], newVal.bbox[1]], [newVal.bbox[2], newVal.bbox[3]]], {
+				// 	paddingTopLeft: [32, 32],
+				// 	paddingBottomRight: [map.getSize().x * 0.5+32, map.getSize().y * 0.5+32],
+				// 	maxZoom: 12,
+				// 	// @ts-ignore
+				// 	duration: scssVars.animTime,
+				// })
 			} catch (e) {
 				console.error('Error fitting bounds:', e)
 			}

@@ -10,8 +10,12 @@ $textColor: rgb(27, 11, 9);
 $primary: rgb(50, 108, 184);
 $highlight: rgb(211,54,130);
 
-$animTime: 0.25s;
+$animTime: 2.25s;
 
 $headerHeight: 4rem;
 $gap: 0.5rem;
 $footerHeight: 2.25rem;
+
+:export {
+    animTime: $animTime;
+}

@@ -24,7 +24,7 @@ const toggleLabel = computed(() =>
 			id="time-panel"
 			:active="store.timePanelExpanded"
 			class="bottom peek"
-			:class="{ side: store.eventSelected }"
+			:class="{ side: false && store.eventSelected }"
 		>
 			<button
 				class="panel-toggle"
@@ -33,13 +33,13 @@ const toggleLabel = computed(() =>
 			>
 				{{ toggleLabel }}
 			</button>
-			<!-- <button
+			<button
 				class="panel-sideline"
 				@click="store.toggleEventSelectedDebug"
 				:aria-label="toggleLabel"
 			>
 				{{ toggleLabel }}
-			</button> -->
+			</button>
 			<TimeReel
 				id="times"
 				:start="store.startTime"
@@ -47,13 +47,14 @@ const toggleLabel = computed(() =>
 				:events="store.events"
 				:zoom="store.eventSelected"
 				:selected-event="store.selectedEvent ? {
+					id: store.selectedEvent!.id,
 					startDate: store.selectedEvent!.times[0],
 					endDate: store.selectedEvent!.times[store.selectedEvent!.times.length - 1]
 				} : null"
 				v-model="store.selectedTime"
 			></TimeReel>
 		</Panel>
-		<Panel id="event-frame-panel" class="top" :active="store.eventSelected">
+		<!-- <Panel id="event-frame-panel" class="top" :active="store.eventSelected">
 			<div id="event-frame">
 				<div class="decor"></div>
 			</div>
@@ -61,19 +62,14 @@ const toggleLabel = computed(() =>
 		</Panel>
 		<Panel id="event-panel" class="right" :active="store.eventSelected">
 			<div id="event"></div>
-		</Panel>
+		</Panel> -->
 
 		<div id="buttons-debug">
 			<!-- <h2>{{ store.selectedEvent }}</h2> -->
 			<button @click="store.toggleEventSelectedDebug">selectevent</button>
 			<button @click="store.selectedTime=new Date(Date.UTC(2022,4,28,0,0,0))">selecttime</button>
 		</div>
-
-		<!-- 
-		<div id="map"></div>
-		<div id="times"></div>
-		<div id="event"></div> 
-		--></div>
+</div>
 </template>
 
 <style lang="scss" scoped>
@@ -90,7 +86,7 @@ const toggleLabel = computed(() =>
 	position: relative;
 
 	.panel {
-		opacity: 0.5;
+		opacity: 0.9;
 	}
 
 	#buttons-debug {
