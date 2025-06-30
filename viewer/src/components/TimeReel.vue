@@ -5,7 +5,8 @@ import {
 	setDayOfYear,
 	addHours,
 	subHours,
-	set,
+	addYears,
+	subYears,
 } from 'date-fns'
 import {
 	ref,
@@ -20,29 +21,25 @@ import {
 import { catScheme } from '@/store/store'
 import { useLabels } from '@/lib/labels'
 
+interface WeatherEvent {
+	id: number
+	startDate: Date
+	endDate: Date
+	times: Date[]
+	color?: string
+	y?: number
+	startX?: number
+	endX?: number
+}
+
 const $l = useLabels()
 
 const props = defineProps({
-	start: {
-		type: Date,
-		default: () => new Date(1970, 0, 1),
-	},
-	end: {
-		type: Date,
-		default: () => new Date(2024, 0, 1),
-	},
-	events: {
-		type: Array,
-		default: () => [] as { id: number; startDate: Date; endDate: Date }[],
-	},
-	selectedEvent: {
-		type: Object as () => { id: number; startDate: Date; endDate: Date } | null,
-		default: null,
-	},
-	zoom: {
-		type: Boolean,
-		default: false,
-	},
+	start: { type: Date, default: () => new Date(1970, 0, 1) },
+	end: { type: Date, default: () => new Date(2024, 0, 1) },
+	events: { type: Array<WeatherEvent>, default: () => [] as WeatherEvent[] },
+	selectedEvent: { type: Object as () => WeatherEvent | null, default: null },
+	zoom: { type: Boolean, default: false },
 })
 
 const model: Ref<Date> = defineModel({
@@ -50,216 +47,206 @@ const model: Ref<Date> = defineModel({
 	default: new Date(),
 })
 
+const needleRef = ref<HTMLDivElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
-	const needleRef = ref<HTMLDivElement | null>(null)
-		
-const yearHeight = ref(96) // Default height for each year row
-// const yearHeight = computed(() => {
-// 	if (props.zoom) {
-// 		return 3 * 96 // Height for zoomed-in view
-// 	} else {
-// 		return 96 // Height for normal view
-// 	}
-// })
-const rowsToShow = ref(3)
-// const rowsToShow = computed(() => {
-// 	if (props.zoom) {
-// 		return 3//1
-// 	} else {
-// 		return 3
-// 	}
-// })
+
+// const yearHeight = ref(96)
+const rowsToShow = computed(() => props.zoom ? 1 : 3)
+
 const totalDays = 366
-const selectedDay = ref(getDayOfYear(model.value))
-const selectedYear = ref(model.value.getUTCFullYear())
+
+const selectedDay = computed(() => getDayOfYear(model.value))
+const selectedYear = computed(() => model.value.getUTCFullYear())
 
 const startYear = computed(() => props.start.getUTCFullYear())
 const endYear = computed(() => props.end.getUTCFullYear())
-const totalYears = computed(() => endYear.value - startYear.value + 3)
+const totalYears = computed(() => endYear.value - startYear.value + 1)
 const years = computed(() =>
-	Array.from({ length: totalYears.value }, (_, i) => startYear.value - 1 + i),
+	Array.from({ length: totalYears.value }, (_, i) => startYear.value + i),
 )
-const days = computed(() => Array.from({ length: totalDays }, (_, i) => i + 1))
+const eventsByYear = ref<Map<number, WeatherEvent[]>>(new Map())
+const maxSimultaneousEvents = ref(0)
 
 const dayStr = (day: number) => {
-	if (day < 1) day = 1
-	if (day > totalDays) day = totalDays
+	day = Math.max(1, Math.min(day, totalDays))
 	const date = setDayOfYear(new Date(selectedYear.value, 0, 1), day)
 	return format(date, 'do MMMM')
 }
 
-const isEvenMonth = (day: number) => {
-	const date = setDayOfYear(new Date(selectedYear.value, 0, 1), day)
-	return date.getMonth() % 2 !== 0
-}
-
-const scrollToYear = (year: number) => {
-	if (false && containerRef.value) {
-		const yearIndex = years.value.indexOf(year)
-		const targetScrollTop =
-			(yearIndex + Math.floor(rowsToShow.value / 2)) * yearHeight.value
-		containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
-	}
-}
-
-const snapping = ref(false)
-
-const onScrollEnd = () => {
-	// Snap to the nearest year and scroll to it
-	console.log('Snapping to nearest year')
-	// if (snapping.value) {
-	// 	snapping.value = false
-	// 	return
-	// }
-	// if (containerRef.value) {
-	// 	const scrollTop = containerRef.value.scrollTop
-	// 	const yearIndex = Math.round(scrollTop / yearHeight.value)
-	// 	snapping.value = true
-	// 	scrollToYear(years.value[yearIndex])
-
-	// 	const offset = Math.floor(rowsToShow.value / 2)
-	// 	selectedYear.value = years.value[yearIndex + offset]
-	// 	const newValue = setDayOfYear(
-	// 		new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
-	// 		selectedDay.value,
-	// 	)
-	// 	model.value = new Date(
-	// 		Date.UTC(
-	// 			newValue.getFullYear(),
-	// 			newValue.getMonth(),
-	// 			newValue.getDate(),
-	// 			0,
-	// 			0,
-	// 			0,
-	// 		),
-	// 	)
-	// }
-}
-
-watch(
-	() => [model.value, props.start, props.end],
-	() => {
-		nextTick(() => {
-			selectedDay.value = getDayOfYear(model.value)
-			selectedYear.value = model.value.getUTCFullYear()
-			// Set the initial scroll position
-			if (containerRef.value) {
-				const yearIndex = years.value.findIndex(
-					(year) => year === model.value.getUTCFullYear(),
-				)
-				const targetScrollTop =
-					(yearIndex - Math.floor(rowsToShow.value / 2)) * yearHeight.value
-				containerRef.value.scrollTo({ top: targetScrollTop, behavior: 'auto' })
-			}
-		})
-	},
-)
-
-watch(
-	() => props.selectedEvent,
-	(newVal) => {
-		if (newVal) {
-			const event = newVal
-			const startDay = getDayOfYear(event.startDate)
-			const endDay = getDayOfYear(event.endDate)
-			zoomToDays(startDay, endDay)
-		} else {
-			resetZoom()
-		}
-	},
-)
-
-watch(
-	() => props.events,
-	() => {
-		cachedEvents.value = years.value.map((year) =>
-			assignTimelinePositions(props.events, year),
+const populateEvents = () => {
+	years.value.forEach((year) => {
+		const { events: eventsForYear, maxEvents } = assignTimelinePositions(
+			props.events,
+			year,
 		)
-		console.log('Cached events:', cachedEvents.value)
-	},
-)
 
-const cachedEvents = ref<any[]>([])
-onMounted(() => {
-	const handleKey = (e: KeyboardEvent) => {
-		if (e.key === 'PageUp') {
-			model.value = subHours(model.value, 24)
-		} else if (e.key === 'PageDown') {
-			model.value = addHours(model.value, 24)
-		}
-	}
-
-	window.addEventListener('keydown', handleKey)
-
-	cachedEvents.value = years.value.map((year) =>
-		assignTimelinePositions(props.events, year),
-	)
-	console.log('Cached events:', cachedEvents.value)
-
-	onBeforeUnmount(() => {
-		window.removeEventListener('keydown', handleKey)
+		maxSimultaneousEvents.value = Math.max(
+			maxSimultaneousEvents.value,
+			maxEvents,
+		)
+		eventsByYear.value.set(year, eventsForYear)
 	})
-})
+	console.log('Cached events:', eventsByYear.value)
+}
+
+const eventIsSelected = (event: { id?: number }) =>
+	event.id === props.selectedEvent?.id
+const eventHeight = computed(() => 0.02)//0.75 / maxSimultaneousEvents.value)
+const isYearVisible = (year: number) => Math.abs(selectedYear.value - year) <= 2
+
+watch(() => props.events, populateEvents, { immediate: true, deep: true })
 
 const isDragging = ref(false)
+const dragMode = ref<'horizontal' | 'vertical' | null>(null)
+let startX = 0
+let startY = 0
+const yOffset = computed(() => {
+	const scrollPos = (model.value.getUTCFullYear() - startYear.value + 1)
+	return scrollPos - Math.floor(rowsToShow.value / 2)
+})
 
 const startDrag = (event: MouseEvent) => {
 	isDragging.value = true
-	window.addEventListener('mousemove', needleDrag)
+	dragMode.value = null
+	startX = event.clientX
+	startY = event.clientY
+	window.addEventListener('mousemove', handleDrag)
 	window.addEventListener('mouseup', endDrag)
 }
 
 const endDrag = () => {
 	isDragging.value = false
-	window.removeEventListener('mousemove', needleDrag)
+	dragMode.value = null
+	window.removeEventListener('mousemove', handleDrag)
 	window.removeEventListener('mouseup', endDrag)
+
 	selectedDay.value = Math.round(selectedDay.value)
-	if (selectedDay.value < 1) {
-		selectedDay.value = 1
-	} else if (selectedDay.value > totalDays) {
-		selectedDay.value = totalDays
-	}
+	selectedDay.value = Math.max(1, Math.min(selectedDay.value, totalDays))
 
 	const tempDate = setDayOfYear(
-		new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
+		new Date(Date.UTC(selectedYear.value, 0, 1)),
 		selectedDay.value,
 	)
 	model.value = new Date(
-		Date.UTC(
-			tempDate.getFullYear(),
-			tempDate.getMonth(),
-			tempDate.getDate(),
-			0,
-			0,
-			0,
-		),
+		Date.UTC(tempDate.getFullYear(), tempDate.getMonth(), tempDate.getDate()),
 	)
 	console.log(`Just set model to ${model.value.toISOString()}`)
 }
 
-const needleDrag = (event: MouseEvent) => {
-	const container = containerRef.value
-	if (container) {
-		const rect = container.getBoundingClientRect()
-		const offsetX = event.clientX - rect.left
-		const percentage = offsetX / rect.width
+const handleDrag = (event: MouseEvent) => {
+	console.warn('Dragging does not properly work yet')
+	const dx = event.clientX - startX
+	const dy = event.clientY - startY
 
-		selectedDay.value = Math.max(Math.min(percentage, 1), 0) * totalDays
-		const tempDate = setDayOfYear(
-			new Date(Date.UTC(selectedYear.value, 0, 1, 0, 0, 0)),
-			selectedDay.value,
-		)
-		model.value = new Date(
-			Date.UTC(
-				tempDate.getFullYear(),
-				tempDate.getMonth(),
-				tempDate.getDate(),
-				0,
-				0,
-				0,
-			),
-		)
+	if (!dragMode.value) {
+		if (Math.abs(dx) > Math.abs(dy)) dragMode.value = 'horizontal'
+		else if (Math.abs(dy) > Math.abs(dx)) dragMode.value = 'vertical'
+		else return
 	}
+
+	if (dragMode.value === 'horizontal') {
+		const container = containerRef.value
+		if (container) {
+			const rect = container.getBoundingClientRect()
+			const offsetX = event.clientX - rect.left
+			const percentage = offsetX / rect.width
+			// selectedDay.value = Math.max(0, Math.min(1, percentage)) * totalDays
+
+			const tempDate = setDayOfYear(
+				new Date(Date.UTC(selectedYear.value, 0, 1)),
+				Math.max(0, Math.min(1, percentage)) * totalDays,
+			)
+			model.value = new Date(
+				Date.UTC(
+					tempDate.getFullYear(),
+					tempDate.getMonth(),
+					tempDate.getDate(),
+				),
+			)
+		}
+	} else if (dragMode.value === 'vertical') {
+		// yOffset.value -= dy
+		// yOffset.value = Math.max(0, yOffset.value)
+		if (dy > 0) {
+			model.value = subYears(model.value, 1)
+		} else {
+			model.value = addYears(model.value, 1)
+		}
+		startY = event.clientY
+	}
+}
+
+const onWheel = (e: WheelEvent) => {
+	e.preventDefault()
+	if (e.shiftKey || e.metaKey) {
+		// const delta = e.deltaY > 0 ? 1.1 : 0.9
+		// scaleX.value = Math.max(0.1, Math.min(scaleX.value * delta, 20))
+		if (e.deltaY < 0) {
+			model.value = subHours(model.value, 24)
+		} else {
+			model.value = addHours(model.value, 24)
+		}
+	} else {
+		if (e.deltaY < 0) {
+			model.value = subYears(model.value, 1)
+		} else {
+			model.value = addYears(model.value, 1)
+		}
+	}
+}
+
+const viewportTransform = computed(() => {
+	const yScale = totalYears.value / rowsToShow.value
+
+	if (!props.selectedEvent) {
+		return `translate(0, ${yScale*(1-yOffset.value)}) scale(1, ${yScale})`
+	} else {
+		const eventStart = getDayOfYear(props.selectedEvent.startDate)
+		const eventEnd = getDayOfYear(props.selectedEvent.endDate)
+		const totalDays = eventEnd - eventStart + 2
+		const scale = 366 / totalDays
+		return `translate(${scale*(1-eventStart)}, ${yScale*(1-yOffset.value)}) scale(${scale}, ${yScale})`
+	}
+})
+
+function assignTimelinePositions(events: WeatherEvent[], targetYear: number) {
+	const filtered = events.filter(
+		(e) =>
+			e.times[0].getFullYear() <= targetYear &&
+			e.times[e.times.length - 1].getFullYear() >= targetYear,
+	)
+
+	const sliced = filtered.map((e) => {
+		const startDay =
+			e.times[0].getFullYear() < targetYear ? 1 : getDayOfYear(e.times[0])
+		const endDay =
+			e.times[e.times.length - 1].getFullYear() > targetYear
+				? (new Date(targetYear, 11, 31).getTime() -
+						new Date(targetYear, 0, 0).getTime()) /
+					86400000
+				: getDayOfYear(e.times[e.times.length - 1])
+		return { ...e, startX: startDay, endX: endDay }
+	})
+
+	let maxy = 0
+	const activeRows: any[] = []
+	const result = sliced
+		.sort((a, b) => a.startX - b.startX)
+		.map((event) => {
+			const usedYs = new Set()
+			for (const row of activeRows) {
+				if (row.endX >= event.startX) usedYs.add(row.y)
+			}
+			let y = 0
+			while (usedYs.has(y)) y++
+			activeRows.push({ endX: event.endX, y })
+			event.y = y
+			maxy = Math.max(maxy, y)
+			event.color = catScheme[event.id % catScheme.length]
+			return event
+		})
+
+	return { events: result, maxEvents: maxy }
 }
 
 const needleOffset = computed(() => {
@@ -269,10 +256,10 @@ const needleOffset = computed(() => {
 	} else {
 		// In zoom mode, we want to center the needle on the selected event
 		if (props.selectedEvent) {
-			const startDay = getDayOfYear(props.selectedEvent.startDate)
-			const endDay = getDayOfYear(props.selectedEvent.endDate)
-			const totalDays = endDay - startDay + 4
-			const midDay = (startDay + endDay) / 2
+			const eventStart = getDayOfYear(props.selectedEvent.startDate)
+			const eventEnd = getDayOfYear(props.selectedEvent.endDate)
+			const totalDays = eventEnd - eventStart + 4
+			const midDay = (eventStart + eventEnd) / 2
 			return ((midDay / totalDays) * 100).toFixed(2)
 		} else {
 			return ((selectedDay.value / totalDays) * 100).toFixed(2)
@@ -280,169 +267,62 @@ const needleOffset = computed(() => {
 	}
 })
 
-const zoomToDays = (start: number, end: number) => {
-	zoomState.value = { start, end }
-}
-
-const zoomState = ref<{ start: number; end: number } | null>(null)
-
-const zoomTransform = () => {
-	const zoom = zoomState.value
-	if (!zoom) return 'scale(1,1) translate(0,0)'
-
-	const total = 366
-	const span = zoom.end - zoom.start + 1
-	const scale = total / span
-	const translate = -zoom.start + 0.5 //-(zoom.start + zoom.end) / 2
-
-	return `scale(${scale},1) translate(${translate},0)`
-}
-const resetZoom = () => {
-	zoomState.value = null
-}
-
-const isInZoomRange = (day: number) => {
-	if (props.selectedEvent) {
-		const zoomStart = getDayOfYear(props.selectedEvent.startDate)
-		const zoomEnd = getDayOfYear(props.selectedEvent.endDate)
-		return day >= zoomStart && day <= zoomEnd
-	} else {
-		return true
-	}
-}
-
-function assignTimelinePositions(
-	events: { times: Date[]; color: string; y: number; id: number }[],
-	targetYear: number,
-) {
-	// console.log('assignTimelinePositions', events, targetYear)
-	// Filter to events active at any point in the target year
-	const filtered = events.filter((e) => {
-		return (
-			e.times[0].getFullYear() <= targetYear &&
-			e.times[e.times.length - 1].getFullYear() >= targetYear
-		)
-	})
-
-	// Convert to day-of-year bounds within the year
-	const sliced = filtered.map((e) => {
-		const startDay =
-			e.times[0].getFullYear() < targetYear ? 1 : getDayOfYear(e.times[0])
-
-		const endDay =
-			e.times[e.times.length - 1].getFullYear() > targetYear
-				? (new Date(targetYear, 11, 31).getTime() -
-						new Date(targetYear, 0, 0).getTime()) /
-					86400000
-				: getDayOfYear(e.times[e.times.length - 1])
-
-		return {
-			...e,
-			startX: startDay,
-			endX: endDay,
-		}
-	})
-
-	// Assign y-levels using greedy algorithm
-	const activeRows: any = [] // each: { endX, y }
-	let nextY = 0
-
-	const result = sliced
-		.sort((a, b) => a.startX - b.startX)
-		.map((event, idx) => {
-			// Reclaim rows that are now free
-			const usedYs = new Set()
-			for (let row of activeRows) {
-				if (row.endX >= event.startX) {
-					usedYs.add(row.y)
-				}
-			}
-
-			let y = 0
-			while (usedYs.has(y)) y++
-			activeRows.push({ endX: event.endX, y })
-			event.y = y
-			event.color = catScheme[event.id % catScheme.length]
-			return event
-		})
-
-	return result
-}
-
-const eventIsSelected = (event: {
-	id?: number
-	startX: number
-	endX: number
-}) => {
-	return event.id === props.selectedEvent?.id
-}
-
-const scaleY = 0.05
 const positionY = (y: number) => {
 	if (y % 2 === 0) {
-		return -scaleY * y
+		return -0.55 * eventHeight.value * y
 	} else {
-		return scaleY * (y + 1)
+		return 0.55 * eventHeight.value * (y + 1)
 	}
 }
 
-const testFocusX = () => {
-	zoomToDays(100, 200)
-}
+onMounted(() => {
+	const handleKey = (e: KeyboardEvent) => {
+		if (e.key === 'PageUp') model.value = subHours(model.value, 24)
+		else if (e.key === 'PageDown') model.value = addHours(model.value, 24)
+		else if (e.key === 'ArrowLeft') model.value = subHours(model.value, 24)
+		else if (e.key === 'ArrowRight') model.value = addHours(model.value, 24)
+		else if (e.key === 'ArrowUp') model.value = subYears(model.value, 1)
+		else if (e.key === 'ArrowDown') model.value = addYears(model.value, 1)
+	}
+	window.addEventListener('keydown', handleKey)
+	populateEvents()
 
-const resetFocus = () => {
-	zoomToDays(1, 366)
-}
+	onBeforeUnmount(() => {
+		window.removeEventListener('keydown', handleKey)
+	})
+})
 </script>
 
 <template>
 	<div class="time-reel">
-		<div
-			class="year-grid-container"
+		<svg
+			class="event-background"
 			ref="containerRef"
-			:style="{ height: `${yearHeight * rowsToShow}px` }"
-			v-on:scrollend="onScrollEnd"
+			xmlns="http://www.w3.org/2000/svg"
+			:viewBox="`0 0 366 ${endYear - startYear + 1}`"
+			preserveAspectRatio="none"
+			@wheel.passive="onWheel"
+			@mousedown="startDrag"
 		>
-			<div class="year-grid">
-				<div
+			<g :transform="viewportTransform" class="scroller">
+				<g
 					v-for="year in years"
 					:key="year"
-					class="year-row"
-					:class="{ zoom: props.zoom }"
-					:style="{ height: `${yearHeight}px` }"
+					v-show="() => true || isYearVisible(year)"
+					:transform="`translate(0, ${0.5 + year - startYear})`"
 				>
-					<div class="year-label">{{ year }}</div>
-					<div
-						class="day-cell"
-						v-for="day in days"
-						:key="day"
-						:class="{ even: isEvenMonth(day), shrunk: !isInZoomRange(day) }"
-					></div>
-					<svg
-						class="year-overlay"
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 -1 366 2"
-						preserveAspectRatio="none"
-						pointer-events="none"
-					>
-						<g :data-whatever="`${year}`" :transform="year == selectedYear ? zoomTransform() : ''">
-							<rect
-								v-for="event in cachedEvents[year - startYear]"
-								:key="event.id ?? event.startX + '-' + event.endX"
-								:x="event.startX"
-								:width="event.endX - event.startX"
-								:y="eventIsSelected(event) ? -1 : positionY(event.y)"
-								:height="eventIsSelected(event) ? 4 * scaleY : scaleY"
-								:fill="event.color"
-								:stroke="event.color"
-								:opacity="!props.zoom || eventIsSelected(event) ? 1.0 : 0.5"
-								:stroke-width="0.8 * scaleY"
-							/>
-						</g>
-					</svg>
-				</div>
-			</div>
-		</div>
+					<rect
+						v-for="event in eventsByYear.get(year)"
+						:x="event.startX! - 0.5"
+						:width="event.endX! - event.startX! + 1"
+						:y="eventIsSelected(event) ? -0.5 : positionY(event.y!)"
+						:height="eventIsSelected(event) ? 3 * eventHeight : eventHeight"
+						:fill="event.color"
+					/>
+				</g>
+			</g>
+		</svg>
+
 		<div class="year-highlights">
 			<div
 				class="highlight-row fade-top"
@@ -482,92 +362,40 @@ const resetFocus = () => {
 				:style="`flex: 0 0 calc( 0.5 * ( 100% - ( 100% / ${rowsToShow} ) )`"
 			></div>
 		</div>
-		<div class="debug">
+		<!-- <div class="debug">
 			<button @click="testFocusY">testFocusY</button>
 			<button @click="testFocusX">testFocusX</button>
 			<button @click="resetFocus">Reset Zoom</button>
-		</div>
+		</div> -->
 	</div>
 </template>
 
 <style scoped lang="scss">
-@use '@/assets/styles/scssVars.scss' as *;
+@use '@/assets/styles/scssVars.module.scss' as *;
 
 $margin: 0 0.5rem;
+$margin: 0 0;
 .time-reel {
 	position: relative;
 }
 
-.year-grid-container {
-	margin: $margin;
-	border: 1px solid #ccc;
-	position: relative;
-	overflow-y: scroll;
-	width: 100%;
-	padding: 0;
-}
-
-.year-grid {
-	display: flex;
-	flex-direction: column;
-
-	.year-row {
-		display: flex;
-		position: relative;
-		transition: all $animTime ease-in-out;
-
-		// border: 1px solid red;
-
-		&.zoom {
-			transform: translateY(-100%);
-			overflow: hidden;
-		}
-
-		.year-label {
-			position: absolute;
-			color: #888888;
-			font-weight: bold;
-			font-size: 0.75rem;
-			pointer-events: none;
-			user-select: none;
-		}
-
-		.day-cell {
-			transition: all $animTime ease-in-out;
-			flex: 1 1 100%;
-			min-width: 0;
-			background-color: #f9f9f9;
-			border: none;
-			height: 100%;
-			overflow: visible;
-			&.shrunk {
-				flex: 0 0 0;
-			}
-			&.even {
-				background-color: #f0f0f0;
-			}
-			p {
-				color: black;
-			}
-		}
-	}
-}
-
-.year-overlay {
+.event-background {
 	position: absolute;
 	top: 0;
 	left: 0;
-	width: 100%;
 	height: 100%;
-	pointer-events: none;
-	z-index: 1;
-	transition: all $animTime linear;
+	width: 100%;
+	margin: $margin;
+	border: 1px solid #ccc;
+	position: relative;
+	padding: 0;
 
-	g {
-		transition: all $animTime linear;
-		rect {
-			transition: all $animTime ease-in-out $animTime;
-		}
+	.scroller {
+		transition: transform $animTime ease-in-out;
+	}
+
+	rect {
+		transition: all $settleTime ease-in-out calc(0.5*$animTime);
 	}
 }
 
@@ -584,6 +412,7 @@ $margin: 0 0.5rem;
 	z-index: 2;
 	pointer-events: none;
 	transition: all $animTime ease-in-out;
+	border: none;
 
 	$fadeColor: #aaaaaa;
 

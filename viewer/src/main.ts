@@ -5,11 +5,15 @@ import router from '@/router'
 import { useStore } from '@/store/store'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
+// @ts-ignore
+import VueVirtualScroller from 'vue-virtual-scroller'
+
 
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
 app.use(router)
+app.use(VueVirtualScroller)
 
 const store = useStore()
 // TODO use language store here (if required)

@@ -16,7 +16,7 @@ const classes = computed(() => ['panel', { active: props.active }])
 </template>
 
 <style scoped lang="scss">
-@use '@/assets/styles/scssVars.scss' as *;
+@use '@/assets/styles/scssVars.module.scss' as *;
 
 .panel {
 	display: flex;

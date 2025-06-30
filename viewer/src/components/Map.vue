@@ -65,7 +65,7 @@ watch(
 	},
 )
 
-import scssVars from '@/assets/styles/scssVars.scss'
+import scssVars from '@/assets/styles/scssVars.module.scss'
 
 watch(
 	() => store.selectedEvent,
@@ -75,13 +75,13 @@ watch(
 			console.log('fitting bounds', newVal.bbox, newVal.regions)
 			try {
 				// TODO - 32px is hardcoded padding, yuck
-				// map.fitBounds([[newVal.bbox[0], newVal.bbox[1]], [newVal.bbox[2], newVal.bbox[3]]], {
-				// 	paddingTopLeft: [32, 32],
-				// 	paddingBottomRight: [map.getSize().x * 0.5+32, map.getSize().y * 0.5+32],
-				// 	maxZoom: 12,
-				// 	// @ts-ignore
-				// 	duration: scssVars.animTime,
-				// })
+				map.fitBounds([[newVal.bbox[0], newVal.bbox[1]], [newVal.bbox[2], newVal.bbox[3]]], {
+					paddingTopLeft: [32, 32],
+					paddingBottomRight: [map.getSize().x * 0.5+32, map.getSize().y * 0.5+32],
+					maxZoom: 12,
+					// @ts-ignore
+					duration: scssVars.animTime,
+				})
 			} catch (e) {
 				console.error('Error fitting bounds:', e)
 			}
@@ -190,13 +190,13 @@ const gridpointIcon = icon({
 				position="bottomright"
 				class="map-scale"
 			></LControlScale>
-			<LControlZoom></LControlZoom>
+			<LControlZoom :class="{ shifted: store.eventSelected }"></LControlZoom>
 		</LMap>
 	</div>
 </template>
 
 <style lang="scss" scoped>
-@use '@/assets/styles/scssVars.scss' as *;
+@use '@/assets/styles/scssVars.module.scss' as *;
 
 .map {
 	width: 100%;
@@ -210,10 +210,6 @@ const gridpointIcon = icon({
 	}
 
 	:deep(.leaflet-tile) {
-		image-rendering: pixelated; /* or auto/smooth depending on your preference */
-		transform-origin: center center;
-	}
-	.leaflet-tile {
 		image-rendering: pixelated; /* or auto/smooth depending on your preference */
 		transform-origin: center center;
 	}

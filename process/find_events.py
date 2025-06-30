@@ -117,7 +117,8 @@ class Eventlet:
         self.slices.clear()
 
 class EventletFactory:
-    def __init__(self, threshold, ref_data, expiry_days=1, min_length=3, neighbor_weight_fn=None):
+    def __init__(self, data, threshold, ref_data, expiry_days=1, min_length=3, neighbor_weight_fn=None):
+        self.data = data
         self.threshold = threshold
         self.ref_data = ref_data
         self.expiry_days = expiry_days
@@ -128,17 +129,38 @@ class EventletFactory:
         self.oldest_active_time = None
         self.id = 0
 
-    def process_slice(self, time, data_slice):
-        print(f"Processing slice at {time}")
-        hot_mask = (data_slice > self.threshold) & (data_slice > self.ref_data)
+        # Store the full thresholded mask
+        self.raw_mask = ((data > self.threshold) & (data > ref_data)).values  # shape (T, Y, X), bool
+        # print(f"Raw mask shape: {self.raw_mask.shape}")
+
+        # Precompute spatial validity mask for 3+ consecutive hits
+        sliding_sum = np.lib.stride_tricks.sliding_window_view(self.raw_mask, window_shape=3, axis=0).sum(axis=0)  # shape (Y, X)
+        self.valid_pixels = (sliding_sum >= 3).any(axis=2)  # shape (Y, X)
+        # print(f"Valid pixels shape: {self.valid_pixels.shape}")
+
+        self.times = self.data.valid_time.values  # in __init__
+
+
+
+    def process_slice(self, time):
+        # print(f"Processing slice at {time}")
+
+        data_slice = self.data.sel(valid_time=time).load()  # Load the slice for the given time
+        # hot_mask = (data_slice > self.threshold) & (data_slice > self.ref_data)
+        # eroded_mask = binary_erosion(eroded_mask, structure=structure)
+        t = np.searchsorted(self.times, np.datetime64(time))
+
+        time3_mask = self.raw_mask[t].copy()
+        time3_mask = np.where(self.valid_pixels, time3_mask, 0)
+
         structure = np.array([[0,1,0],
                       [1,1,1],
                       [0,1,0]], dtype=bool)  # 4-connectivity
-        eroded_mask = binary_erosion(hot_mask, structure=structure)
+        eroded_mask = binary_erosion(time3_mask, structure=structure)
         eroded_mask = binary_erosion(eroded_mask, structure=structure)
 
         # print(f"Masked data")
-        blobs = self._label_connected_blobs(eroded_mask)
+        blobs = self._label_connected_blobs(eroded_mask, time)
         # print(f"Processing slice at {time}")
 
         lat_vals = data_slice["latitude"].values
@@ -202,7 +224,7 @@ class EventletFactory:
         while self.output_queue:
             yield self.output_queue.popleft()
 
-    def _label_connected_blobs(self, mask):
+    def _label_connected_blobs(self, mask, time):
         # Extend mask in longitude for wrapping (assumes last axis is lon)
         extended_mask = np.concatenate([mask, mask[:, :1]], axis=1)  # add first column to end for wrapping
         structure = np.array([[0,1,0],
@@ -241,7 +263,19 @@ class EventletFactory:
             blob = list(zip(ys, xs))
             blobs.append(blob)
 
-        print(f"Found {len(blobs)} blobs in the current slice\n")
+        print(f"Found {len(blobs)} blobs in the current slice at {time}\n")
+
+        with open("/data/output/debug.jsonl", "a") as f:
+            for i, blob in enumerate(blobs):
+                f.write(json.dumps({
+                    "id": f"{self.id:04d}",
+                    "times": [time.isoformat()+"Z"],
+                    # "coords": blob,
+                    "regions": [get_region(blob)],
+                    "centroids": [np.mean([pt[0] for pt in blob]), np.mean([pt[1] for pt in blob])],
+                }) + "\n")
+                self.id += 1
+
         return blobs
 
 
@@ -282,7 +316,7 @@ class EventletClusterer:
         return min_dist
 
     def process_eventlet(self, eventlet):
-        print(f"Processing eventlet with {len(eventlet.times)} times\n")
+        # print(f"Processing eventlet with {len(eventlet.times)} times\n")
         matched_eventlet = None
 
         for existing_ev in self.eventlets:
@@ -341,7 +375,7 @@ class EventletClusterer:
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
         event_dict = {
-            "id": int(`{all_times[0].format("%Y%m%d")}{int(centroids[0][0]*100):4d}int({centroids[0][1]*100):4d}`),
+            "id": stable_cluster_hash(all_times[0], centroids[0]),
             "times": [t.isoformat()+"Z" for t in all_times],
             "regions": [get_region(region) for region in ev.slices],
             "centroids": centroids,
@@ -352,7 +386,14 @@ class EventletClusterer:
         with open(self.output_path, "a") as f:
             f.write(json.dumps(event_dict) + "\n")
 
+import hashlib
 
+def stable_cluster_hash(time, centroid):
+    """
+    Stable integer hash based on time and centroid.
+    """
+    s = f"{str(time)}_{centroid[0]:.6f}_{centroid[1]:.6f}"
+    return int(hashlib.sha256(s.encode("utf-8")).hexdigest()[:16], 16)
 
 
 def downstream_worker(q, clusterer):
@@ -374,12 +415,10 @@ def load_data(data_path, ref_path):
     return shift_longitudes(ds["t2m"]), shift_longitudes(ref["t2m"])        
 
 def main():
-    data_var, ref_data = load_data("/data/era5_202*.nc", "/data/era5_ref98.nc")
+    data_var, ref_data = load_data("/data/era5_202*.nc", "/data/era5_ref99.nc")
     time_dim = data_var["valid_time"]
-    ref_data = xr.open_dataset("/data/era5_ref98.nc")["t2m"].values
-    print(f"Reference data shape: {ref_data.shape}")
 
-    factory = EventletFactory(threshold=28 + 273.15, ref_data=ref_data)
+    factory = EventletFactory(data_var, threshold=28 + 273.15, ref_data=ref_data)
     downstream = EventletClusterer(
         dist_threshold=1.75,
         factory_ref=factory,
@@ -401,9 +440,8 @@ def main():
 
     for i in range(time_dim.size):
         time_val = pd.to_datetime(time_dim[i].values)
-        slice_data = data_var.isel(valid_time=i).load()
 
-        factory.process_slice(time_val, slice_data)
+        factory.process_slice(time_val)
         for ev in factory.yield_completed():
             eventlet_queue.put(ev)
 

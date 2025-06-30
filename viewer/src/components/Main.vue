@@ -24,22 +24,8 @@ const toggleLabel = computed(() =>
 			id="time-panel"
 			:active="store.timePanelExpanded"
 			class="bottom peek"
-			:class="{ side: false && store.eventSelected }"
+			:class="{ side: store.eventSelected }"
 		>
-			<button
-				class="panel-toggle"
-				@click="store.toggleTimePanel"
-				:aria-label="toggleLabel"
-			>
-				{{ toggleLabel }}
-			</button>
-			<button
-				class="panel-sideline"
-				@click="store.toggleEventSelectedDebug"
-				:aria-label="toggleLabel"
-			>
-				{{ toggleLabel }}
-			</button>
 			<TimeReel
 				id="times"
 				:start="store.startTime"
@@ -54,7 +40,7 @@ const toggleLabel = computed(() =>
 				v-model="store.selectedTime"
 			></TimeReel>
 		</Panel>
-		<!-- <Panel id="event-frame-panel" class="top" :active="store.eventSelected">
+		<Panel id="event-frame-panel" class="top" :active="store.eventSelected">
 			<div id="event-frame">
 				<div class="decor"></div>
 			</div>
@@ -62,7 +48,7 @@ const toggleLabel = computed(() =>
 		</Panel>
 		<Panel id="event-panel" class="right" :active="store.eventSelected">
 			<div id="event"></div>
-		</Panel> -->
+		</Panel>
 
 		<div id="buttons-debug">
 			<!-- <h2>{{ store.selectedEvent }}</h2> -->
@@ -73,7 +59,7 @@ const toggleLabel = computed(() =>
 </template>
 
 <style lang="scss" scoped>
-@use '@/assets/styles/scssVars.scss' as *;
+@use '@/assets/styles/scssVars.module.scss' as *;
 
 .main {
 	display: flex;
@@ -97,7 +83,6 @@ const toggleLabel = computed(() =>
 
 	#map {
 		flex: 1 1 100%;
-		background-color: red;
 		z-index: 0;
 	}
 
@@ -117,10 +102,15 @@ const toggleLabel = computed(() =>
 		left: 1.5rem;
 		right: 1.5rem;
 		bottom: 1.5rem;
-		// height: 200px;
+		height: 45%;
 
+		transition: all $animTime ease-in-out;
+		
 		&.side {
 			left: 50%;
+			height: 15%;
+			bottom: calc(-1.5rem + 15%);
+			border-top: none;
 		}
 
 		#times {
@@ -184,6 +174,7 @@ const toggleLabel = computed(() =>
 		left: 50%;
 		border-radius: 0;
 		border-top-right-radius: 6px;
+		border-bottom: none;
 		box-shadow: rgba(0, 0, 0, 0.5) 3px 0px 3px 0px;
 	}
 }

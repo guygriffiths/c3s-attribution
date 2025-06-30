@@ -25,7 +25,7 @@ onMounted(() => {
 
 <style lang="scss">
 @forward '@/assets/styles/main.scss';
-@use '@/assets/styles/scssVars.scss' as *;
+@use '@/assets/styles/scssVars.module.scss' as *;
 
 #app {
 	width: 100vw;
