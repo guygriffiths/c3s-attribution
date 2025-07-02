@@ -20,7 +20,6 @@ TODO at some point:
     - size
     - duration
     - area affected
-* Download the data - look on Bertha, do it on the VM.
 * As the timeline zooms to become the event info axis, fly a polygon from each (non-selected) day to overlap? But perhaps try and show the whole event, or the event's progression
 
 * Explore by geo - point location. See all events ever at this pixel.

@@ -348,15 +348,6 @@ const positionY = (y: number) => {
 	}
 }
 
-const getDayBoxStrokeStyle = (i: number) => {
-	const delay = 50 * i // ms
-	return {
-		// transition: `stroke-width 10s ease ${delay}ms`,
-		strokeWidth: '0.05',
-		stroke: 'lilac',
-	}
-}
-
 onMounted(() => {
 	const handleKey = (e: KeyboardEvent) => {
 		if (e.key === 'PageUp') prevDay()
@@ -378,14 +369,6 @@ onMounted(() => {
 		window.removeEventListener('keydown', handleKey)
 	})
 })
-
-const show = ref(true)
-
-const items = computed(() => (show.value ? [1, 2, 3, 4, 5] : [3, 4]))
-
-function toggle() {
-	show.value = !show.value
-}
 </script>
 
 <template>
@@ -440,10 +423,11 @@ function toggle() {
 					/>
 				</g>
 			</g>
-			<transition-group tag="g" name="event-fx" :transform="viewportTransform">
+			<transition-group tag="g" name="event-fx" class="event-taxis" :transform="viewportTransform">
 				<rect
 					v-for="(day, i) in props.selectedEvent?.times || []"
 					:key="`${day.getTime()}-${props.selectedEvent?.id || ''}`"
+					vector-effect="non-scaling-stroke" 
 					:x="getDayOfYear(day) - 0.5"
 					:width="1"
 					:y="(props.selectedEvent?.times[0].getFullYear() || 0) - startYear"
@@ -526,14 +510,19 @@ $margin: 0 0;
 		stroke: 0;
 	}
 
+	.event-taxis {
+		transition: transform $animTime ease-in-out;
+	}
+
 	rect {
+		// TODO - do this with Vue transition? Maybe not, just tweak it so it's better
 		transition:
-			all $settleTime ease-in-out calc(0.5 * $animTime),
+			all $settleTime ease-in-out $animTime,
 			opacity 0s linear;
 		&.selected {
 			transition:
-				all $settleTime ease-in-out calc(0.5 * $animTime),
-				opacity 0s linear calc(0.5 * $animTime + $settleTime);
+				all $settleTime ease-in-out $animTime,
+				opacity 0s linear calc($animTime + $settleTime);
 		}
 
 		&.unselected {
@@ -543,28 +532,29 @@ $margin: 0 0;
 	}
 
 	.day-box {
-		stroke-width: 0.03;
+		stroke-width: 2;
 		opacity: 1;
 	}
 
+	// TODO Polish this even more.
 	.event-fx-enter-from {
 		opacity: 0;
 		stroke-width: 0;
 	}
 	.event-fx-enter-to {
 		opacity: 1;
-		stroke-width: 0.03;
+		stroke-width: 2;
 	}
 	.event-fx-enter-active {
 		transition:
 			stroke-width 0s ease-out
-				calc(0.5 * $animTime + $settleTime + var(--i) * 20ms),
-			opacity 0s linear calc(0.5 * $animTime + $settleTime);
+				calc($animTime + $settleTime + var(--i) * 20ms),
+			opacity 0s linear calc($animTime + $settleTime);
 	}
 
 	.event-fx-leave-from {
 		opacity: 1;
-		stroke-width: 0.03;
+		stroke-width: 2;
 	}
 	.event-fx-leave-to {
 		opacity: 0;
