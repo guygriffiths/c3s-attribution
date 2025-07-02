@@ -34,7 +34,9 @@ interface State {
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
 export const T2M_LAYER = 'era5/t2m'
-export const catScheme = [...d3.schemeDark2, ...d3.schemeCategory10]
+// export const catScheme = [...d3.schemeDark2, ...d3.schemeCategory10]
+const getColor = (i: number) => d3.interpolateWarm((i * 0.61803398875) % 1)
+export const catScheme = Array.from({ length: 100 }, (_, i) => getColor(i))
 
 export const useStore = defineStore('main', {
 	state: (): State => {
@@ -127,6 +129,8 @@ export const useStore = defineStore('main', {
 							this.endTime = new Date(endDate)
 						}
 						endDate.setHours(23, 59, 59, 999)
+
+						event.color = catScheme[event.id % catScheme.length]
 					})
 
 					// this.events = data.filter((_, i) => i % 4 === 0) as Event[]

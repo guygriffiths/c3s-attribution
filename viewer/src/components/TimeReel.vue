@@ -23,8 +23,8 @@ import { useLabels } from '@/lib/labels'
 
 interface WeatherEvent {
 	id: number
-	startDate: Date
-	endDate: Date
+	// startDate: Date
+	// endDate: Date
 	times: Date[]
 	color?: string
 	y?: number
@@ -39,19 +39,51 @@ const props = defineProps({
 	end: { type: Date, default: () => new Date(2024, 0, 1) },
 	events: { type: Array<WeatherEvent>, default: () => [] as WeatherEvent[] },
 	selectedEvent: { type: Object as () => WeatherEvent | null, default: null },
-	zoom: { type: Boolean, default: false },
 })
 
 const model: Ref<Date> = defineModel({
 	type: Date,
 	default: new Date(),
 })
+const nextDay = () => {
+	const newVal = addHours(model.value, 24)
+	if (newVal.getUTCFullYear() <= props.end.getUTCFullYear()) {
+		model.value = newVal
+	}
+}
+const prevDay = () => {
+	const newVal = subHours(model.value, 24)
+	if (newVal.getUTCFullYear() >= props.start.getUTCFullYear()) {
+		model.value = newVal
+	}
+}
+const nextYear = () => {
+	const newVal = addYears(model.value, 1)
+	if (newVal.getUTCFullYear() <= props.end.getUTCFullYear()) {
+		model.value = newVal
+	}
+}
+const prevYear = () => {
+	const newVal = subYears(model.value, 1)
+	if (newVal.getUTCFullYear() >= props.start.getUTCFullYear()) {
+		model.value = newVal
+	}
+}
+const setDate = (date: Date) => {
+	if (
+		date.getUTCFullYear() >= props.start.getUTCFullYear() &&
+		date.getUTCFullYear() <= props.end.getUTCFullYear()
+	) {
+		model.value = date
+	}
+}
 
 const needleRef = ref<HTMLDivElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 
 // const yearHeight = ref(96)
-const rowsToShow = computed(() => props.zoom ? 1 : 3)
+const zoom = computed(() => props.selectedEvent || false)
+const rowsToShow = computed(() => (zoom.value ? 1 : 3))
 
 const totalDays = 366
 
@@ -62,7 +94,10 @@ const startYear = computed(() => props.start.getUTCFullYear())
 const endYear = computed(() => props.end.getUTCFullYear())
 const totalYears = computed(() => endYear.value - startYear.value + 1)
 const years = computed(() =>
-	Array.from({ length: totalYears.value }, (_, i) => startYear.value + i),
+	Array.from(
+		{ length: totalYears.value + rowsToShow.value },
+		(_, i) => startYear.value + i - Math.floor(rowsToShow.value / 2),
+	),
 )
 const eventsByYear = ref<Map<number, WeatherEvent[]>>(new Map())
 const maxSimultaneousEvents = ref(0)
@@ -71,6 +106,35 @@ const dayStr = (day: number) => {
 	day = Math.max(1, Math.min(day, totalDays))
 	const date = setDayOfYear(new Date(selectedYear.value, 0, 1), day)
 	return format(date, 'do MMMM')
+}
+
+const monthsForYear = (year: number) => {
+	const months = [
+		{ name: $l.value.months.jan, length: 31 },
+		{ name: $l.value.months.feb, length: year % 4 === 0 ? 29 : 28 },
+		{ name: $l.value.months.mar, length: 31 },
+		{ name: $l.value.months.apr, length: 30 },
+		{ name: $l.value.months.may, length: 31 },
+		{ name: $l.value.months.jun, length: 30 },
+		{ name: $l.value.months.jul, length: 31 },
+		{ name: $l.value.months.aug, length: 31 },
+		{ name: $l.value.months.sep, length: 30 },
+		{ name: $l.value.months.oct, length: 31 },
+		{ name: $l.value.months.nov, length: 30 },
+		{ name: $l.value.months.dec, length: 31 },
+	]
+
+	let startX = 0
+	return months.map((month, i) => {
+		const monthStartX = startX
+		startX += month.length
+		return {
+			name: month.name,
+			startX: monthStartX,
+			length: month.length,
+			color: i % 2 === 0 ? 'rgba(0, 0, 0, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+		}
+	})
 }
 
 const populateEvents = () => {
@@ -91,7 +155,7 @@ const populateEvents = () => {
 
 const eventIsSelected = (event: { id?: number }) =>
 	event.id === props.selectedEvent?.id
-const eventHeight = computed(() => 0.02)//0.75 / maxSimultaneousEvents.value)
+const eventHeight = computed(() => 0.5 / maxSimultaneousEvents.value)
 const isYearVisible = (year: number) => Math.abs(selectedYear.value - year) <= 2
 
 watch(() => props.events, populateEvents, { immediate: true, deep: true })
@@ -101,7 +165,7 @@ const dragMode = ref<'horizontal' | 'vertical' | null>(null)
 let startX = 0
 let startY = 0
 const yOffset = computed(() => {
-	const scrollPos = (model.value.getUTCFullYear() - startYear.value + 1)
+	const scrollPos = model.value.getUTCFullYear() - startYear.value + 1
 	return scrollPos - Math.floor(rowsToShow.value / 2)
 })
 
@@ -120,16 +184,16 @@ const endDrag = () => {
 	window.removeEventListener('mousemove', handleDrag)
 	window.removeEventListener('mouseup', endDrag)
 
-	selectedDay.value = Math.round(selectedDay.value)
-	selectedDay.value = Math.max(1, Math.min(selectedDay.value, totalDays))
-
-	const tempDate = setDayOfYear(
-		new Date(Date.UTC(selectedYear.value, 0, 1)),
-		selectedDay.value,
-	)
-	model.value = new Date(
-		Date.UTC(tempDate.getFullYear(), tempDate.getMonth(), tempDate.getDate()),
-	)
+	// selectedDay.value = Math.round(selectedDay.value)
+	// selectedDay.value = Math.max(1, Math.min(selectedDay.value, totalDays))
+	//
+	// const tempDate = setDayOfYear(
+	// 	new Date(Date.UTC(selectedYear.value, 0, 1)),
+	// 	selectedDay.value,
+	// )
+	// setDate(
+	// 	new Date(Date.UTC(tempDate.getFullYear(), tempDate.getMonth(), tempDate.getDate())),
+	// )
 	console.log(`Just set model to ${model.value.toISOString()}`)
 }
 
@@ -150,17 +214,22 @@ const handleDrag = (event: MouseEvent) => {
 			const rect = container.getBoundingClientRect()
 			const offsetX = event.clientX - rect.left
 			const percentage = offsetX / rect.width
-			// selectedDay.value = Math.max(0, Math.min(1, percentage)) * totalDays
-
+			const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
+			const dayOfYear = Math.floor(
+				1 + Math.max(0, Math.min(1, percentage)) * totalDays,
+			)
 			const tempDate = setDayOfYear(
 				new Date(Date.UTC(selectedYear.value, 0, 1)),
-				Math.max(0, Math.min(1, percentage)) * totalDays,
+				dayOfYear,
 			)
-			model.value = new Date(
-				Date.UTC(
-					tempDate.getFullYear(),
-					tempDate.getMonth(),
-					tempDate.getDate(),
+
+			setDate(
+				new Date(
+					Date.UTC(
+						tempDate.getFullYear(),
+						tempDate.getMonth(),
+						tempDate.getDate(),
+					),
 				),
 			)
 		}
@@ -168,29 +237,28 @@ const handleDrag = (event: MouseEvent) => {
 		// yOffset.value -= dy
 		// yOffset.value = Math.max(0, yOffset.value)
 		if (dy > 0) {
-			model.value = subYears(model.value, 1)
+			prevYear()
 		} else {
-			model.value = addYears(model.value, 1)
+			nextYear()
 		}
 		startY = event.clientY
 	}
 }
 
+const TRACK_THRESHOLD = 10 // pixels
 const onWheel = (e: WheelEvent) => {
-	e.preventDefault()
 	if (e.shiftKey || e.metaKey) {
-		// const delta = e.deltaY > 0 ? 1.1 : 0.9
-		// scaleX.value = Math.max(0.1, Math.min(scaleX.value * delta, 20))
 		if (e.deltaY < 0) {
-			model.value = subHours(model.value, 24)
+			prevDay()
 		} else {
-			model.value = addHours(model.value, 24)
+			nextDay()
 		}
 	} else {
+		console.log('wheel scrolling is kinda shit with a trackpad :(')
 		if (e.deltaY < 0) {
-			model.value = subYears(model.value, 1)
-		} else {
-			model.value = addYears(model.value, 1)
+			prevYear()
+		} else if (e.deltaY > 0) {
+			nextYear()
 		}
 	}
 }
@@ -199,13 +267,16 @@ const viewportTransform = computed(() => {
 	const yScale = totalYears.value / rowsToShow.value
 
 	if (!props.selectedEvent) {
-		return `translate(0, ${yScale*(1-yOffset.value)}) scale(1, ${yScale})`
+		return `translate(0, ${yScale * (1 - yOffset.value)}) scale(1, ${yScale})`
 	} else {
-		const eventStart = getDayOfYear(props.selectedEvent.startDate)
-		const eventEnd = getDayOfYear(props.selectedEvent.endDate)
+		const eventStart = getDayOfYear(props.selectedEvent.times[0])
+		const eventEnd = getDayOfYear(
+			props.selectedEvent.times[props.selectedEvent.times.length - 1],
+		)
 		const totalDays = eventEnd - eventStart + 2
 		const scale = 366 / totalDays
-		return `translate(${scale*(1-eventStart)}, ${yScale*(1-yOffset.value)}) scale(${scale}, ${yScale})`
+
+		return `translate(${scale * (1 - eventStart)}, ${yScale * (1 - yOffset.value)}) scale(${scale}, ${yScale})`
 	}
 })
 
@@ -242,7 +313,6 @@ function assignTimelinePositions(events: WeatherEvent[], targetYear: number) {
 			activeRows.push({ endX: event.endX, y })
 			event.y = y
 			maxy = Math.max(maxy, y)
-			event.color = catScheme[event.id % catScheme.length]
 			return event
 		})
 
@@ -250,17 +320,20 @@ function assignTimelinePositions(events: WeatherEvent[], targetYear: number) {
 }
 
 const needleOffset = computed(() => {
-	if (!props.zoom) {
+	if (!zoom.value) {
 		const offset = (selectedDay.value / totalDays) * 100
 		return Math.max(Math.min(offset, 100), 0)
 	} else {
 		// In zoom mode, we want to center the needle on the selected event
 		if (props.selectedEvent) {
-			const eventStart = getDayOfYear(props.selectedEvent.startDate)
-			const eventEnd = getDayOfYear(props.selectedEvent.endDate)
-			const totalDays = eventEnd - eventStart + 4
-			const midDay = (eventStart + eventEnd) / 2
-			return ((midDay / totalDays) * 100).toFixed(2)
+			const eventStart = getDayOfYear(props.selectedEvent.times[0])
+			const selectedDay = getDayOfYear(model.value)
+			const eventEnd = getDayOfYear(
+				props.selectedEvent.times[props.selectedEvent.times.length - 1],
+			)
+			const totalDays = eventEnd - eventStart + 2
+			const offset = selectedDay - eventStart + 1
+			return (offset / totalDays) * 100
 		} else {
 			return ((selectedDay.value / totalDays) * 100).toFixed(2)
 		}
@@ -269,20 +342,34 @@ const needleOffset = computed(() => {
 
 const positionY = (y: number) => {
 	if (y % 2 === 0) {
-		return -0.55 * eventHeight.value * y
+		return -0.5 * eventHeight.value * y
 	} else {
-		return 0.55 * eventHeight.value * (y + 1)
+		return 0.5 * eventHeight.value * (y + 1)
+	}
+}
+
+const getDayBoxStrokeStyle = (i: number) => {
+	const delay = 50 * i // ms
+	return {
+		// transition: `stroke-width 10s ease ${delay}ms`,
+		strokeWidth: '0.05',
+		stroke: 'lilac',
 	}
 }
 
 onMounted(() => {
 	const handleKey = (e: KeyboardEvent) => {
-		if (e.key === 'PageUp') model.value = subHours(model.value, 24)
-		else if (e.key === 'PageDown') model.value = addHours(model.value, 24)
-		else if (e.key === 'ArrowLeft') model.value = subHours(model.value, 24)
-		else if (e.key === 'ArrowRight') model.value = addHours(model.value, 24)
-		else if (e.key === 'ArrowUp') model.value = subYears(model.value, 1)
-		else if (e.key === 'ArrowDown') model.value = addYears(model.value, 1)
+		if (e.key === 'PageUp') prevDay()
+		else if (e.key === 'PageDown') nextDay()
+		else if (e.key === 'ArrowLeft') prevDay()
+		else if (e.key === 'ArrowRight') nextDay()
+		else if (e.key === 'ArrowUp') prevYear()
+		else if (e.key === 'ArrowDown') nextYear()
+		else if (e.key === 'Home') setDate(new Date(props.start.getTime()))
+		else if (e.key === 'End') setDate(new Date(props.end.getTime()))
+		else if (e.key === 'Escape') {
+			if (isDragging.value) endDrag()
+		}
 	}
 	window.addEventListener('keydown', handleKey)
 	populateEvents()
@@ -291,6 +378,14 @@ onMounted(() => {
 		window.removeEventListener('keydown', handleKey)
 	})
 })
+
+const show = ref(true)
+
+const items = computed(() => (show.value ? [1, 2, 3, 4, 5] : [3, 4]))
+
+function toggle() {
+	show.value = !show.value
+}
 </script>
 
 <template>
@@ -312,21 +407,59 @@ onMounted(() => {
 					:transform="`translate(0, ${0.5 + year - startYear})`"
 				>
 					<rect
+						v-for="(month, i) in monthsForYear(year)"
+						:key="`${year}${i}`"
+						class="background"
+						:x="month.startX"
+						:width="month.length"
+						:y="-0.5"
+						:height="1"
+						:fill="month.color"
+						:opacity="zoom ? 0 : 1"
+					/>
+
+					<rect
 						v-for="event in eventsByYear.get(year)"
 						:x="event.startX! - 0.5"
 						:width="event.endX! - event.startX! + 1"
-						:y="eventIsSelected(event) ? -0.5 : positionY(event.y!)"
-						:height="eventIsSelected(event) ? 3 * eventHeight : eventHeight"
+						:y="
+							eventIsSelected(event)
+								? -0.5
+								: positionY(event.y!) - 0.5 * eventHeight
+						"
+						:height="
+							eventIsSelected(event) ? 3 * eventHeight : 0.8 * eventHeight
+						"
 						:fill="event.color"
+						:class="{
+							selected: eventIsSelected(event),
+							unselected:
+								!eventIsSelected(event) && props.selectedEvent !== null,
+						}"
+						:opacity="eventIsSelected(event) ? 0 : 1"
 					/>
 				</g>
 			</g>
+			<transition-group tag="g" name="event-fx" :transform="viewportTransform">
+				<rect
+					v-for="(day, i) in props.selectedEvent?.times || []"
+					:key="`${day.getTime()}-${props.selectedEvent?.id || ''}`"
+					:x="getDayOfYear(day) - 0.5"
+					:width="1"
+					:y="(props.selectedEvent?.times[0].getFullYear() || 0) - startYear"
+					:height="3 * eventHeight"
+					stroke="white"
+					:fill="props.selectedEvent?.color || '#ff0000'"
+					class="day-box"
+					:style="{ '--i': i }"
+				/>
+			</transition-group>
 		</svg>
 
 		<div class="year-highlights">
 			<div
 				class="highlight-row fade-top"
-				:class="{ zoom: props.zoom }"
+				:class="{ zoom: zoom }"
 				:style="`flex: 0 0 calc( 0.5 * ( 100% - ( 100% / ${rowsToShow} ) )`"
 			></div>
 			<div
@@ -344,29 +477,24 @@ onMounted(() => {
 						<p>{{ dayStr(selectedDay) }}</p>
 					</div>
 				</div>
-				<p v-show="!props.zoom" class="jan">{{ $l.months.jan }}</p>
-				<p v-show="!props.zoom" class="feb">{{ $l.months.feb }}</p>
-				<p v-show="!props.zoom" class="mar">{{ $l.months.mar }}</p>
-				<p v-show="!props.zoom" class="apr">{{ $l.months.apr }}</p>
-				<p v-show="!props.zoom" class="may">{{ $l.months.may }}</p>
-				<p v-show="!props.zoom" class="jun">{{ $l.months.jun }}</p>
-				<p v-show="!props.zoom" class="jul">{{ $l.months.jul }}</p>
-				<p v-show="!props.zoom" class="aug">{{ $l.months.aug }}</p>
-				<p v-show="!props.zoom" class="sep">{{ $l.months.sep }}</p>
-				<p v-show="!props.zoom" class="oct">{{ $l.months.oct }}</p>
-				<p v-show="!props.zoom" class="nov">{{ $l.months.nov }}</p>
-				<p v-show="!props.zoom" class="dec">{{ $l.months.dec }}</p>
+				<p v-show="!zoom" class="jan">{{ $l.months.jan }}</p>
+				<p v-show="!zoom" class="feb">{{ $l.months.feb }}</p>
+				<p v-show="!zoom" class="mar">{{ $l.months.mar }}</p>
+				<p v-show="!zoom" class="apr">{{ $l.months.apr }}</p>
+				<p v-show="!zoom" class="may">{{ $l.months.may }}</p>
+				<p v-show="!zoom" class="jun">{{ $l.months.jun }}</p>
+				<p v-show="!zoom" class="jul">{{ $l.months.jul }}</p>
+				<p v-show="!zoom" class="aug">{{ $l.months.aug }}</p>
+				<p v-show="!zoom" class="sep">{{ $l.months.sep }}</p>
+				<p v-show="!zoom" class="oct">{{ $l.months.oct }}</p>
+				<p v-show="!zoom" class="nov">{{ $l.months.nov }}</p>
+				<p v-show="!zoom" class="dec">{{ $l.months.dec }}</p>
 			</div>
 			<div
 				class="highlight-row fade-bottom"
 				:style="`flex: 0 0 calc( 0.5 * ( 100% - ( 100% / ${rowsToShow} ) )`"
 			></div>
 		</div>
-		<!-- <div class="debug">
-			<button @click="testFocusY">testFocusY</button>
-			<button @click="testFocusX">testFocusX</button>
-			<button @click="resetFocus">Reset Zoom</button>
-		</div> -->
 	</div>
 </template>
 
@@ -386,7 +514,6 @@ $margin: 0 0;
 	height: 100%;
 	width: 100%;
 	margin: $margin;
-	border: 1px solid #ccc;
 	position: relative;
 	padding: 0;
 
@@ -394,8 +521,59 @@ $margin: 0 0;
 		transition: transform $animTime ease-in-out;
 	}
 
+	.background {
+		pointer-events: none;
+		stroke: 0;
+	}
+
 	rect {
-		transition: all $settleTime ease-in-out calc(0.5*$animTime);
+		transition:
+			all $settleTime ease-in-out calc(0.5 * $animTime),
+			opacity 0s linear;
+		&.selected {
+			transition:
+				all $settleTime ease-in-out calc(0.5 * $animTime),
+				opacity 0s linear calc(0.5 * $animTime + $settleTime);
+		}
+
+		&.unselected {
+			// TODO looks iffy
+			opacity: 0.5;
+		}
+	}
+
+	.day-box {
+		stroke-width: 0.03;
+		opacity: 1;
+	}
+
+	.event-fx-enter-from {
+		opacity: 0;
+		stroke-width: 0;
+	}
+	.event-fx-enter-to {
+		opacity: 1;
+		stroke-width: 0.03;
+	}
+	.event-fx-enter-active {
+		transition:
+			stroke-width 0s ease-out
+				calc(0.5 * $animTime + $settleTime + var(--i) * 20ms),
+			opacity 0s linear calc(0.5 * $animTime + $settleTime);
+	}
+
+	.event-fx-leave-from {
+		opacity: 1;
+		stroke-width: 0.03;
+	}
+	.event-fx-leave-to {
+		opacity: 0;
+		stroke-width: 0;
+	}
+	.event-fx-leave-active {
+		transition:
+			stroke-width 0s ease calc(var(--i) * 20ms),
+			opacity 0s linear 500ms;
 	}
 }
 
@@ -438,7 +616,6 @@ $margin: 0 0;
 		&.highlight {
 			position: relative;
 			width: 100%;
-			border: 1px solid #aaaaaa;
 			display: flex;
 			flex-direction: row;
 			align-items: stretch;

@@ -31,12 +31,7 @@ const toggleLabel = computed(() =>
 				:start="store.startTime"
 				:end="store.endTime"
 				:events="store.events"
-				:zoom="store.eventSelected"
-				:selected-event="store.selectedEvent ? {
-					id: store.selectedEvent!.id,
-					startDate: store.selectedEvent!.times[0],
-					endDate: store.selectedEvent!.times[store.selectedEvent!.times.length - 1]
-				} : null"
+				:selected-event="store.selectedEvent"
 				v-model="store.selectedTime"
 			></TimeReel>
 		</Panel>
@@ -46,7 +41,7 @@ const toggleLabel = computed(() =>
 			</div>
 			<div id="event-info"></div>
 		</Panel>
-		<Panel id="event-panel" class="right" :active="store.eventSelected">
+		<Panel id="event-panel" class="top" :active="store.eventSelected">
 			<div id="event"></div>
 		</Panel>
 
@@ -72,7 +67,7 @@ const toggleLabel = computed(() =>
 	position: relative;
 
 	.panel {
-		opacity: 0.9;
+		// opacity: 0.9;
 	}
 
 	#buttons-debug {
@@ -103,14 +98,18 @@ const toggleLabel = computed(() =>
 		right: 1.5rem;
 		bottom: 1.5rem;
 		height: 45%;
+		z-index: 20;
 
-		transition: all $animTime ease-in-out;
+		transition: all $animTime linear;
 		
 		&.side {
 			left: 50%;
 			height: 15%;
-			bottom: calc(-1.5rem + 15%);
+			// padding-bottom: calc(15% - 0.75rem);
 			border-top: none;
+			border-top-right-radius: 0;
+			border-top-left-radius: 0;
+			border-bottom-left-radius: 0;
 		}
 
 		#times {
@@ -121,6 +120,7 @@ const toggleLabel = computed(() =>
 			display: flex;
 			align-items: center;
 			justify-content: center;
+			border: none;
 		}
 	}
 
@@ -170,12 +170,12 @@ const toggleLabel = computed(() =>
 	#event-panel {
 		top: 1.5rem;
 		right: 1.5rem;
-		bottom: calc(300px + 0.75rem);
+		bottom: calc(15% + 1.5rem);
 		left: 50%;
 		border-radius: 0;
 		border-top-right-radius: 6px;
 		border-bottom: none;
-		box-shadow: rgba(0, 0, 0, 0.5) 3px 0px 3px 0px;
+		// box-shadow: rgba(0, 0, 0, 0.5) 3px 0px 3px 0px;
 	}
 }
 </style>

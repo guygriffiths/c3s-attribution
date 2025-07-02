@@ -15,10 +15,9 @@ import {
 } from '@vue-leaflet/vue-leaflet'
 import { LatLng, LatLngBounds, Map, Point, icon } from 'leaflet'
 import { T2M_LAYER, useStore, WMS_ROOT, catScheme } from '@/store/store'
-import { differenceInDays } from 'date-fns'
+import { debounce } from '@/lib/utils'
 import markerIconImg from '@/assets/img/marker-icon-2x-c3sred.png'
 import gridpointIconImg from '@/assets/img/gridpoint-icon.png'
-import { markRaw } from 'vue'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
@@ -30,7 +29,7 @@ const mapOptions = {
 	zoomDelta: 1,
 	wheelPxPerZoomLevel: 240,
 }
-const centerPoint: Ref<Point> = ref(new LatLng(30, 0) as unknown as Point)
+const centerPoint: Ref<Point> = ref(new LatLng(0, 0) as unknown as Point)
 const zoom = ref(3)
 
 const bgLayer = {
@@ -46,15 +45,7 @@ const wmtsUrl = ref(
 	`https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${store.isoDatetime}`,
 )
 
-let debounceTimeout: NodeJS.Timeout | null = null
-const debounce = (func: () => void, delay: number) => {
-	if (debounceTimeout) {
-		clearTimeout(debounceTimeout)
-	}
-	debounceTimeout = setTimeout(() => {
-		func()
-	}, delay)
-}
+
 watch(
 	() => store.isoDatetime,
 	(newVal) => {
@@ -72,7 +63,7 @@ watch(
 	(newVal) => {
 		if (newVal && mapRef.value) {
 			const map: Map = mapRef.value.leafletObject as Map
-			console.log('fitting bounds', newVal.bbox, newVal.regions)
+			// console.log('fitting bounds', newVal.bbox, newVal.regions)
 			try {
 				// TODO - 32px is hardcoded padding, yuck
 				map.fitBounds([[newVal.bbox[0], newVal.bbox[1]], [newVal.bbox[2], newVal.bbox[3]]], {
