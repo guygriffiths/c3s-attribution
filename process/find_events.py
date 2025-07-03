@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 import numpy as np
+from sklearn.cluster import DBSCAN
+from scipy.spatial import cKDTree
+from scipy.sparse import coo_matrix
 import xarray as xr
 from collections import deque
 import xarray as xr
@@ -63,13 +66,18 @@ class Eventlet:
         return MultiPoint(target_slice).convex_hull
 
     def overlaps(self, coords, eps=1e-6):
-        # coords: list of (lat, lon)
-        test = np.array(coords, dtype=np.float32)
-        current = self.slices[-1]
-        for pt in test:
-            if np.any(np.all(np.abs(current - pt) < eps, axis=1)):
-                return True
-        return False
+        test = np.array(coords, dtype=np.float32)  # shape (N, 2)
+        current = self.slices[-1]  # shape (M, 2)
+
+        # Compute pairwise absolute differences for lat and lon
+        # Broadcast shapes: (N,1,2) and (1,M,2) -> (N,M,2)
+        diffs = np.abs(test[:, None, :] - current[None, :, :])
+
+        # Check if differences in both lat & lon are < eps
+        close_points = np.all(diffs < eps, axis=2)  # shape (N, M), True if points close
+
+        # Check if any pair is close
+        return np.any(close_points)
 
     def extend(self, time, coords, values):
         coords_arr = np.array(coords, dtype=np.float32)
@@ -159,66 +167,57 @@ class EventletFactory:
         ).values  # shape (T, Y, X), bool
         # print(f"Raw mask shape: {self.raw_mask.shape}")
 
-        # Precompute spatial validity mask for 3+ consecutive hits
+        # Ignore any pixels which are not hot for at least 3 time steps
         sliding_sum = np.lib.stride_tricks.sliding_window_view(
             self.raw_mask, window_shape=3, axis=0
         ).sum(
             axis=0
         )  # shape (Y, X)
-        self.valid_pixels = (sliding_sum >= 3).any(axis=2)  # shape (Y, X)
-        # print(f"Valid pixels shape: {self.valid_pixels.shape}")
+        self.enduring_pixels = (sliding_sum >= 3).any(axis=2)  # shape (Y, X)
 
         self.times = self.data.valid_time.values  # in __init__
 
     def process_slice(self, time):
-        # print(f"Processing slice at {time}")
+        print(f"Processing slice at {time}")
 
         data_slice = self.data.sel(
             valid_time=time
         ).load()  # Load the slice for the given time
-        # hot_mask = (data_slice > self.threshold) & (data_slice > self.ref_data)
-        # eroded_mask = binary_erosion(eroded_mask, structure=structure)
         t = np.searchsorted(self.times, np.datetime64(time))
 
-        time3_mask = self.raw_mask[t].copy()
-        time3_mask = np.where(self.valid_pixels, time3_mask, 0)
+        raw_mask_slice = self.raw_mask[t].copy()
+        enduring_slice = np.where(self.enduring_pixels, raw_mask_slice, 0)
 
-        structure = np.array(
-            [[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool
-        )  # 4-connectivity
-        eroded_mask = binary_erosion(time3_mask, structure=structure)
-        eroded_mask = binary_erosion(eroded_mask, structure=structure)
+        hot_indices = np.argwhere(
+            enduring_slice
+        )  # shape (N, 2): rows are (i_lat, i_lon)
 
-        # print(f"Masked data")
-        blobs = self._label_connected_blobs(eroded_mask, time)
-        # print(f"Processing slice at {time}")
+        lat_vals = data_slice.latitude.values  # shape (Y,)
+        lon_vals = data_slice.longitude.values  # shape (X,)
 
-        lat_vals = data_slice["latitude"].values
-        lon_vals = data_slice["longitude"].values
-        nlat, nlon = len(lat_vals), len(lon_vals)
+        # coords = np.column_stack(
+        #     (
+        #         lat_vals[hot_indices[:, 0]],  # i_lat -> actual latitude
+        #         lon_vals[hot_indices[:, 1]],  # i_lon -> actual longitude
+        #     )
+        # )
 
-        def to_latlon(yx):
-            y, x = yx
-            lat_idx = np.clip(y, 0, nlat - 1)
-            lon_idx = np.clip(x % nlon, 0, nlon - 1)
+        D, metadata = self.get_distance_matrix(
+            hot_indices, lat_vals, lon_vals, radius=2, eps=1.5, min_samples=1
+        )
+        db = DBSCAN(
+            eps=1.5,
+            min_samples=1,
+            metric="precomputed",
+        )
+        labels = db.fit_predict(D)
+        # print(f"DBSCAN found {len(set(labels))} clusters in slice at {labels}")
+        blobs = []
+        for label in set(labels):
+            points = [m for i, m in enumerate(metadata) if labels[i] == label]
+            blobs.append(points)
 
-            # Linear interpolation between surrounding grid values
-            lat_lo = int(np.floor(lat_idx))
-            lat_hi = min(lat_lo + 1, nlat - 1)
-            lat = np.interp(
-                lat_idx, [lat_lo, lat_hi], [lat_vals[lat_lo], lat_vals[lat_hi]]
-            )
-
-            lon_lo = int(np.floor(lon_idx))
-            lon_hi = min(lon_lo + 1, nlon - 1)
-            lon = np.interp(
-                lon_idx, [lon_lo, lon_hi], [lon_vals[lon_lo], lon_vals[lon_hi]]
-            )
-
-            return (float(lat), float(lon))
-
-        # Convert blobs to lat/lon coordinates
-        blobs = [list(map(to_latlon, blob)) for blob in blobs]
+        print(f"Found {len(blobs)} blobs in slice at {time}")
 
         used_blobs = set()
 
@@ -260,61 +259,47 @@ class EventletFactory:
         while self.output_queue:
             yield self.output_queue.popleft()
 
-    def _label_connected_blobs(self, mask, time):
-        # Extend mask in longitude for wrapping (assumes last axis is lon)
-        extended_mask = np.concatenate(
-            [mask, mask[:, :1]], axis=1
-        )  # add first column to end for wrapping
-        structure = np.array(
-            [[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool
-        )  # 4-connectivity
+    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius=2, eps=1.5, min_samples=1):
+        lat_len = len(lat_arr)
+        lon_len = len(lon_arr)
 
-        labeled_array, num_features = label(extended_mask, structure=structure)
+        metadata = []
+        metadata_index = {}
 
-        # Wrap fix: if last column matches first, merge labels
-        label_map = {}
-        first_col = labeled_array[:, 0]
-        last_col = labeled_array[:, -1]
-        for i in range(first_col.shape[0]):
-            if first_col[i] and last_col[i] and first_col[i] != last_col[i]:
-                a, b = sorted((first_col[i], last_col[i]))
-                label_map[b] = a
+        coord_set = set(map(tuple, coords))
 
-        # Flatten label_map to resolve transitive merges
-        def resolve(label):
-            while label in label_map:
-                label = label_map[label]
-            return label
+        def get_uid(i_lat, i_lon):
+            return i_lat * lon_len + i_lon
 
-        remap = np.vectorize(resolve)
-        labeled_array = remap(labeled_array)
+        def ensure_metadata(i_lat, i_lon):
+            uid = get_uid(i_lat, i_lon)
+            if uid not in metadata_index:
+                metadata_index[uid] = len(metadata)
+                metadata.append((float(lat_arr[i_lat]), float(lon_arr[i_lon])))
+            return metadata_index[uid]
 
-        # Clip back to original shape
-        labeled_array = labeled_array[:, :-1]
+        p1idx = []
+        p2idx = []
 
-        # Extract blobs
-        blobs = []
-        for label_val in np.unique(labeled_array):
-            if label_val == 0:
-                continue
-            ys, xs = np.where(labeled_array == label_val)
-            blob = list(zip(ys, xs))
-            blobs.append(blob)
+        for i_lat, i_lon in coords:
+            i_idx = ensure_metadata(i_lat, i_lon)
+            for dlat in [-2, -1, 0, 1, 2]:
+                for dlon in [-2, -1, 0, 1, 2]:
+                    if dlat == 0 and dlon == 0 or abs(dlat) == 2 and abs(dlon) == 2:
+                        continue
+                    j_lat = i_lat + dlat
+                    j_lon = (i_lon + dlon) % lon_len
 
-        print(f"Found {len(blobs)} blobs in the current slice at {time}\n")
+                    if 0 <= j_lat < lat_len and (j_lat, j_lon) in coord_set:
+                        j_idx = metadata_index.get(get_uid(j_lat, j_lon))
+                        if j_idx is not None:
+                            p1idx.append(i_idx)
+                            p2idx.append(j_idx)
 
-        # with open("/data/output/debug.jsonl", "a") as f:
-        #     for i, blob in enumerate(blobs):
-        #         f.write(json.dumps({
-        #             "id": f"{self.id:04d}",
-        #             "times": [time.isoformat()+"Z"],
-        #             # "coords": blob,
-        #             "regions": [get_region(blob)],
-        #             "centroids": [np.mean([pt[0] for pt in blob]), np.mean([pt[1] for pt in blob])],
-        #         }) + "\n")
-        #         self.id += 1
-
-        return blobs
+        dists = [1] * len(p1idx)
+        D = coo_matrix((dists, (p1idx, p2idx)), shape=(len(metadata), len(metadata)))
+        D = D + D.T
+        return D, metadata
 
 
 class EventletClusterer:
@@ -359,6 +344,8 @@ class EventletClusterer:
         return min_dist
 
     def process_eventlet(self, eventlet):
+        self._finalise_cluster(eventlet)
+        return
         # print(f"Processing eventlet with {len(eventlet.times)} times\n")
         matched_eventlet = None
 
@@ -434,12 +421,13 @@ class EventletClusterer:
         }
 
         with open(f"{self.output_path}/events.jsonl", "a") as f:
-            f.write(json.dumps(catalogue_event) + "\n")
+            f.write(json.dumps(round_floats(catalogue_event)) + "\n")
         with open(f"{self.output_path}/events/event-{event_id}.json", "w") as f:
-            f.write(json.dumps(full_event) + "\n")
+            f.write(json.dumps(round_floats(full_event)) + "\n")
 
 
 import hashlib
+
 
 def to_serialisable(obj):
     if isinstance(obj, np.ndarray):
@@ -456,12 +444,25 @@ def to_serialisable(obj):
         return obj
 
 
+def round_floats(obj):
+    if isinstance(obj, float):
+        return round(obj, 4)
+    elif isinstance(obj, dict):
+        return {k: round_floats(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [round_floats(x) for x in obj]
+    else:
+        return obj
+
+
 def stable_cluster_hash(time, centroid):
     """
-    Stable integer hash based on time and centroid.
+    Stable 32-bit integer hash based on time and centroid.
+    Safe for JavaScript and anything else that isnae mad.
     """
     s = f"{str(time)}_{centroid[0]:.6f}_{centroid[1]:.6f}"
-    return int(hashlib.sha256(s.encode("utf-8")).hexdigest()[:16], 16)
+    hash_bytes = hashlib.sha256(s.encode("utf-8")).digest()
+    return int.from_bytes(hash_bytes[:4], byteorder="big")  # 32 bits
 
 
 def downstream_worker(q, clusterer):
@@ -485,7 +486,7 @@ def load_data(data_path, ref_path):
 
 
 def main():
-    data_var, ref_data = load_data("/data/era5_2024.nc", "/data/era5_ref99.nc")
+    data_var, ref_data = load_data("/data/era5_2024.nc", "/data/era5_ref98.nc")
     time_dim = data_var["valid_time"]
 
     factory = EventletFactory(data_var, threshold=30 + 273.15, ref_data=ref_data)

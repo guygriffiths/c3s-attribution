@@ -17,6 +17,19 @@ interface Event {
 	id: number
 }
 
+interface FullEvent {
+	times: Date[]
+	slices: any[]
+	featureLevel?: number
+	regions: any[]
+	maxArea: number
+	bbox: [number, number, number, number]
+	centroid: [number, number]
+	size: number
+	feature: boolean
+	id: number
+}
+
 interface State {
 	lang: Language
 	loadingCount: number
@@ -25,9 +38,7 @@ interface State {
 	startTime: Date
 	endTime: Date
 	events: Event[]
-	eventlets: Event[]
-	features: Event[]
-	selectedEvent?: Event | null
+	selectedEvent?: FullEvent | null
 
 	timePanelExpanded: boolean
 }
@@ -49,8 +60,6 @@ export const useStore = defineStore('main', {
 			startTime: new Date(),
 			endTime: new Date(),
 			events: [],
-			eventlets: [],
-			features: [],
 			selectedEvent: null,
 			timePanelExpanded: true,
 		}
@@ -68,6 +77,7 @@ export const useStore = defineStore('main', {
 			// Find the index of the selected time in the times array
 			return differenceInDays(state.selectedTime, state.startTime)
 		},
+		// Returns the events which are active at the selected time (i.e. plotted on the map)
 		activeEvents: (state) => {
 			return state.events.filter((event) => {
 				const startDate = new Date(event.times[0])
@@ -79,12 +89,21 @@ export const useStore = defineStore('main', {
 		},
 	},
 	actions: {
-		selectEvent(event: Event, bbox?: [[number, number], [number, number]]) {
-			if (this.selectedEvent === event) {
+		async selectEvent(id: number) {
+			console.log('Selecting event with id:', id, this.selectedEvent)
+			if (this.selectedEvent?.id === id) {
 				this.selectedEvent = null
 			} else {
-				this.selectedEvent = event
+				this.setLoading()
+				const resp = await fetch(`/events/event-${id}.json`)
+				const event = (await resp.json())
+				// This should always be the case...
+				event.id = id
+				event.times = event.times.map((time: string) => new Date(time))
+				event.color = catScheme[event.id % catScheme.length]
+				this.selectedEvent = event as FullEvent
 				this.timePanelExpanded = true
+				this.setLoadingDone()
 			}
 		},
 		toggleTimePanel() {

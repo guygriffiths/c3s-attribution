@@ -92,17 +92,17 @@ const getEventRegion = (event: any) => {
 }
 
 const lastBbox = ref<LatLngBounds | null>(null)
-const selectEvent = (event: any) => {
+const selectEvent = (id: number) => {
 	if (!store.eventSelected) {
 		// @ts-ignore
 		lastBbox.value = mapRef.value?.leafletObject.getBounds()
-	} else if (event == store.selectedEvent) {
+	} else if (id == store.selectedEvent?.id) {
 		if (lastBbox.value && mapRef.value) {
 			// @ts-ignore
 			mapRef.value.leafletObject.fitBounds(lastBbox.value)
 		}
 	}
-	store.selectEvent(event)
+	store.selectEvent(id)
 }
 
 const markerIcon = icon({
@@ -141,18 +141,14 @@ const gridpointIcon = icon({
 
 			<!-- <l-marker :lat-lng="[51.437576, -0.941099]" :icon="markerIcon" /> -->
 			<LTileLayer :url="wmtsUrl" :zIndex="2" :opacity="0.75"></LTileLayer>
-			<!-- <LMarker
+			<LMarker
 				v-for="point in store.selectedEvent?.slices[
-					store.selectedEvent?.times.findIndex(
-						(t: Date) =>
-							new Date(t).getTime() === new Date(store.selectedTime).getTime(),
-					)
+					2
 				]"
 				:lat-lng="point"
 				:icon="gridpointIcon"
 			>
 			</LMarker>
-			 -->
 			<LPolygon
 				v-for="(event, idx) in store.activeEvents"
 				:key="event.id"
@@ -161,7 +157,7 @@ const gridpointIcon = icon({
 				:fill="true"
 				:opacity="1"
 				:color="catScheme[event.id % catScheme.length]"
-				@click="selectEvent(event)"
+				@click="selectEvent(event.id)"
 			>
 				<!-- <LPopup>
 					<p>{{ event }}</p>
