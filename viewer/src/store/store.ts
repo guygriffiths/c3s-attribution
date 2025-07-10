@@ -49,6 +49,7 @@ interface State {
 		size: number
 		includeOceanEvents : boolean
 	}
+	draggingFilter: boolean
 
 }
 
@@ -78,6 +79,7 @@ export const useStore = defineStore('main', {
 				size: 0, 
 				includeOceanEvents: false, // Whether to include ocean events in the filter
 			},
+			draggingFilter: false,
 		}
 	},
 	getters: {
@@ -148,6 +150,9 @@ export const useStore = defineStore('main', {
 				event.times = event.times.map((time: string) => new Date(time))
 				event.color = catScheme[event.id % catScheme.length]
 				this.selectedEvent = event as FullEvent
+				if(this.selectedTime < event.times[0] || this.selectedTime > event.times[event.times.length - 1]) {
+					this.selectedTime = new Date(event.times[0])
+				}
 				this.timePanelExpanded = true
 				this.setLoadingDone()
 			}

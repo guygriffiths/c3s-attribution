@@ -39,12 +39,16 @@ const props = defineProps({
 	end: { type: Date, default: () => new Date(2024, 0, 1) },
 	events: { type: Array<WeatherEvent>, default: () => [] as WeatherEvent[] },
 	selectedEvent: { type: Object as () => WeatherEvent | null, default: null },
+	changingFilter: { type: Boolean, default: false },
 })
 
 const model: Ref<Date> = defineModel({
 	type: Date,
 	default: new Date(),
 })
+const emits = defineEmits<{
+	(event: 'eventSelected', id: number): void
+}>()
 const nextDay = () => {
 	const newVal = addHours(model.value, 24)
 	if (newVal.getUTCFullYear() <= props.end.getUTCFullYear()) {
@@ -150,7 +154,6 @@ const populateEvents = () => {
 		)
 		eventsByYear.value.set(year, eventsForYear)
 	})
-	console.log('Cached events:', eventsByYear.value)
 }
 
 const eventIsSelected = (event: { id?: number }) =>
@@ -158,7 +161,13 @@ const eventIsSelected = (event: { id?: number }) =>
 const eventHeight = computed(() => 0.5 / maxSimultaneousEvents.value)
 const isYearVisible = (year: number) => Math.abs(selectedYear.value - year) <= 2
 
-watch(() => props.events, populateEvents, { immediate: true, deep: true })
+watch(
+	() => props.events,
+	() => {
+		populateEvents()
+	},
+	{ immediate: true, deep: false },
+)
 
 const isDragging = ref(false)
 const dragMode = ref<'horizontal' | 'vertical' | null>(null)
@@ -263,6 +272,10 @@ const onWheel = (e: WheelEvent) => {
 	}
 }
 
+const eventClicked = (event: WeatherEvent) => {
+	emits('eventSelected', event.id)
+}
+
 const viewportTransform = computed(() => {
 	const yScale = totalYears.value / rowsToShow.value
 
@@ -281,42 +294,47 @@ const viewportTransform = computed(() => {
 })
 
 function assignTimelinePositions(events: WeatherEvent[], targetYear: number) {
-	const filtered = events.filter(
-		(e) =>
-			e.times[0].getFullYear() <= targetYear &&
-			e.times[e.times.length - 1].getFullYear() >= targetYear,
-	)
+	const yearStart = new Date(targetYear, 0, 0).getTime()
+	const yearEnd = new Date(targetYear + 1, 0, 0).getTime() - 1
 
-	const sliced = filtered.map((e) => {
-		const startDay =
-			e.times[0].getFullYear() < targetYear ? 1 : getDayOfYear(e.times[0])
-		const endDay =
-			e.times[e.times.length - 1].getFullYear() > targetYear
-				? (new Date(targetYear, 11, 31).getTime() -
-						new Date(targetYear, 0, 0).getTime()) /
-					86400000
-				: getDayOfYear(e.times[e.times.length - 1])
-		return { ...e, startX: startDay, endX: endDay }
-	})
+	// Step 1: Filter and slice in one go, reuse timestamps to avoid creating Date objects
+	const sliced: (WeatherEvent & { startX: number; endX: number })[] = []
+	for (let i = 0; i < events.length; i++) {
+		const e = events[i]
+		const first = e.times[0]
+		const last = e.times[e.times.length - 1]
 
-	let maxy = 0
-	const activeRows: any[] = []
-	const result = sliced
-		.sort((a, b) => a.startX - b.startX)
-		.map((event) => {
-			const usedYs = new Set()
-			for (const row of activeRows) {
-				if (row.endX >= event.startX) usedYs.add(row.y)
-			}
-			let y = 0
-			while (usedYs.has(y)) y++
-			activeRows.push({ endX: event.endX, y })
-			event.y = y
-			maxy = Math.max(maxy, y)
-			return event
-		})
+		if (last.getTime() < yearStart || first.getTime() > yearEnd) continue
 
-	return { events: result, maxEvents: maxy }
+		const startX = first.getTime() < yearStart ? 1 : getDayOfYear(first)
+		const endX =
+			last.getTime() > yearEnd
+				? (yearEnd - yearStart) / 86400000
+				: getDayOfYear(last)
+
+		sliced.push({ ...e, startX, endX })
+	}
+
+	// Step 2: Assign y-positions using a greedy row-packing algorithm
+	const rows: number[] = [] // row[y] = lastEndX
+	const result = new Array(sliced.length)
+
+	sliced.sort((a, b) => a.startX - b.startX)
+
+	let maxY = 0
+	for (let i = 0; i < sliced.length; i++) {
+		const e = sliced[i]
+		let y = 0
+		for (; y < rows.length; y++) {
+			if (rows[y] < e.startX) break
+		}
+		e.y = y
+		rows[y] = e.endX
+		if (y > maxY) maxY = y
+		result[i] = e
+	}
+
+	return { events: result, maxEvents: maxY }
 }
 
 const needleOffset = computed(() => {
@@ -405,36 +423,42 @@ onMounted(() => {
 						:fill="month.color"
 						:opacity="zoom ? 0 : 1"
 					/>
-
-					<rect
-						v-for="event in eventsByYear.get(year)"
-						:key="event.id"
-						:x="event.startX! - 0.5"
-						:width="event.endX! - event.startX! + 1"
-						:y="
-							eventIsSelected(event)
-								? -0.5
-								: positionY(event.y!) - 0.5 * eventHeight
-						"
-						:height="
-							eventIsSelected(event) ? 3 * eventHeight : 0.8 * eventHeight
-						"
-						:fill="event.color"
-						:class="{
-							selected: eventIsSelected(event),
-							unselected:
-								!eventIsSelected(event) && props.selectedEvent !== null,
-						}"
-						:opacity="eventIsSelected(event) ? 0 : 1"
-						@click="console.log(event.id, 'clicked')"
-					/>
+					<transition-group tag="g" name="daily-event-fx">
+						<rect
+							v-for="event in eventsByYear.get(year)"
+							:key="event.id"
+							:x="event.startX! - 0.5"
+							:width="event.endX! - event.startX! + 1"
+							:y="
+								eventIsSelected(event)
+									? -0.5
+									: positionY(event.y!) - 0.5 * eventHeight
+							"
+							:height="
+								eventIsSelected(event) ? 3 * eventHeight : 0.8 * eventHeight
+							"
+							:fill="event.color"
+							:class="{
+								selected: eventIsSelected(event),
+								unselected:
+									!eventIsSelected(event) && props.selectedEvent !== null,
+							}"
+							:opacity="eventIsSelected(event) ? 0 : 1"
+							@click="eventClicked(event)"
+						/>
+					</transition-group>
 				</g>
 			</g>
-			<transition-group tag="g" name="event-fx" class="event-taxis" :transform="viewportTransform">
+			<transition-group
+				tag="g"
+				name="selected-event-fx"
+				class="event-taxis"
+				:transform="viewportTransform"
+			>
 				<rect
 					v-for="(day, i) in props.selectedEvent?.times || []"
 					:key="`${day.getTime()}-${props.selectedEvent?.id || ''}`"
-					vector-effect="non-scaling-stroke" 
+					vector-effect="non-scaling-stroke"
 					:x="getDayOfYear(day) - 0.5"
 					:width="1"
 					:y="(props.selectedEvent?.times[0].getFullYear() || 0) - startYear"
@@ -543,31 +567,37 @@ $margin: 0 0;
 		opacity: 1;
 	}
 
+	.daily-event-fx-enter-from {
+		opacity: 0;
+	}
+	.daily-event-fx-enter-to {
+		opacity: 1;
+	}
+
 	// TODO Polish this even more.
-	.event-fx-enter-from {
+	.selected-event-fx-enter-from {
 		opacity: 0;
 		stroke-width: 0;
 	}
-	.event-fx-enter-to {
+	.selected-event-fx-enter-to {
 		opacity: 1;
 		stroke-width: 2;
 	}
-	.event-fx-enter-active {
+	.selected-event-fx-enter-active {
 		transition:
-			stroke-width 0s ease-out
-				calc($animTime + $settleTime + var(--i) * 20ms),
+			stroke-width 0s ease-out calc($animTime + $settleTime + var(--i) * 20ms),
 			opacity 0s linear calc($animTime + $settleTime);
 	}
 
-	.event-fx-leave-from {
+	.selected-event-fx-leave-from {
 		opacity: 1;
 		stroke-width: 2;
 	}
-	.event-fx-leave-to {
+	.selected-event-fx-leave-to {
 		opacity: 0;
 		stroke-width: 0;
 	}
-	.event-fx-leave-active {
+	.selected-event-fx-leave-active {
 		transition:
 			stroke-width 0s ease calc(var(--i) * 20ms),
 			opacity 0s linear 500ms;

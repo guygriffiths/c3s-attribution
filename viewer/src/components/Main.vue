@@ -33,6 +33,8 @@ const toggleLabel = computed(() =>
 				:events="store.filteredEvents"
 				:selected-event="store.selectedEvent"
 				v-model="store.selectedTime"
+				:changing-filter="store.draggingFilter"
+				@event-selected="store.selectEvent"
 			></TimeReel>
 		</Panel>
 		<Panel id="event-frame-panel" class="top" :active="store.eventSelected">

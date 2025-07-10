@@ -208,6 +208,8 @@ const gridpointIcon = icon({
 							type: 'toggle',
 						},
 					]"
+					@drag-start="store.draggingFilter = true"
+					@drag-end="store.draggingFilter = false"
 				/>
 				<div>
 					<p>
@@ -257,8 +259,7 @@ const gridpointIcon = icon({
 	height: 100%;
 
 	.filter-panel {
-		/* This is a hack to make the filter panel appear above the map */
-		padding: 1rem;
+		// padding: 1rem;
 	}
 
 	:deep(.leaflet-control-zoom),
