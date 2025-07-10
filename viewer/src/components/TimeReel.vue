@@ -346,6 +346,11 @@ const positionY = (y: number) => {
 	} else {
 		return 0.5 * eventHeight.value * (y + 1)
 	}
+	// if (y % 2 === 0) {
+	// 	return -0.5 * eventHeight.value * (maxSimultaneousEvents.value - y)
+	// } else {
+	// 	return 0.5 * eventHeight.value * (maxSimultaneousEvents.value -  y + 1)
+	// }
 }
 
 onMounted(() => {
@@ -420,6 +425,7 @@ onMounted(() => {
 								!eventIsSelected(event) && props.selectedEvent !== null,
 						}"
 						:opacity="eventIsSelected(event) ? 0 : 1"
+						@click="console.log(event.id, 'clicked')"
 					/>
 				</g>
 			</g>

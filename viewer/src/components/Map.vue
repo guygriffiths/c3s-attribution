@@ -18,6 +18,7 @@ import { T2M_LAYER, useStore, WMS_ROOT, catScheme } from '@/store/store'
 import { debounce } from '@/lib/utils'
 import markerIconImg from '@/assets/img/marker-icon-2x-c3sred.png'
 import gridpointIconImg from '@/assets/img/gridpoint-icon.png'
+import { differenceInDays } from 'date-fns'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
@@ -143,7 +144,7 @@ const gridpointIcon = icon({
 			<LTileLayer :url="wmtsUrl" :zIndex="2" :opacity="0.75"></LTileLayer>
 			<LMarker
 				v-for="point in store.selectedEvent?.slices[
-					2
+					differenceInDays(store.selectedTime, store.selectedEvent?.times[0]) || 0
 				]"
 				:lat-lng="point"
 				:icon="gridpointIcon"
@@ -168,7 +169,28 @@ const gridpointIcon = icon({
 					<p>
 						{{ store.isoDatetime }}
 					</p>
-				</div>
+					<select
+						v-model="store.selectedModel"
+						@change="store.init()"
+						class="form-select form-select-sm"
+					>
+						<option value="RAD4.5-DBSCANFalse-EXP1-THRESH301.15-PERC98">RAD4.5-DBSCANFalse-EXP1-THRESH301.15-PERC98</option>
+						<option value="RAD3-DBSCANFalse-EXP1-THRESH301.15-PERC98">RAD3-DBSCANFalse-EXP1-THRESH301.15-PERC98</option>
+						<option value="RAD1.5-DBSCANFalse-EXP1-THRESH301.15-PERC98">RAD1.5-DBSCANFalse-EXP1-THRESH301.15-PERC98</option>
+						<option value="RAD4.5-DBSCANFalse-EXP1-THRESH301.15-PERC99">RAD4.5-DBSCANFalse-EXP1-THRESH301.15-PERC99</option>
+						<option value="RAD3-DBSCANFalse-EXP1-THRESH301.15-PERC99">RAD3-DBSCANFalse-EXP1-THRESH301.15-PERC99</option>
+						<option value="RAD1.5-DBSCANFalse-EXP1-THRESH301.15-PERC99">RAD1.5-DBSCANFalse-EXP1-THRESH301.15-PERC99</option>
+
+						<option value="RAD4.5-DBSCANFalse-EXP1-THRESH303.15-PERC98">RAD4.5-DBSCANFalse-EXP1-THRESH303.15-PERC98</option>
+						<option value="RAD3-DBSCANFalse-EXP1-THRESH303.15-PERC98">RAD3-DBSCANFalse-EXP1-THRESH303.15-PERC98</option>
+						<option value="RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC98">RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC98</option>
+						<option value="RAD4.5-DBSCANFalse-EXP1-THRESH303.15-PERC99">RAD4.5-DBSCANFalse-EXP1-THRESH303.15-PERC99</option>
+						<option value="RAD3-DBSCANFalse-EXP1-THRESH303.15-PERC99">RAD3-DBSCANFalse-EXP1-THRESH303.15-PERC99</option>
+						<option value="RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC99">RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC99</option>
+
+
+					</select>
+				</div>	
 			</LControl>
 			<LControlScale
 				:max-width="200"

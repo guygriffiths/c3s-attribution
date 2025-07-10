@@ -21,6 +21,7 @@ TODO at some point:
     - duration
     - area affected
 * As the timeline zooms to become the event info axis, fly a polygon from each (non-selected) day to overlap? But perhaps try and show the whole event, or the event's progression
+* It was really hot that day, for ages, why am I not a heatwave? Do it by saving all eventlets in a backup database, sorted by pixel id? It's a big filesystem, but probably not unmanageably so. Certainly not if stored by row OR column
 
 * Explore by geo - point location. See all events ever at this pixel.
 * Explore by (event) - similar events?

@@ -97,7 +97,7 @@ const toggleLabel = computed(() =>
 		left: 1.5rem;
 		right: 1.5rem;
 		bottom: 1.5rem;
-		height: 25%;
+		height: 45%;
 		z-index: 20;
 
 		transition: all $animTime linear;

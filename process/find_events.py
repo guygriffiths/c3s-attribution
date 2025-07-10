@@ -16,6 +16,56 @@ import queue
 import threading
 
 
+def walk_scan(D_coo: coo_matrix, eps: float, min_samples: int = 1):
+    """
+    Sparse distance-matrix DBSCAN drop-in replacement.
+    Takes:
+        D_coo: sparse COO matrix of distances between valid pairs
+        eps: distance threshold
+        min_samples: minimum cluster size (remove smaller ones at end)
+
+    Returns:
+        labels: np.ndarray of cluster labels (-1 for noise)
+    """
+    D = D_coo.tocsr()
+    n_points = D.shape[0]
+    visited = np.zeros(n_points, dtype=bool)
+    labels = -np.ones(n_points, dtype=int)
+    cluster_id = 0
+
+    for i in range(n_points):
+        if visited[i]:
+            continue
+
+        # Find neighbours within eps
+        neighbours = D[i].indices[D[i].data <= eps]
+
+        # Start new cluster
+        queue = deque([i])
+        queue.extend(neighbours)
+        cluster_members = set()
+
+        while queue:
+            point = queue.popleft()
+            if visited[point]:
+                continue
+            visited[point] = True
+            cluster_members.add(point)
+
+            # Expand neighbours
+            neighbours = D[point].indices[D[point].data <= eps]
+            if len(neighbours) >= min_samples:
+                queue.extend(neighbours)
+
+        # Drop small clusters
+        if len(cluster_members) >= min_samples:
+            for pt in cluster_members:
+                labels[pt] = cluster_id
+            cluster_id += 1
+
+    return labels
+
+
 def get_region(shape):
     if shape.geom_type == "Polygon":
         return [[x, y] for x, y in shape.exterior.coords]
@@ -63,6 +113,14 @@ class Eventlet:
         target_slice = self.slices[n] if n < len(self.slices) else self.slices[-1]
         if len(target_slice) == 0:
             return None
+        longitude_span = target_slice[:, 1].max() - target_slice[:, 1].min()
+        if longitude_span > 180:
+            # If the points span more than 180 degrees, we need to handle wrapping
+            # Current range is [-180, 180], so we shift anything < 0 to the right by 360
+            target_slice[:, 1] = np.where(
+                target_slice[:, 1] < 0, target_slice[:, 1] + 360, target_slice[:, 1]
+            )
+            print(f"Shifted hull coords to handle wrapping: {target_slice[:, 1]}")
         return MultiPoint(target_slice).convex_hull
 
     def overlaps(self, coords, eps=1e-6):
@@ -148,7 +206,9 @@ class EventletFactory:
         ref_data,
         expiry_days=1,
         min_length=3,
-        neighbor_weight_fn=None,
+        neighbor_radius=4.5,
+        output_path="/data/output-debug/events",
+        use_dbscan=False,
     ):
         self.data = data
         self.threshold = threshold
@@ -157,9 +217,17 @@ class EventletFactory:
         self.min_length = min_length
         self.active = []
         self.output_queue = deque()
-        self.neighbor_weight_fn = neighbor_weight_fn or (lambda dx, dy: 1)
         self.oldest_active_time = None
         self.id = 0
+        self.radius = neighbor_radius
+        self.output_path = output_path
+        self.use_dbscan = use_dbscan
+
+        self.raw_mask = (data > self.threshold) & (data > ref_data)
+
+        self.enduring_pixels = (
+            self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
+        )
 
         # Store the full thresholded mask
         self.raw_mask = (
@@ -167,18 +235,10 @@ class EventletFactory:
         ).values  # shape (T, Y, X), bool
         # print(f"Raw mask shape: {self.raw_mask.shape}")
 
-        # Ignore any pixels which are not hot for at least 3 time steps
-        sliding_sum = np.lib.stride_tricks.sliding_window_view(
-            self.raw_mask, window_shape=3, axis=0
-        ).sum(
-            axis=0
-        )  # shape (Y, X)
-        self.enduring_pixels = (sliding_sum >= 3).any(axis=2)  # shape (Y, X)
-
         self.times = self.data.valid_time.values  # in __init__
 
     def process_slice(self, time):
-        print(f"Processing slice at {time}")
+        # print(f"Processing slice at {time}")
 
         data_slice = self.data.sel(
             valid_time=time
@@ -186,7 +246,7 @@ class EventletFactory:
         t = np.searchsorted(self.times, np.datetime64(time))
 
         raw_mask_slice = self.raw_mask[t].copy()
-        enduring_slice = np.where(self.enduring_pixels, raw_mask_slice, 0)
+        enduring_slice = np.where(self.enduring_pixels[t], raw_mask_slice, False)
 
         hot_indices = np.argwhere(
             enduring_slice
@@ -195,71 +255,75 @@ class EventletFactory:
         lat_vals = data_slice.latitude.values  # shape (Y,)
         lon_vals = data_slice.longitude.values  # shape (X,)
 
-        # coords = np.column_stack(
-        #     (
-        #         lat_vals[hot_indices[:, 0]],  # i_lat -> actual latitude
-        #         lon_vals[hot_indices[:, 1]],  # i_lon -> actual longitude
-        #     )
-        # )
-
         D, metadata = self.get_distance_matrix(
-            hot_indices, lat_vals, lon_vals, radius=2, eps=1.5, min_samples=1
+            hot_indices, lat_vals, lon_vals, radius=self.radius
         )
-        db = DBSCAN(
-            eps=1.5,
-            min_samples=1,
-            metric="precomputed",
-        )
-        labels = db.fit_predict(D)
-        # print(f"DBSCAN found {len(set(labels))} clusters in slice at {labels}")
+
+        if not self.use_dbscan:
+            labels = walk_scan(D, eps=1.5, min_samples=1)
+        else:
+            db = DBSCAN(
+                eps=1.5,
+                min_samples=1,
+                metric="precomputed",
+            )
+            labels = db.fit_predict(D)
+
         blobs = []
         for label in set(labels):
             points = [m for i, m in enumerate(metadata) if labels[i] == label]
             blobs.append(points)
 
-        print(f"Found {len(blobs)} blobs in slice at {time}")
+        # Now we have full list of blobs in this time slice
+
+        print(f"Found {len(blobs)} potential events in slice at {time}")
 
         used_blobs = set()
-
-        for ev in self.active:
+        for i, blob in enumerate(blobs):
             matched = False
-            for i, blob in enumerate(blobs):
+            for ev in self.active:
                 if ev.overlaps(blob):
-                    values = []
-                    for lat, lon in blob:
-                        val = data_slice.sel(latitude=lat, longitude=lon).values.item()
-                        values.append(val)
+                    values = [
+                        data_slice.sel(latitude=lat, longitude=lon).values.item()
+                        for lat, lon in blob
+                    ]
                     ev.extend(time, blob, values)
                     used_blobs.add(i)
                     matched = True
-
-            if not matched and ev.is_expired(time, self.expiry_days):
-                if ev.is_valid(self.min_length):
-                    self.output_queue.append(ev)
-                # drop otherwise
-        self.active = [
-            ev for ev in self.active if not ev.is_expired(time, self.expiry_days)
-        ]
-
-        for i, blob in enumerate(blobs):
-            if i not in used_blobs:
-                values = []
-                for lat, lon in blob:
-                    val = data_slice.sel(latitude=lat, longitude=lon).values.item()
-                    values.append(val)
-                    # print(f"Adding new eventlet at {time} with {len(blob)} coords {blob}\n and {len(values)} values {values}")
+                    break
+            if not matched:
+                values = [
+                    data_slice.sel(latitude=lat, longitude=lon).values.item()
+                    for lat, lon in blob
+                ]
                 new_ev = Eventlet(time, blob, values)
                 self.active.append(new_ev)
 
+        # Expire any events that are too old
+        for ev in list(self.active):  # copy to avoid mutation during loop
+            if ev.is_expired(time, self.expiry_days):
+                if ev.is_valid(self.min_length):
+                    self._finalise_cluster(ev)
+                self.active.remove(ev)
+
+        # Sort active events largest-first (for later matching)
+        self.active.sort(key=lambda ev: len(ev.values), reverse=True)
+
+        # Update oldest time
         self.oldest_active_time = min(
             (ev.earliest_time() for ev in self.active), default=None
         )
+
+    def flush(self):
+        for ev in self.active:
+            self.output_queue.append(ev)
+        self.active = []
 
     def yield_completed(self):
         while self.output_queue:
             yield self.output_queue.popleft()
 
-    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius=2, eps=1.5, min_samples=1):
+    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius=4.5):
         lat_len = len(lat_arr)
         lon_len = len(lon_arr)
 
@@ -281,11 +345,18 @@ class EventletFactory:
         p1idx = []
         p2idx = []
 
+        radius_ceiling = int(np.ceil(radius))
+        delta_list = np.arange(-radius_ceiling, radius_ceiling + 1, 1)
+
         for i_lat, i_lon in coords:
             i_idx = ensure_metadata(i_lat, i_lon)
-            for dlat in [-2, -1, 0, 1, 2]:
-                for dlon in [-2, -1, 0, 1, 2]:
-                    if dlat == 0 and dlon == 0 or abs(dlat) == 2 and abs(dlon) == 2:
+            for dlat in delta_list:
+                for dlon in delta_list:
+                    if (
+                        dlat == 0
+                        and dlon == 0
+                        or dlat * dlat + dlon * dlon > radius * radius
+                    ):
                         continue
                     j_lat = i_lat + dlat
                     j_lon = (i_lon + dlon) % lon_len
@@ -301,91 +372,8 @@ class EventletFactory:
         D = D + D.T
         return D, metadata
 
-
-class EventletClusterer:
-    def __init__(
-        self,
-        dist_threshold,
-        factory_ref,
-        time_threshold=timedelta(days=1),
-        output_path="/data/output/",
-    ):
-        self.dist_threshold = dist_threshold
-        self.factory = factory_ref
-        self.time_threshold = time_threshold
-        self.eventlets = []
-        self.output_path = output_path
-
-    def custom_distance(self, ev1, ev2):
-        ts1 = ev1.times
-        ts2 = ev2.times
-        idx1 = {t: i for i, t in enumerate(ts1)}
-        idx2 = {t: i for i, t in enumerate(ts2)}
-
-        min_dist = np.inf
-
-        for t1 in ts1:
-            i1 = idx1[t1]
-            hull1 = ev1.hull(i1)
-
-            for offset in [0]:  # [-1, 0, 1]:
-                t2 = t1 + timedelta(days=offset)
-                i2 = idx2.get(t2)
-                if i2 is None:
-                    continue
-
-                hull2 = ev2.hull(i2)
-
-                if hull1.intersects(hull2):
-                    return 0.0  # Direct intersection or containment
-
-                min_dist = min(min_dist, hull1.distance(hull2))
-
-        return min_dist
-
-    def process_eventlet(self, eventlet):
-        self._finalise_cluster(eventlet)
-        return
-        # print(f"Processing eventlet with {len(eventlet.times)} times\n")
-        matched_eventlet = None
-
-        for existing_ev in self.eventlets:
-            dist = self.custom_distance(eventlet, existing_ev)
-            if dist <= self.dist_threshold:
-                matched_eventlet = existing_ev
-                break
-            if matched_eventlet:
-                break
-
-        if matched_eventlet:
-            # print(f"Growing stored cluster ({len(self.eventlets)})\n")
-            matched_eventlet.merge(eventlet)
-        else:
-            self.eventlets.append(eventlet)
-            # print(f"Adding new cluster ({len(self.eventlets)})\n")
-
-        self._purge_stale()
-
-    def _purge_stale(self):
-        active_time = self.factory.oldest_active_time
-        # print(f"Purging clusters based on active time: {active_time}\n")
-        if active_time is None:
-            return  # Nothing active upstream
-
-        cutoff_time = active_time - self.time_threshold
-        # print(f"Purging clusters older than {cutoff_time}\n")
-        new_clusters = []
-        for cluster in self.eventlets:
-            cluster_is_active = cluster.last_time() >= cutoff_time
-            if cluster_is_active:
-                new_clusters.append(cluster)
-            else:
-                self._finalise_cluster(cluster)
-        self.eventlets = new_clusters
-        # print(f"Purged down to ({len(self.eventlets)})")
-
     def _finalise_cluster(self, ev):
-        print(f"Finalising cluster with {ev}\n")
+        # print(f"Finalising cluster with {ev}\n")
         all_times = sorted(ev.times)
         centroids = []
 
@@ -405,14 +393,15 @@ class EventletClusterer:
 
         catalogue_event = {
             "id": event_id,
-            "times": [t.isoformat() + "Z" for t in all_times],
+            "times": [formatTime(t) for t in all_times],
             "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
             "bbox": to_serialisable(bbox),
+            "slices": to_serialisable(ev.slices),
         }
 
         full_event = {
             "id": event_id,
-            "times": [t.isoformat() + "Z" for t in all_times],
+            "times": [formatTime(t) for t in all_times],
             "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
             "slices": to_serialisable(ev.slices),
             "values": to_serialisable(ev.values),
@@ -424,6 +413,17 @@ class EventletClusterer:
             f.write(json.dumps(round_floats(catalogue_event)) + "\n")
         with open(f"{self.output_path}/events/event-{event_id}.json", "w") as f:
             f.write(json.dumps(round_floats(full_event)) + "\n")
+
+
+def formatTime(t):
+    if isinstance(t, np.datetime64):
+        return np.datetime_as_string(t, unit="s") + "Z"
+    elif isinstance(t, pd.Timestamp):
+        return t.isoformat() + "Z"
+    elif isinstance(t, str):
+        return t + "Z"
+    else:
+        raise ValueError(f"Unsupported time type: {type(t)}")
 
 
 import hashlib
@@ -485,52 +485,41 @@ def load_data(data_path, ref_path):
     return shift_longitudes(ds["t2m"]), shift_longitudes(ref["t2m"])
 
 
+import os
+
+
 def main():
-    data_var, ref_data = load_data("/data/era5_2024.nc", "/data/era5_ref98.nc")
-    time_dim = data_var["valid_time"]
 
-    factory = EventletFactory(data_var, threshold=30 + 273.15, ref_data=ref_data)
-    downstream = EventletClusterer(
-        dist_threshold=1.75,
-        factory_ref=factory,
-        time_threshold=timedelta(days=1),
-        output_path="/data/output/",
-    )
+    for dbscan in [False, True]:
+        for perc in [98, 99]:
+            data_var, ref_data = load_data(
+                "/data/era5_2024.nc", f"/data/era5_ref{perc}.nc"
+            )
+            time_dim = data_var["valid_time"]
+            for thresh in [28 + 273.15, 30 + 273.15, 32 + 273.15]:
+                for r in [5, 6, 7, 4, 3, 2, 1, 8, 9, 10]:
+                    print(f"Running with radius={r}, dbscan={dbscan} days")
+                    out_path = f"/data/output-debug-RAD{r}-DBSCAN{dbscan}-THRESH{thresh}-PERC{perc}/"
+                    os.makedirs(out_path, exist_ok=True)
+                    os.makedirs(f"{out_path}/events", exist_ok=True)
 
-    eventlet_queue = queue.Queue(maxsize=500)
+                    factory = EventletFactory(
+                        data_var,
+                        threshold=thresh,
+                        ref_data=ref_data,
+                        neighbor_radius=r,
+                        output_path=out_path,
+                        use_dbscan=dbscan,
+                    )
 
-    # Launch downstream thread
-    downstream_thread = threading.Thread(
-        target=downstream_worker, args=(eventlet_queue, downstream), daemon=True
-    )
-    downstream_thread.start()
+                    for i in range(time_dim.size):
+                        time_val = pd.to_datetime(time_dim[i].values)
+                        factory.process_slice(time_val)
 
-    print("Processing slices...")
-
-    for i in range(time_dim.size):
-        time_val = pd.to_datetime(time_dim[i].values)
-
-        factory.process_slice(time_val)
-        for ev in factory.yield_completed():
-            eventlet_queue.put(ev)
-
-    print("All slices processed. Waiting for downstream to finish...")
-
-    # Tell downstream to shut down after queue is empty
-    eventlet_queue.put(None)
-    downstream_thread.join()
-    print("All done.")
-
-    # for i in range(len(time_dim)):
-    #     time_val = pd.to_datetime(time_dim[i].values)
-    #     slice_data = data_var.isel(valid_time=i).load()
-    #     # print(f"Loaded slice for time {time_val}")
-
-    #     factory.process_slice(time_val, slice_data)
-    #     # print(f"Processed slice {time_val}")
-
-    #     for ev in factory.yield_completed():
-    #         downstream.process_eventlet(ev)
+                    factory.flush()
+                    print("All slices processed.")
+                    with open(f"/data/paths.txt", "a") as f:
+                        f.write(f"{out_path}\n")
 
 
 if __name__ == "__main__":

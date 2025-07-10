@@ -41,6 +41,8 @@ interface State {
 	selectedEvent?: FullEvent | null
 
 	timePanelExpanded: boolean
+
+	selectedModel?: string
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -62,6 +64,7 @@ export const useStore = defineStore('main', {
 			events: [],
 			selectedEvent: null,
 			timePanelExpanded: true,
+			selectedModel: 'RAD5-DBSCANFalse-THRESH301.15-PERC98'
 		}
 	},
 	getters: {
@@ -95,7 +98,11 @@ export const useStore = defineStore('main', {
 				this.selectedEvent = null
 			} else {
 				this.setLoading()
-				const resp = await fetch(`/events/event-${id}.json`)
+				let path = `/events/event-${id}.json`
+				if (this.selectedModel !== undefined) {
+					path = `/data/output-debug-${this.selectedModel}/events/event-${id}.json`
+				}
+				const resp = await fetch(path)
 				const event = (await resp.json())
 				// This should always be the case...
 				event.id = id
@@ -121,7 +128,11 @@ export const useStore = defineStore('main', {
 		},
 		init() {
 			this.setLoading()
-			fetch('/events.jsonl')
+			let path = `/events/events.jsonl`
+			if(this.selectedModel !== undefined) {
+				path = `/data/output-debug-${this.selectedModel}/events.jsonl`
+			}
+			fetch(path)
 				.then((response) => {
 					if (!response.ok) {
 						throw new Error('Network response was not ok')
