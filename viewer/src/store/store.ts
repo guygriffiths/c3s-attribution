@@ -43,6 +43,13 @@ interface State {
 	timePanelExpanded: boolean
 
 	selectedModel?: string
+	filters: {
+		duration: number
+		intensity: number
+		size: number
+		includeOceanEvents : boolean
+	}
+
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -64,7 +71,13 @@ export const useStore = defineStore('main', {
 			events: [],
 			selectedEvent: null,
 			timePanelExpanded: true,
-			selectedModel: 'RAD5-DBSCANFalse-THRESH301.15-PERC98'
+			selectedModel: undefined, // This can be set to a model name to load events from a specific model
+			filters: {
+				duration: 3,
+				intensity: 0,
+				size: 0, 
+				includeOceanEvents: false, // Whether to include ocean events in the filter
+			},
 		}
 	},
 	getters: {
@@ -80,9 +93,35 @@ export const useStore = defineStore('main', {
 			// Find the index of the selected time in the times array
 			return differenceInDays(state.selectedTime, state.startTime)
 		},
-		// Returns the events which are active at the selected time (i.e. plotted on the map)
-		activeEvents: (state) => {
+		filteredEvents: (state) => {
+			// Filter events based on the current filters
 			return state.events.filter((event) => {
+				// Check if the event is an ocean event if the filter is enabled
+				if (!state.filters.includeOceanEvents && event.regions.some(region => region.type === 'ocean')) {
+					return false
+				}
+				// Check duration filter
+				const duration = (event.times[event.times.length - 1].getTime() - event.times[0].getTime()) / (1000 * 60 * 60 * 24) // Convert to days
+				if (duration < state.filters.duration) {
+					return false
+				}
+				// Check intensity filter
+				const intensity = event.intensity || 0 // Default to 0 if intensity is not defined
+				if (intensity < state.filters.intensity) {
+					return false
+				}
+				// Check size filter
+				const sizePercentile = event.size || 0
+				if (sizePercentile < state.filters.size) {
+					return false
+				}
+				// If all filters pass, include the event
+				return true
+			})
+		},
+		// Returns the events which are active at the selected time (i.e. plotted on the map)
+		currentEvents: (state) => {
+			return state.filteredEvents.filter((event) => {
 				const startDate = new Date(event.times[0])
 				const endDate = new Date(event.times[event.times.length - 1])
 				startDate.setHours(0, 0, 0, 0)
@@ -99,7 +138,7 @@ export const useStore = defineStore('main', {
 			} else {
 				this.setLoading()
 				let path = `/events/event-${id}.json`
-				if (this.selectedModel !== undefined) {
+				if (this.selectedModel) {
 					path = `/data/output-debug-${this.selectedModel}/events/event-${id}.json`
 				}
 				const resp = await fetch(path)
@@ -128,8 +167,9 @@ export const useStore = defineStore('main', {
 		},
 		init() {
 			this.setLoading()
-			let path = `/events/events.jsonl`
-			if(this.selectedModel !== undefined) {
+			let path = `/events.jsonl`
+			if(this.selectedModel) {
+				console.log('Loading events for model:', this.selectedModel)
 				path = `/data/output-debug-${this.selectedModel}/events.jsonl`
 			}
 			fetch(path)

@@ -19,13 +19,6 @@ const classes = computed(() => ['panel', { active: props.active }])
 @use '@/assets/styles/scssVars.module.scss' as *;
 
 .panel {
-	display: flex;
-  flex-direction: column;
-	border-radius: 6px;
-	justify-content: center;
-	align-items: center;
-	box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;
-	background-color: $panelBg;
 	position: absolute;
 	transition:
 		transform $animTime ease,
@@ -34,7 +27,6 @@ const classes = computed(() => ['panel', { active: props.active }])
 		bottom $animTime ease;
 	z-index: 10;
 }
-
 .panel.left {
 	transform: translateX(-150%);
 }

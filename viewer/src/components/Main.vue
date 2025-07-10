@@ -30,7 +30,7 @@ const toggleLabel = computed(() =>
 				id="times"
 				:start="store.startTime"
 				:end="store.endTime"
-				:events="store.events"
+				:events="store.filteredEvents"
 				:selected-event="store.selectedEvent"
 				v-model="store.selectedTime"
 			></TimeReel>

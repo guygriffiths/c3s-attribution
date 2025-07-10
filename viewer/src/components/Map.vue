@@ -19,6 +19,8 @@ import { debounce } from '@/lib/utils'
 import markerIconImg from '@/assets/img/marker-icon-2x-c3sred.png'
 import gridpointIconImg from '@/assets/img/gridpoint-icon.png'
 import { differenceInDays } from 'date-fns'
+import scssVars from '@/assets/styles/scssVars.module.scss'
+import FilterPanel from './FilterPanel.vue'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
@@ -46,7 +48,6 @@ const wmtsUrl = ref(
 	`https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${store.isoDatetime}`,
 )
 
-
 watch(
 	() => store.isoDatetime,
 	(newVal) => {
@@ -57,8 +58,6 @@ watch(
 	},
 )
 
-import scssVars from '@/assets/styles/scssVars.module.scss'
-
 watch(
 	() => store.selectedEvent,
 	(newVal) => {
@@ -67,13 +66,22 @@ watch(
 			// console.log('fitting bounds', newVal.bbox, newVal.regions)
 			try {
 				// TODO - 32px is hardcoded padding, yuck
-				map.fitBounds([[newVal.bbox[0], newVal.bbox[1]], [newVal.bbox[2], newVal.bbox[3]]], {
-					paddingTopLeft: [32, 32],
-					paddingBottomRight: [map.getSize().x * 0.5+32, map.getSize().y * 0.5+32],
-					maxZoom: 12,
-					// @ts-ignore
-					duration: scssVars.animTime,
-				})
+				map.fitBounds(
+					[
+						[newVal.bbox[0], newVal.bbox[1]],
+						[newVal.bbox[2], newVal.bbox[3]],
+					],
+					{
+						paddingTopLeft: [32, 32],
+						paddingBottomRight: [
+							map.getSize().x * 0.5 + 32,
+							map.getSize().y * 0.5 + 32,
+						],
+						maxZoom: 12,
+						// @ts-ignore
+						duration: scssVars.animTime,
+					},
+				)
 			} catch (e) {
 				console.error('Error fitting bounds:', e)
 			}
@@ -144,14 +152,15 @@ const gridpointIcon = icon({
 			<LTileLayer :url="wmtsUrl" :zIndex="2" :opacity="0.75"></LTileLayer>
 			<LMarker
 				v-for="point in store.selectedEvent?.slices[
-					differenceInDays(store.selectedTime, store.selectedEvent?.times[0]) || 0
+					differenceInDays(store.selectedTime, store.selectedEvent?.times[0]) ||
+						0
 				]"
 				:lat-lng="point"
 				:icon="gridpointIcon"
 			>
 			</LMarker>
 			<LPolygon
-				v-for="(event, idx) in store.activeEvents"
+				v-for="(event, idx) in store.currentEvents"
 				:key="event.id"
 				:lat-lngs="getEventRegion(event)"
 				:weight="3"
@@ -165,11 +174,47 @@ const gridpointIcon = icon({
 				</LPopup> -->
 			</LPolygon>
 			<LControl position="topright">
+				<FilterPanel
+					v-model="store.filters"
+					class="filter panel"
+					:filters="[
+						{
+							key: 'duration',
+							label: 'Duration (days)',
+							type: 'range',
+							pass: 'high-pass',
+							min: 3,
+							max: 14,
+						},
+						{
+							key: 'intensity',
+							label: 'Intensity %ile',
+							type: 'range',
+							pass: 'high-pass',
+							min: 0,
+							max: 99,
+						},
+						{
+							key: 'size',
+							label: 'Size %ile',
+							type: 'range',
+							pass: 'high-pass',
+							min: 0,
+							max: 99,
+						},
+						{
+							key: 'includeOceanOnly',
+							label: 'Include ocean-only events',
+							type: 'toggle',
+						},
+					]"
+				/>
 				<div>
 					<p>
 						{{ store.isoDatetime }}
+						{{ store.filters }}
 					</p>
-					<select
+					<!-- <select
 						v-model="store.selectedModel"
 						@change="store.init()"
 						class="form-select form-select-sm"
@@ -189,8 +234,8 @@ const gridpointIcon = icon({
 						<option value="RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC99">RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC99</option>
 
 
-					</select>
-				</div>	
+					</select> -->
+				</div>
 			</LControl>
 			<LControlScale
 				:max-width="200"
@@ -210,6 +255,11 @@ const gridpointIcon = icon({
 .map {
 	width: 100%;
 	height: 100%;
+
+	.filter-panel {
+		/* This is a hack to make the filter panel appear above the map */
+		padding: 1rem;
+	}
 
 	:deep(.leaflet-control-zoom),
 	:deep(.leaflet-control-zoom-out),

@@ -408,6 +408,7 @@ onMounted(() => {
 
 					<rect
 						v-for="event in eventsByYear.get(year)"
+						:key="event.id"
 						:x="event.startX! - 0.5"
 						:width="event.endX! - event.startX! + 1"
 						:y="
