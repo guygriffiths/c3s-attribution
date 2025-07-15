@@ -161,10 +161,13 @@ const eventIsSelected = (event: { id?: number }) =>
 const eventHeight = computed(() => 0.5 / maxSimultaneousEvents.value)
 const isYearVisible = (year: number) => Math.abs(selectedYear.value - year) <= 2
 
+import { debounce } from '@/lib/utils'
+
 watch(
 	() => props.events,
 	() => {
-		populateEvents()
+		debounce(() => populateEvents(), 25)
+		// populateEvents()
 	},
 	{ immediate: true, deep: false },
 )
@@ -224,23 +227,50 @@ const handleDrag = (event: MouseEvent) => {
 			const offsetX = event.clientX - rect.left
 			const percentage = offsetX / rect.width
 			const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
-			const dayOfYear = Math.floor(
-				1 + Math.max(0, Math.min(1, percentage)) * totalDays,
-			)
-			const tempDate = setDayOfYear(
-				new Date(Date.UTC(selectedYear.value, 0, 1)),
-				dayOfYear,
-			)
 
-			setDate(
-				new Date(
-					Date.UTC(
-						tempDate.getFullYear(),
-						tempDate.getMonth(),
-						tempDate.getDate(),
+			if (!props.selectedEvent) {
+				const dayOfYear = Math.floor(
+					1 + Math.max(0, Math.min(1, percentage)) * totalDays,
+				)
+				const tempDate = setDayOfYear(
+					new Date(Date.UTC(selectedYear.value, 0, 1)),
+					dayOfYear,
+				)
+
+				setDate(
+					new Date(
+						Date.UTC(
+							tempDate.getFullYear(),
+							tempDate.getMonth(),
+							tempDate.getDate(),
+						),
 					),
-				),
-			)
+				)
+			} else {
+				const eventStart = getDayOfYear(props.selectedEvent.times[0])
+				const eventEnd = getDayOfYear(
+					props.selectedEvent.times[props.selectedEvent.times.length - 1],
+				)
+				const totalDays = eventEnd - eventStart + 2
+
+				const dayFromStart = Math.floor(
+					1 + Math.max(0, Math.min(1, percentage)) * totalDays,
+				)
+				const tempDate = setDayOfYear(
+					new Date(Date.UTC(selectedYear.value, 0, 1)),
+					dayFromStart + eventStart - 1,
+				)
+
+				setDate(
+					new Date(
+						Date.UTC(
+							tempDate.getFullYear(),
+							tempDate.getMonth(),
+							tempDate.getDate(),
+						),
+					),
+				)
+			}
 		}
 	} else if (dragMode.value === 'vertical') {
 		// yOffset.value -= dy

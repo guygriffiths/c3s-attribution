@@ -7,6 +7,7 @@ import Map from './Map.vue'
 import Panel from './common/Panel.vue'
 import TimeReel from './TimeReel.vue'
 import { active } from 'd3'
+import EventGraphs from './EventGraphs.vue'
 
 const $l = useLabels()
 const store = useStore()
@@ -44,7 +45,10 @@ const toggleLabel = computed(() =>
 			<div id="event-info"></div>
 		</Panel>
 		<Panel id="event-panel" class="top" :active="store.eventSelected">
-			<div id="event"></div>
+			<EventGraphs
+				:selected-event="store.selectedEvent"
+				:time="store.selectedTime"
+			></EventGraphs>
 		</Panel>
 
 		<div id="buttons-debug">

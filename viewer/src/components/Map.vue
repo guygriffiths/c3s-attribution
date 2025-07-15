@@ -216,27 +216,87 @@ const gridpointIcon = icon({
 						{{ store.isoDatetime }}
 						{{ store.filters }}
 					</p>
-					<!-- <select
+					<select
 						v-model="store.selectedModel"
 						@change="store.init()"
 						class="form-select form-select-sm"
 					>
-						<option value="RAD4.5-DBSCANFalse-EXP1-THRESH301.15-PERC98">RAD4.5-DBSCANFalse-EXP1-THRESH301.15-PERC98</option>
-						<option value="RAD3-DBSCANFalse-EXP1-THRESH301.15-PERC98">RAD3-DBSCANFalse-EXP1-THRESH301.15-PERC98</option>
-						<option value="RAD1.5-DBSCANFalse-EXP1-THRESH301.15-PERC98">RAD1.5-DBSCANFalse-EXP1-THRESH301.15-PERC98</option>
-						<option value="RAD4.5-DBSCANFalse-EXP1-THRESH301.15-PERC99">RAD4.5-DBSCANFalse-EXP1-THRESH301.15-PERC99</option>
-						<option value="RAD3-DBSCANFalse-EXP1-THRESH301.15-PERC99">RAD3-DBSCANFalse-EXP1-THRESH301.15-PERC99</option>
-						<option value="RAD1.5-DBSCANFalse-EXP1-THRESH301.15-PERC99">RAD1.5-DBSCANFalse-EXP1-THRESH301.15-PERC99</option>
-
-						<option value="RAD4.5-DBSCANFalse-EXP1-THRESH303.15-PERC98">RAD4.5-DBSCANFalse-EXP1-THRESH303.15-PERC98</option>
-						<option value="RAD3-DBSCANFalse-EXP1-THRESH303.15-PERC98">RAD3-DBSCANFalse-EXP1-THRESH303.15-PERC98</option>
-						<option value="RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC98">RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC98</option>
-						<option value="RAD4.5-DBSCANFalse-EXP1-THRESH303.15-PERC99">RAD4.5-DBSCANFalse-EXP1-THRESH303.15-PERC99</option>
-						<option value="RAD3-DBSCANFalse-EXP1-THRESH303.15-PERC99">RAD3-DBSCANFalse-EXP1-THRESH303.15-PERC99</option>
-						<option value="RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC99">RAD1.5-DBSCANFalse-EXP1-THRESH303.15-PERC99</option>
-
-
-					</select> -->
+						<option value="RAD5-DBSCANFalse-THRESH301.15-PERC98" selected>
+							RAD5-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD6-DBSCANFalse-THRESH301.15-PERC98">
+							RAD6-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD7-DBSCANFalse-THRESH301.15-PERC98">
+							RAD7-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD4-DBSCANFalse-THRESH301.15-PERC98">
+							RAD4-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD3-DBSCANFalse-THRESH301.15-PERC98">
+							RAD3-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD2-DBSCANFalse-THRESH301.15-PERC98">
+							RAD2-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD1-DBSCANFalse-THRESH301.15-PERC98">
+							RAD1-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD8-DBSCANFalse-THRESH301.15-PERC98">
+							RAD8-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD9-DBSCANFalse-THRESH301.15-PERC98">
+							RAD9-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD10-DBSCANFalse-THRESH301.15-PERC98">
+							RAD10-DBSCANFalse-THRESH301.15-PERC98
+						</option>
+						<option value="RAD5-DBSCANFalse-THRESH303.15-PERC98">
+							RAD5-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD6-DBSCANFalse-THRESH303.15-PERC98">
+							RAD6-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD7-DBSCANFalse-THRESH303.15-PERC98">
+							RAD7-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD4-DBSCANFalse-THRESH303.15-PERC98">
+							RAD4-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD3-DBSCANFalse-THRESH303.15-PERC98">
+							RAD3-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD2-DBSCANFalse-THRESH303.15-PERC98">
+							RAD2-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD1-DBSCANFalse-THRESH303.15-PERC98">
+							RAD1-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD8-DBSCANFalse-THRESH303.15-PERC98">
+							RAD8-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD9-DBSCANFalse-THRESH303.15-PERC98">
+							RAD9-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD10-DBSCANFalse-THRESH303.15-PERC98">
+							RAD10-DBSCANFalse-THRESH303.15-PERC98
+						</option>
+						<option value="RAD5-DBSCANFalse-THRESH305.15-PERC98">
+							RAD5-DBSCANFalse-THRESH305.15-PERC98
+						</option>
+						<option value="RAD6-DBSCANFalse-THRESH305.15-PERC98">
+							RAD6-DBSCANFalse-THRESH305.15-PERC98
+						</option>
+						<option value="RAD7-DBSCANFalse-THRESH305.15-PERC98">
+							RAD7-DBSCANFalse-THRESH305.15-PERC98
+						</option>
+						<option value="RAD4-DBSCANFalse-THRESH305.15-PERC98">
+							RAD4-DBSCANFalse-THRESH305.15-PERC98
+						</option>
+						<option value="RAD3-DBSCANFalse-THRESH305.15-PERC98">
+							RAD3-DBSCANFalse-THRESH305.15-PERC98
+						</option>
+					</select>
 				</div>
 			</LControl>
 			<LControlScale

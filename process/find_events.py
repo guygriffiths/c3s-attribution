@@ -11,6 +11,7 @@ import numpy as np
 from scipy.ndimage import label, binary_erosion
 from datetime import timedelta
 from shapely.geometry import MultiPoint
+from shapely.ops import unary_union
 import json
 import queue
 import threading
@@ -391,14 +392,6 @@ class EventletFactory:
 
         event_id = stable_cluster_hash(all_times[0], centroids[0])
 
-        catalogue_event = {
-            "id": event_id,
-            "times": [formatTime(t) for t in all_times],
-            "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
-            "bbox": to_serialisable(bbox),
-            "slices": to_serialisable(ev.slices),
-        }
-
         full_event = {
             "id": event_id,
             "times": [formatTime(t) for t in all_times],
@@ -407,7 +400,33 @@ class EventletFactory:
             "values": to_serialisable(ev.values),
             "centroids": to_serialisable(centroids),
             "bbox": to_serialisable(bbox),
+            "total_area": float(unary_union([
+                ev.hull(i) for i in range(len(ev.slices)) if ev.hull(i) is not None
+            ]).area),
+            "areas":to_serialisable([
+                ev.hull(i).area if ev.hull(i) is not None else 0
+                for i in range(len(ev.slices))
+            ]),
+            "peak_values": to_serialisable([
+                np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
+                for i in range(len(ev.slices))
+            ]),
+            "mean_values": to_serialisable([
+                np.mean(ev.values[i]) if len(ev.values[i]) > 0 else None
+                for i in range(len(ev.slices))
+            ]),
         }
+
+        catalogue_event = {
+            "id": full_event["id"],
+            "times": full_event["times"],
+            "regions": full_event["regions"],
+            "bbox": full_event["bbox"],
+            "peak_value": np.max(full_event["peak_values"]) if full_event["peak_values"] else None,
+            "mean_value": np.mean(full_event["mean_values"]) if full_event["mean_values"] else None,
+            "total_area": full_event["total_area"],
+        }
+
 
         with open(f"{self.output_path}/events.jsonl", "a") as f:
             f.write(json.dumps(round_floats(catalogue_event)) + "\n")
@@ -490,36 +509,30 @@ import os
 
 def main():
 
-    for dbscan in [False, True]:
-        for perc in [98, 99]:
-            data_var, ref_data = load_data(
-                "/data/era5_2024.nc", f"/data/era5_ref{perc}.nc"
-            )
-            time_dim = data_var["valid_time"]
-            for thresh in [28 + 273.15, 30 + 273.15, 32 + 273.15]:
-                for r in [5, 6, 7, 4, 3, 2, 1, 8, 9, 10]:
-                    print(f"Running with radius={r}, dbscan={dbscan} days")
-                    out_path = f"/data/output-debug-RAD{r}-DBSCAN{dbscan}-THRESH{thresh}-PERC{perc}/"
-                    os.makedirs(out_path, exist_ok=True)
-                    os.makedirs(f"{out_path}/events", exist_ok=True)
+    # for dbscan in [False, True]:
+    #     for perc in [98, 99]:
+    data_var, ref_data = load_data(
+        "/data/era5_2024.nc", f"/data/era5_ref{98}.nc"
+    )
+    time_dim = data_var["valid_time"]
+    out_path = f"/data/output"
+    os.makedirs(out_path, exist_ok=True)
+    os.makedirs(f"{out_path}/events", exist_ok=True)
 
-                    factory = EventletFactory(
-                        data_var,
-                        threshold=thresh,
-                        ref_data=ref_data,
-                        neighbor_radius=r,
-                        output_path=out_path,
-                        use_dbscan=dbscan,
-                    )
+    factory = EventletFactory(
+        data_var,
+        threshold=273.15+30,
+        ref_data=ref_data,
+        neighbor_radius=5,
+        output_path=out_path,
+        use_dbscan=False,
+    )
 
-                    for i in range(time_dim.size):
-                        time_val = pd.to_datetime(time_dim[i].values)
-                        factory.process_slice(time_val)
+    for i in range(time_dim.size):
+        time_val = pd.to_datetime(time_dim[i].values)
+        factory.process_slice(time_val)
 
-                    factory.flush()
-                    print("All slices processed.")
-                    with open(f"/data/paths.txt", "a") as f:
-                        f.write(f"{out_path}\n")
+    factory.flush()
 
 
 if __name__ == "__main__":

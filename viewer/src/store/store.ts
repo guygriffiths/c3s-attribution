@@ -17,17 +17,19 @@ interface Event {
 	id: number
 }
 
-interface FullEvent {
-	times: Date[]
-	slices: any[]
-	featureLevel?: number
-	regions: any[]
-	maxArea: number
-	bbox: [number, number, number, number]
-	centroid: [number, number]
-	size: number
-	feature: boolean
+export interface FullEvent {
 	id: number
+	times: Date[]
+	regions: any[]
+	slices: any[]
+	values: any[]
+	centroids: [[number, number]]
+	bbox: [number, number, number, number]
+	total_area: number
+	areas: number[]
+	peak_values: (number | null)[]
+	mean_values: (number | null)[]
+	color?: string
 }
 
 interface State {
@@ -150,6 +152,7 @@ export const useStore = defineStore('main', {
 				event.times = event.times.map((time: string) => new Date(time))
 				event.color = catScheme[event.id % catScheme.length]
 				this.selectedEvent = event as FullEvent
+				console.log('Selected event:', this.selectedEvent)
 				if(this.selectedTime < event.times[0] || this.selectedTime > event.times[event.times.length - 1]) {
 					this.selectedTime = new Date(event.times[0])
 				}
