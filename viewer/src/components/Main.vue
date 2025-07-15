@@ -8,6 +8,7 @@ import Panel from './common/Panel.vue'
 import TimeReel from './TimeReel.vue'
 import { active } from 'd3'
 import EventGraphs from './EventGraphs.vue'
+import EventInfo from './EventInfo.vue'
 
 const $l = useLabels()
 const store = useStore()
@@ -42,21 +43,19 @@ const toggleLabel = computed(() =>
 			<div id="event-frame">
 				<div class="decor"></div>
 			</div>
-			<div id="event-info"></div>
+			<EventInfo
+				id="event-info"
+				:selected-event="store.selectedEvent"
+			></EventInfo>
 		</Panel>
 		<Panel id="event-panel" class="top" :active="store.eventSelected">
+			<!-- <button @click="store.selectEvent(null)" class="panel-toggle">x</button> -->
 			<EventGraphs
 				:selected-event="store.selectedEvent"
 				:time="store.selectedTime"
 			></EventGraphs>
 		</Panel>
-
-		<div id="buttons-debug">
-			<!-- <h2>{{ store.selectedEvent }}</h2> -->
-			<button @click="store.toggleEventSelectedDebug">selectevent</button>
-			<button @click="store.selectedTime=new Date(Date.UTC(2022,4,28,0,0,0))">selecttime</button>
-		</div>
-</div>
+	</div>
 </template>
 
 <style lang="scss" scoped>
@@ -107,7 +106,7 @@ const toggleLabel = computed(() =>
 		z-index: 20;
 
 		transition: all $animTime linear;
-		
+
 		&.side {
 			left: 50%;
 			height: 15%;
@@ -145,7 +144,7 @@ const toggleLabel = computed(() =>
 
 		#event-frame {
 			pointer-events: none;
-			flex: 0 0 70%;
+			flex: 0 0 50%;
 			border-top: 3rem solid $panelBg;
 			border-top-left-radius: 6px;
 			border-right: 3rem solid $panelBg;
@@ -164,6 +163,7 @@ const toggleLabel = computed(() =>
 		#event-info {
 			flex: 1 1 50%;
 			background-color: $panelBg;
+			border-radius: 0;
 			border-bottom-left-radius: 6px;
 			pointer-events: all;
 			// padding: 0.5rem;
@@ -181,6 +181,7 @@ const toggleLabel = computed(() =>
 		border-radius: 0;
 		border-top-right-radius: 6px;
 		border-bottom: none;
+		padding-top: 1rem;
 		// box-shadow: rgba(0, 0, 0, 0.5) 3px 0px 3px 0px;
 	}
 }

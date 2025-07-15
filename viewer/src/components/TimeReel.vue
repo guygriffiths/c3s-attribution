@@ -456,6 +456,7 @@ onMounted(() => {
 					<transition-group tag="g" name="daily-event-fx">
 						<rect
 							v-for="event in eventsByYear.get(year)"
+							class="event-bar"
 							:key="event.id"
 							:x="event.startX! - 0.5"
 							:width="event.endX! - event.startX! + 1"
@@ -482,7 +483,7 @@ onMounted(() => {
 			<transition-group
 				tag="g"
 				name="selected-event-fx"
-				class="event-taxis"
+				class="selected-event-fx"
 				:transform="viewportTransform"
 			>
 				<rect
@@ -564,6 +565,10 @@ $margin: 0 0;
 
 	.scroller {
 		transition: transform $animTime ease-in-out;
+
+		&.zoom {
+			transition: transform $animTime ease-in-out $settleTime;
+		}
 	}
 
 	.background {
@@ -571,15 +576,13 @@ $margin: 0 0;
 		stroke: 0;
 	}
 
-	.event-taxis {
-		transition: transform $animTime ease-in-out;
-	}
+	.event-bar {
+		cursor: pointer;
 
-	rect {
-		// TODO - do this with Vue transition? Maybe not, just tweak it so it's better
 		transition:
 			all $settleTime ease-in-out $animTime,
 			opacity 0s linear;
+
 		&.selected {
 			transition:
 				all $settleTime ease-in-out $animTime,
@@ -587,8 +590,11 @@ $margin: 0 0;
 		}
 
 		&.unselected {
+			transition:
+				all $settleTime ease-in-out $animTime,
+				opacity 0 linear;
 			// TODO looks iffy
-			opacity: 0.5;
+			opacity: 1;
 		}
 	}
 
@@ -604,7 +610,6 @@ $margin: 0 0;
 		opacity: 1;
 	}
 
-	// TODO Polish this even more.
 	.selected-event-fx-enter-from {
 		opacity: 0;
 		stroke-width: 0;
@@ -614,9 +619,8 @@ $margin: 0 0;
 		stroke-width: 2;
 	}
 	.selected-event-fx-enter-active {
-		transition:
-			stroke-width 0s ease-out calc($animTime + $settleTime + var(--i) * 20ms),
-			opacity 0s linear calc($animTime + $settleTime);
+		transition: stroke-width 0s ease-out calc($animTime + $settleTime + var(--i) * 20ms),
+			opacity 0s ease-out calc($animTime + $settleTime);
 	}
 
 	.selected-event-fx-leave-from {
@@ -628,9 +632,13 @@ $margin: 0 0;
 		stroke-width: 0;
 	}
 	.selected-event-fx-leave-active {
+		// transition:
+		// 	stroke-width $animTime ease calc(var(--i) * 20ms) $settleTime,
+		// 	opacity $animTime linear $settleTime;
 		transition:
-			stroke-width 0s ease calc(var(--i) * 20ms),
-			opacity 0s linear 500ms;
+			transform 0s ease-in-out,
+		    stroke-width 0s ease-out calc(var(--i) * 20ms),
+			opacity 0s ease-out $settleTime;
 	}
 }
 

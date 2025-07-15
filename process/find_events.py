@@ -391,6 +391,20 @@ class EventletFactory:
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
         event_id = stable_cluster_hash(all_times[0], centroids[0])
+        peak_values = to_serialisable(
+            [
+                np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
+                for i in range(len(ev.slices))
+            ]
+        )
+        peak_value = to_serialisable(np.max(peak_values)) if peak_values else None
+        mean_values = to_serialisable(
+            [
+                np.mean(ev.values[i]) if len(ev.values[i]) > 0 else None
+                for i in range(len(ev.slices))
+            ]
+        )
+        mean_value = to_serialisable(np.mean(ev.values.flat)) if mean_values else None
 
         full_event = {
             "id": event_id,
@@ -400,21 +414,25 @@ class EventletFactory:
             "values": to_serialisable(ev.values),
             "centroids": to_serialisable(centroids),
             "bbox": to_serialisable(bbox),
-            "total_area": float(unary_union([
-                ev.hull(i) for i in range(len(ev.slices)) if ev.hull(i) is not None
-            ]).area),
-            "areas":to_serialisable([
-                ev.hull(i).area if ev.hull(i) is not None else 0
-                for i in range(len(ev.slices))
-            ]),
-            "peak_values": to_serialisable([
-                np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
-                for i in range(len(ev.slices))
-            ]),
-            "mean_values": to_serialisable([
-                np.mean(ev.values[i]) if len(ev.values[i]) > 0 else None
-                for i in range(len(ev.slices))
-            ]),
+            "total_area": float(
+                unary_union(
+                    [
+                        ev.hull(i)
+                        for i in range(len(ev.slices))
+                        if ev.hull(i) is not None
+                    ]
+                ).area
+            ),
+            "areas": to_serialisable(
+                [
+                    ev.hull(i).area if ev.hull(i) is not None else 0
+                    for i in range(len(ev.slices))
+                ]
+            ),
+            "peak_values": peak_values,
+            "peak_value": peak_value,
+            "mean_values": mean_values,
+            "mean_value": mean_value,
         }
 
         catalogue_event = {
@@ -422,11 +440,16 @@ class EventletFactory:
             "times": full_event["times"],
             "regions": full_event["regions"],
             "bbox": full_event["bbox"],
-            "peak_value": np.max(full_event["peak_values"]) if full_event["peak_values"] else None,
-            "mean_value": np.mean(full_event["mean_values"]) if full_event["mean_values"] else None,
+            "peak_value": (
+                np.max(full_event["peak_values"]) if full_event["peak_values"] else None
+            ),
+            "mean_value": (
+                np.mean(full_event["mean_values"])
+                if full_event["mean_values"]
+                else None
+            ),
             "total_area": full_event["total_area"],
         }
-
 
         with open(f"{self.output_path}/events.jsonl", "a") as f:
             f.write(json.dumps(round_floats(catalogue_event)) + "\n")
@@ -511,9 +534,7 @@ def main():
 
     # for dbscan in [False, True]:
     #     for perc in [98, 99]:
-    data_var, ref_data = load_data(
-        "/data/era5_2024.nc", f"/data/era5_ref{98}.nc"
-    )
+    data_var, ref_data = load_data("/data/era5_2024.nc", f"/data/era5_ref{98}.nc")
     time_dim = data_var["valid_time"]
     out_path = f"/data/output"
     os.makedirs(out_path, exist_ok=True)
@@ -521,7 +542,7 @@ def main():
 
     factory = EventletFactory(
         data_var,
-        threshold=273.15+30,
+        threshold=273.15 + 30,
         ref_data=ref_data,
         neighbor_radius=5,
         output_path=out_path,

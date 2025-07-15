@@ -135,8 +135,10 @@ export const useStore = defineStore('main', {
 		},
 	},
 	actions: {
-		async selectEvent(id: number) {
-			console.log('Selecting event with id:', id, this.selectedEvent)
+		async selectEvent(id: number | null) {
+			if (id === null) {
+				this.selectedEvent = null
+			}
 			if (this.selectedEvent?.id === id) {
 				this.selectedEvent = null
 			} else {

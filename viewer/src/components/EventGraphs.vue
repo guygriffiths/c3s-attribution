@@ -2,22 +2,28 @@
 import { computed, watch, ref, onMounted } from 'vue'
 import * as d3 from 'd3'
 import { FullEvent } from '@/store/store'
+import { c } from 'vite/dist/node/moduleRunnerTransport.d-DJ_mE5sf'
 
 const props = defineProps<{ selectedEvent: FullEvent | null }>()
 
 const days = computed(() => props.selectedEvent?.times || [])
 
-const areaData = computed(() => props.selectedEvent?.areas || [])
+const areaData = computed(
+	() => props.selectedEvent?.slices.map((s) => s.length) || [],
+)
 const peakData = computed(() => props.selectedEvent?.peak_values || [])
 const meanData = computed(() => props.selectedEvent?.mean_values || [])
+
 const distData = computed(() => {
 	const centroids = props.selectedEvent?.centroids || []
 	if (centroids.length < 2) return []
 	const [startX, startY] = centroids[0]
-	return centroids.map(([x, y]) => Math.hypot(x - startX, y - startY))
+	return centroids.map(([x, y]) =>
+		Math.sqrt((x - startX) ** 2 + (y - startY) ** 2),
+	)
 })
 
-const margin = { top: 20, right: 0, bottom: 30, left: 0 }
+const chartTopMargin = 20
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const width = computed(() => {
@@ -26,20 +32,20 @@ const width = computed(() => {
 		const rect = container.getBoundingClientRect()
 		return rect.width || 800
 	}
-    return 800
+	return 800
 })
 const height = computed(() => {
-    const container = svgRef.value
-    if (container) {
-        const rect = container.getBoundingClientRect()
-        return rect.height / 3 || 400
-    }
-    return 400
+	const container = svgRef.value
+	if (container) {
+		const rect = container.getBoundingClientRect()
+		return rect.height / 3 || 400
+	}
+	return 400
 })
 
 // Scales
 const xScale = computed(() => {
-	const sideMargin = (0.5 * width.value) / (days.value.length+1)
+	const sideMargin = (0.5 * width.value) / (days.value.length + 1)
 	return d3
 		.scaleBand()
 		.domain(days.value.map((_, i) => i.toString()))
@@ -51,48 +57,57 @@ const areaScale = computed(() =>
 	d3
 		.scaleLinear()
 		.domain([0, d3.max(areaData.value) || 1])
-		.range([height.value - margin.bottom, margin.top]),
+		.range([height.value, chartTopMargin]),
 )
 const valueScale = computed(() =>
 	d3
 		.scaleLinear()
-		.domain([273.15, d3.max(peakData.value) || 1])
-		.range([height.value - margin.bottom, margin.top]),
+		.domain([30 + 273.15, d3.max(peakData.value) || 1])
+		.range([height.value, chartTopMargin]),
 )
-const distScale = computed(() =>
+const latScale = computed(() =>
 	d3
 		.scaleLinear()
-		.domain([0, d3.max(distData.value) || 1])
-		.range([height.value - margin.bottom, margin.top]),
+		.domain([d3.min(distData.value), d3.max(distData.value) || 1])
+		.range([height.value, chartTopMargin]),
 )
 
-const transitionDuration = 300
+const getBackgroundColor = (isEven: boolean) => {
+	return isEven ? props.selectedEvent?.color || '#f0f0f0' : '#ffffff'
+}
 </script>
 
 <template>
 	<svg class="graph-container" ref="svgRef">
-		<!-- Geographic Area Bar Chart -->
-		<g>
+		<transition-group
+			name="graph-bg-transition"
+			tag="g"
+			:style="{ transform: 'scaleY(-1) translateY(-100%)' }"
+		>
 			<template v-for="(day, i) in days" :key="day">
 				<rect
 					:x="xScale(i.toString())"
 					:y="0"
 					:width="xScale.bandwidth()"
-					:height="height * 3 - margin.bottom"
-					:fill="i % 2 === 0 ? '#f0f0f0' : '#e0e0e0'"
+					:height="height * 3"
+					:opacity="i % 2 === 0 ? 0.1 : 0.05"
+					:fill="props.selectedEvent?.color || '#f0f0f0'"
 				/>
 			</template>
-		</g>
+		</transition-group>
 
-		<g>
+		<g :transform="`translate(0, ${height * 2})`">
 			<text x="10" y="15">Area</text>
 			<template v-for="(value, i) in areaData" :key="i">
 				<rect
 					:x="xScale(i.toString())"
 					:y="areaScale(value)"
 					:width="xScale.bandwidth()"
-					:height="height - margin.bottom - areaScale(value)"
-					fill="#4e79a7"
+					:height="height - areaScale(value)"
+					:fill="props.selectedEvent?.color || '#f0f0f0'"
+					stroke="white"
+					:stroke-width="2"
+					vector-effect="non-scaling-stroke"
 				/>
 			</template>
 		</g>
@@ -134,7 +149,7 @@ const transitionDuration = 300
 		</g>
 
 		<!-- dist Chart -->
-		<g :transform="`translate(0, ${height * 2})`">
+		<g :transform="`translate(0, ${0})`">
 			<text x="10" y="15">dist from start</text>
 			<template v-if="distData.length">
 				<polyline
@@ -145,7 +160,7 @@ const transitionDuration = 300
 						distData
 							.map(
 								(v, i) =>
-									`${xScale(i.toString()) + xScale.bandwidth() / 2},${distScale(v)}`,
+									`${xScale(i.toString()) + xScale.bandwidth() / 2},${latScale(v)}`,
 							)
 							.join(' ')
 					"
@@ -155,13 +170,30 @@ const transitionDuration = 300
 	</svg>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/assets/styles/scssVars.module.scss' as *;
+
 svg {
 	font-family: sans-serif;
 	font-size: 12px;
 	user-select: none;
-    width : 100%;
-    height: 100%;
+	width: 100%;
+	height: 100%;
+
+	.graph-bg-transition-enter-active {
+		transition: all $animTime ease-in-out calc($animTime + $settleTime);
+	}
+	.graph-bg-transition-leave-active {
+		transition: all $animTime ease-in-out;
+	}
+	.graph-bg-transition-enter-from,
+	.graph-bg-transition-leave-to {
+		height: 0;
+	}
+	.graph-bg-transition-enter-to,
+	.graph-bg-transition-leave-from {
+		height: 100%;
+	}
 }
 text {
 	fill: #444;

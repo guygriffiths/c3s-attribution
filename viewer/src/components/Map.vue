@@ -72,7 +72,7 @@ watch(
 						[newVal.bbox[2], newVal.bbox[3]],
 					],
 					{
-						paddingTopLeft: [32, 32],
+						paddingTopLeft: [64, 64],
 						paddingBottomRight: [
 							map.getSize().x * 0.5 + 32,
 							map.getSize().y * 0.5 + 32,
@@ -126,6 +126,16 @@ const gridpointIcon = icon({
 	iconAnchor: [4, 4], // point of the icon which will correspond to marker's location
 	popupAnchor: [4, 4], // point from which the popup should open
 })
+
+const getOpacity = (stepsFromNow: number) => {
+	// const stepsFromNow = Math.abs(differenceInDays(store.selectedTime, store.selectedEvent.times[idx]))
+	const maxSteps = 6
+	const opacity = 0.5 - (1 * stepsFromNow) / maxSteps
+	if (stepsFromNow > maxSteps) {
+		return 0
+	}
+	return Math.max(opacity, 0.01)
+}
 </script>
 
 <template>
@@ -169,9 +179,17 @@ const gridpointIcon = icon({
 				:color="catScheme[event.id % catScheme.length]"
 				@click="selectEvent(event.id)"
 			>
-				<!-- <LPopup>
-					<p>{{ event }}</p>
-				</LPopup> -->
+			</LPolygon>
+			<LPolygon
+				v-for="(region, idx) in store.selectedEvent?.regions"
+				:key="idx"
+				:lat-lngs="region"
+				:weight="0"
+				:fill="true"
+				:fill-opacity="getOpacity(Math.abs(differenceInDays(store.selectedTime, store.selectedEvent.times[idx])))"
+				:color="catScheme[store.selectedEvent.id % catScheme.length]"
+				@click="selectEvent(store.selectedEvent.id)"
+			>
 			</LPolygon>
 			<LControl position="topright">
 				<FilterPanel
@@ -211,7 +229,7 @@ const gridpointIcon = icon({
 					@drag-start="store.draggingFilter = true"
 					@drag-end="store.draggingFilter = false"
 				/>
-				<div>
+				<!-- <div>
 					<p>
 						{{ store.isoDatetime }}
 						{{ store.filters }}
@@ -297,7 +315,7 @@ const gridpointIcon = icon({
 							RAD3-DBSCANFalse-THRESH305.15-PERC98
 						</option>
 					</select>
-				</div>
+				</div> -->
 			</LControl>
 			<LControlScale
 				:max-width="200"
@@ -319,7 +337,7 @@ const gridpointIcon = icon({
 	height: 100%;
 
 	.filter-panel {
-		// padding: 1rem;
+		padding: 1rem;
 	}
 
 	:deep(.leaflet-control-zoom),
