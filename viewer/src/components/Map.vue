@@ -221,7 +221,7 @@ const getOpacity = (stepsFromNow: number) => {
 							max: 99,
 						},
 						{
-							key: 'includeOceanOnly',
+							key: 'includeOceanEvents',
 							label: 'Include ocean-only events',
 							type: 'toggle',
 						},

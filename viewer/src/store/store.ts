@@ -14,6 +14,7 @@ interface Event {
 	centroid: [number, number]
 	size: number
 	feature: boolean
+	ocean_only?: boolean // Whether the event is only in ocean regions
 	id: number
 }
 
@@ -27,8 +28,8 @@ export interface FullEvent {
 	bbox: [number, number, number, number]
 	total_area: number
 	areas: number[]
-	peak_values: (number | null)[]
-	mean_values: (number | null)[]
+	peak_values: number[]
+	mean_values: number[]
 	color?: string
 }
 
@@ -79,7 +80,7 @@ export const useStore = defineStore('main', {
 				duration: 3,
 				intensity: 0,
 				size: 0, 
-				includeOceanEvents: false, // Whether to include ocean events in the filter
+				includeOceanEvents: true, // Whether to include ocean events in the filter
 			},
 			draggingFilter: false,
 		}
@@ -98,30 +99,37 @@ export const useStore = defineStore('main', {
 			return differenceInDays(state.selectedTime, state.startTime)
 		},
 		filteredEvents: (state) => {
+
 			// Filter events based on the current filters
-			return state.events.filter((event) => {
+			const fe= state.events.filter((event) => {
 				// Check if the event is an ocean event if the filter is enabled
-				if (!state.filters.includeOceanEvents && event.regions.some(region => region.type === 'ocean')) {
+				if (!state.filters.includeOceanEvents && event.ocean_only) {
+					console.log('Skipping ocean event:', JSON.stringify(state.filters.includeOceanEvents))
 					return false
 				}
 				// Check duration filter
-				const duration = (event.times[event.times.length - 1].getTime() - event.times[0].getTime()) / (1000 * 60 * 60 * 24) // Convert to days
+				const duration = differenceInDays(event.times[event.times.length - 1] - event.times[0])
 				if (duration < state.filters.duration) {
+					console.log('Skipping short event:', event)
 					return false
 				}
 				// Check intensity filter
 				const intensity = event.intensity || 0 // Default to 0 if intensity is not defined
 				if (intensity < state.filters.intensity) {
+					console.log('Skipping weak event:', event)
 					return false
 				}
 				// Check size filter
 				const sizePercentile = event.size || 0
 				if (sizePercentile < state.filters.size) {
+					console.log('Skipping small event:', event)
 					return false
 				}
 				// If all filters pass, include the event
 				return true
 			})
+			console.log('Filtered events:', fe.length, 'from', state.events.length, 'total events')
+			return fe
 		},
 		// Returns the events which are active at the selected time (i.e. plotted on the map)
 		currentEvents: (state) => {

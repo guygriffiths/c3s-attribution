@@ -53,6 +53,7 @@ const toggleLabel = computed(() =>
 			<EventGraphs
 				:selected-event="store.selectedEvent"
 				:time="store.selectedTime"
+				@date-selected="store.selectedTime = $event"
 			></EventGraphs>
 		</Panel>
 	</div>
@@ -102,7 +103,7 @@ const toggleLabel = computed(() =>
 		left: 1.5rem;
 		right: 1.5rem;
 		bottom: 1.5rem;
-		height: 45%;
+		height: 15%;
 		z-index: 20;
 
 		transition: all $animTime linear;

@@ -25,6 +25,11 @@ const area = computed(() => props.selectedEvent?.total_area?.toFixed(1) + ' km²
 
 <template>
   <div class="event-info-panel">
+    <!-- <div class="info-row">
+      <FontAwesomeIcon :icon="faClock" class="icon" />
+      <span class="label">Debug:</span>
+      <span class="value">{{ props.selectedEvent }}</span>
+    </div> -->
     <div class="info-row">
       <FontAwesomeIcon :icon="faClock" class="icon" />
       <span class="label">Time:</span>

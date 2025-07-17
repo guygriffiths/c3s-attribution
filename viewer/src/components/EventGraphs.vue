@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, watch, ref, onMounted } from 'vue'
+import { computed, ComputedRef, ref } from 'vue'
 import * as d3 from 'd3'
 import { FullEvent } from '@/store/store'
-import { c } from 'vite/dist/node/moduleRunnerTransport.d-DJ_mE5sf'
 
 const props = defineProps<{ selectedEvent: FullEvent | null }>()
+const emits = defineEmits<{
+	(event: 'dateSelected', date: Date): void
+}>()
 
 const days = computed(() => props.selectedEvent?.times || [])
-
 const areaData = computed(
 	() => props.selectedEvent?.slices.map((s) => s.length) || [],
 )
@@ -17,6 +18,7 @@ const meanData = computed(() => props.selectedEvent?.mean_values || [])
 const distData = computed(() => {
 	const centroids = props.selectedEvent?.centroids || []
 	if (centroids.length < 2) return []
+    // @ts-ignore
 	const [startX, startY] = centroids[0]
 	return centroids.map(([x, y]) =>
 		Math.sqrt((x - startX) ** 2 + (y - startY) ** 2),
@@ -62,13 +64,13 @@ const areaScale = computed(() =>
 const valueScale = computed(() =>
 	d3
 		.scaleLinear()
-		.domain([30 + 273.15, d3.max(peakData.value) || 1])
+		.domain([303.15, d3.max(peakData.value) || 1])
 		.range([height.value, chartTopMargin]),
 )
 const latScale = computed(() =>
 	d3
 		.scaleLinear()
-		.domain([d3.min(distData.value), d3.max(distData.value) || 1])
+		.domain([d3.min(distData.value) || 0, d3.max(distData.value) || 1])
 		.range([height.value, chartTopMargin]),
 )
 
@@ -92,6 +94,7 @@ const getBackgroundColor = (isEven: boolean) => {
 					:height="height * 3"
 					:opacity="i % 2 === 0 ? 0.1 : 0.05"
 					:fill="props.selectedEvent?.color || '#f0f0f0'"
+					@click="emits('dateSelected', day)"
 				/>
 			</template>
 		</transition-group>

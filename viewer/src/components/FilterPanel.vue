@@ -63,6 +63,8 @@ watch(
 				<Toggle v-else-if="f.type === 'toggle'" v-model="values[f.key]" />
 			</div>
 		</div>
+		<!-- {{ props.filters }}
+		{{ values }}  -->
 	</div>
 </template>
 

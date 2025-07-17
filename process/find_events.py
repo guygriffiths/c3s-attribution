@@ -121,7 +121,7 @@ class Eventlet:
             target_slice[:, 1] = np.where(
                 target_slice[:, 1] < 0, target_slice[:, 1] + 360, target_slice[:, 1]
             )
-            print(f"Shifted hull coords to handle wrapping: {target_slice[:, 1]}")
+            # print(f"Shifted hull coords to handle wrapping: {target_slice[:, 1]}")
         return MultiPoint(target_slice).convex_hull
 
     def overlaps(self, coords, eps=1e-6):
@@ -205,6 +205,7 @@ class EventletFactory:
         data,
         threshold,
         ref_data,
+        land_sea_mask=None,
         expiry_days=1,
         min_length=3,
         neighbor_radius=4.5,
@@ -214,6 +215,7 @@ class EventletFactory:
         self.data = data
         self.threshold = threshold
         self.ref_data = ref_data
+        self.land_sea_mask = land_sea_mask
         self.expiry_days = expiry_days
         self.min_length = min_length
         self.active = []
@@ -404,12 +406,38 @@ class EventletFactory:
                 for i in range(len(ev.slices))
             ]
         )
-        mean_value = to_serialisable(np.mean(ev.values.flat)) if mean_values else None
+        mean_value = to_serialisable(np.mean(np.concatenate(ev.values))) if mean_values else None
+
+        ocean_only = False
+        if self.land_sea_mask is not None:
+            # Check if all points in the event are over ocean
+            all_ocean = True
+            for i in range(len(ev.slices)):
+                if ev.hull(i) is not None:
+                    coords = np.array(ev.slices[i])
+                    lat_indices = np.searchsorted(self.land_sea_mask.latitude, coords[:, 0])
+                    lat_indices = np.clip(lat_indices, 0, self.land_sea_mask.latitude.size - 1)
+
+                    lon_indices = np.searchsorted(self.land_sea_mask.longitude, coords[:, 1])
+                    lon_indices = np.clip(lon_indices, 0, self.land_sea_mask.longitude.size - 1)
+
+                    # print(f"Indices for hull {i}: {lat_indices}, {lon_indices}, {self.land_sea_mask.values.shape}")
+                    mask_values = self.land_sea_mask.values[0, lat_indices, lon_indices]
+                    if not np.all(mask_values < 0):
+                        all_ocean = False
+                        break
+            ocean_only = all_ocean
+
+        if ocean_only:
+            print(f"Event {event_id} is ocean-only")
 
         full_event = {
             "id": event_id,
             "times": [formatTime(t) for t in all_times],
             "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
+            "total_region": get_region(
+                unary_union([ev.hull(i) for i in range(len(ev.slices)) if ev.hull(i)])
+            ),
             "slices": to_serialisable(ev.slices),
             "values": to_serialisable(ev.values),
             "centroids": to_serialisable(centroids),
@@ -433,6 +461,7 @@ class EventletFactory:
             "peak_value": peak_value,
             "mean_values": mean_values,
             "mean_value": mean_value,
+            "ocean_only": ocean_only,
         }
 
         catalogue_event = {
@@ -449,6 +478,7 @@ class EventletFactory:
                 else None
             ),
             "total_area": full_event["total_area"],
+            "ocean_only": ocean_only,
         }
 
         with open(f"{self.output_path}/events.jsonl", "a") as f:
@@ -516,15 +546,23 @@ def downstream_worker(q, clusterer):
         q.task_done()
 
 
-def load_data(data_path, ref_path):
+def load_data(data_path, ref_path, land_sea_mask_path):
     ds = xr.open_mfdataset(data_path)
     ref = xr.open_dataset(ref_path)
+    if land_sea_mask_path:
+        land_sea_mask = xr.open_dataset(land_sea_mask_path)
+    else:
+        land_sea_mask = None
 
     def shift_longitudes(da):
         da = da.assign_coords(longitude=(((da.longitude + 180) % 360) - 180))
         return da.sortby("longitude")
 
-    return shift_longitudes(ds["t2m"]), shift_longitudes(ref["t2m"])
+    return (
+        shift_longitudes(ds["t2m"]),
+        shift_longitudes(ref["t2m"]),
+        shift_longitudes(land_sea_mask["lsm"]) if land_sea_mask is not None else None,
+    )
 
 
 import os
@@ -534,7 +572,9 @@ def main():
 
     # for dbscan in [False, True]:
     #     for perc in [98, 99]:
-    data_var, ref_data = load_data("/data/era5_2024.nc", f"/data/era5_ref{98}.nc")
+    data_var, ref_data, land_sea_mask = load_data(
+        "/data/era5_20*.nc", f"/data/era5_ref{98}.nc", f"/data/era5_land_sea.nc"
+    )
     time_dim = data_var["valid_time"]
     out_path = f"/data/output"
     os.makedirs(out_path, exist_ok=True)
@@ -544,7 +584,8 @@ def main():
         data_var,
         threshold=273.15 + 30,
         ref_data=ref_data,
-        neighbor_radius=5,
+        land_sea_mask=land_sea_mask,
+        neighbor_radius=10,
         output_path=out_path,
         use_dbscan=False,
     )

@@ -87,7 +87,7 @@ const containerRef = ref<HTMLDivElement | null>(null)
 
 // const yearHeight = ref(96)
 const zoom = computed(() => props.selectedEvent || false)
-const rowsToShow = computed(() => (zoom.value ? 1 : 3))
+const rowsToShow = computed(() => (zoom.value ? 1 : 1))
 
 const totalDays = 366
 

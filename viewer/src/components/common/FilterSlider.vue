@@ -15,6 +15,10 @@ const props = defineProps({
 		type: Number,
 		default: 100,
 	},
+	step: {
+		type: Number,
+		default: 10	
+	}
 })
 
 const emit = defineEmits(['drag-start', 'drag-end'])
@@ -119,6 +123,7 @@ const backgroundStyle = computed(() => {
 					type="range"
 					:min="props.min"
 					:max="props.max"
+					:step="props.step"
 					:value="lowVal"
 					@mousedown="handleStart"
 					@touchstart="handleStart"
@@ -134,6 +139,7 @@ const backgroundStyle = computed(() => {
 					type="range"
 					:min="props.min"
 					:max="props.max"
+					:step="props.step"
 					:value="highVal"
 					@change="onHighChange"
 					@input="onHighInput"
