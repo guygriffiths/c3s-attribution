@@ -34,6 +34,7 @@ props.filters.forEach(({ key, type }) => {
 watch(
 	values,
 	() => {
+		console.log('Filter values changed:', values.value)
 		emit('update:modelValue', { ...values.value })
 	},
 	{ deep: true },

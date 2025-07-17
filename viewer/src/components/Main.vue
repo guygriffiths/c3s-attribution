@@ -9,13 +9,21 @@ import TimeReel from './TimeReel.vue'
 import { active } from 'd3'
 import EventGraphs from './EventGraphs.vue'
 import EventInfo from './EventInfo.vue'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import {
+	faChevronUp,
+	faAnglesUp,
+	faWandMagicSparkles,
+	faClose,
+	faChevronDown,
+} from '@fortawesome/free-solid-svg-icons'
 
 const $l = useLabels()
 const store = useStore()
 
 onMounted(async () => {})
 const toggleLabel = computed(() =>
-	store.timePanelExpanded ? $l.value.hideTimePanel : $l.value.showTimePanel,
+	store.timePanelVisible ? $l.value.hideTimePanel : $l.value.showTimePanel,
 )
 </script>
 
@@ -24,9 +32,9 @@ const toggleLabel = computed(() =>
 		<Map id="map"></Map>
 		<Panel
 			id="time-panel"
-			:active="store.timePanelExpanded"
+			:active="store.timePanelVisible || store.eventSelected"
 			class="bottom peek"
-			:class="{ side: store.eventSelected }"
+			:class="{ side: store.eventSelected, expanded: store.timePanelExpanded }"
 		>
 			<TimeReel
 				id="times"
@@ -37,10 +45,43 @@ const toggleLabel = computed(() =>
 				v-model="store.selectedTime"
 				:changing-filter="store.draggingFilter"
 				@event-selected="store.selectEvent"
+				:exploring="store.timePanelExpanded"
 			></TimeReel>
+			<button
+				class="panel-hide"
+				@click="
+					store.timePanelVisible = !store.timePanelVisible;
+					if (!store.timePanelVisible) store.timePanelExpanded = false
+				"
+				v-show="!store.eventSelected"
+			>
+				<font-awesome-icon
+					:icon="!store.timePanelExpanded ? faChevronUp : faAnglesUp"
+					:class="{ 'fa-rotate-180': store.timePanelVisible }"
+				/>
+			</button>
+			<button
+				v-if="store.timePanelVisible"
+				class="panel-expand"
+				@click="
+					store.timePanelExpanded = !store.timePanelExpanded;
+					if (store.timePanelExpanded) store.timePanelVisible = true
+				"
+				v-show="!store.eventSelected"
+			>
+				<font-awesome-icon
+					:icon="!store.timePanelExpanded ? faWandMagicSparkles : faChevronDown"
+				/>
+			</button>
 		</Panel>
 		<Panel id="event-frame-panel" class="top" :active="store.eventSelected">
 			<div id="event-frame">
+				<button
+					class="explore-button"
+					@click="console.log('explore local events')"
+				>
+					<font-awesome-icon :icon="faWandMagicSparkles" />
+				</button>
 				<div class="decor"></div>
 			</div>
 			<EventInfo
@@ -49,7 +90,24 @@ const toggleLabel = computed(() =>
 			></EventInfo>
 		</Panel>
 		<Panel id="event-panel" class="top" :active="store.eventSelected">
-			<!-- <button @click="store.selectEvent(null)" class="panel-toggle">x</button> -->
+			<button
+				class="explore-button"
+				@click="console.log('explore local events')"
+			>
+				<font-awesome-icon :icon="faWandMagicSparkles" />
+			</button>
+			<button
+				class="explore-button middle"
+				@click="console.log('explore local events')"
+			>
+				<font-awesome-icon :icon="faWandMagicSparkles" />
+			</button>
+			<button
+				class="explore-button bottom"
+				@click="console.log('explore local events')"
+			>
+				<font-awesome-icon :icon="faWandMagicSparkles" />
+			</button>
 			<EventGraphs
 				:selected-event="store.selectedEvent"
 				:time="store.selectedTime"
@@ -92,6 +150,22 @@ const toggleLabel = computed(() =>
 		top: -20px;
 		z-index: 20;
 	}
+	.panel-expand,
+	.panel-hide {
+		position: absolute;
+		right: 0;
+		top: -0.5rem;
+		z-index: 20;
+		border: none;
+		background-color: transparent;
+		color: $textColor;
+		&:hover {
+			color: $c3sred;
+		}
+	}
+	.panel-expand {
+		right: 1.2rem;
+	}
 	.panel-sideline {
 		position: absolute;
 		left: -20px;
@@ -103,7 +177,11 @@ const toggleLabel = computed(() =>
 		left: 1.5rem;
 		right: 1.5rem;
 		bottom: 1.5rem;
-		height: 15%;
+		height: 20%;
+		&.expanded {
+			height: 75%;
+		}
+
 		z-index: 20;
 
 		transition: all $animTime linear;

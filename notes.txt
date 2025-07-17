@@ -27,7 +27,16 @@ TODO at some point:
 * Explore by (event) - similar events?
 * Explore by similar time
 
+Nah. Explore is like this:
+* Timeline - expand timeline
+* Event view - lock view, show all events within this region
+* Global view - show heatmap of global events. Click/move a marker - see all events at that pixel
+* Graph views - open the full explore view, with the selected variable highlighted. This will explore "similar" events, or rather all events in some 2d(?) space(s) perhaps centred/zoomed on the current event
+
+
 
 What info do we return for a selected location?
+What about background when exploring event? What is useful? Don't say "the mean over the period of the event". Also what about backgrounds in general.
+
 
 

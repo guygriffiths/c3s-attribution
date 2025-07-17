@@ -21,6 +21,8 @@ import gridpointIconImg from '@/assets/img/gridpoint-icon.png'
 import { differenceInDays } from 'date-fns'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import FilterPanel from './FilterPanel.vue'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { faFilter, faClose } from '@fortawesome/free-solid-svg-icons'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
@@ -52,7 +54,7 @@ watch(
 	() => store.isoDatetime,
 	(newVal) => {
 		debounce(() => {
-			console.warn('Do not forget to uncomment this')
+			console.warn('Do not forget to recomment this')
 			// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
 		}, 500)
 	},
@@ -186,13 +188,26 @@ const getOpacity = (stepsFromNow: number) => {
 				:lat-lngs="region"
 				:weight="0"
 				:fill="true"
-				:fill-opacity="getOpacity(Math.abs(differenceInDays(store.selectedTime, store.selectedEvent.times[idx])))"
+				:fill-opacity="
+					getOpacity(
+						Math.abs(
+							differenceInDays(
+								store.selectedTime,
+								store.selectedEvent.times[idx],
+							),
+						),
+					)
+				"
 				:color="catScheme[store.selectedEvent.id % catScheme.length]"
 				@click="selectEvent(store.selectedEvent.id)"
 			>
 			</LPolygon>
-			<LControl position="topright">
+			<LControl position="topright" class="filter-container">
+				<button @click="store.filtersExpanded = !store.filtersExpanded">
+					<FontAwesomeIcon :icon="store.filtersExpanded ? faClose : faFilter" />
+				</button>
 				<FilterPanel
+					v-show="store.filtersExpanded"
 					v-model="store.filters"
 					class="filter panel"
 					:filters="[
@@ -335,6 +350,25 @@ const getOpacity = (stepsFromNow: number) => {
 .map {
 	width: 100%;
 	height: 100%;
+
+	.filter-container {
+		position: relative;
+		button {
+			position: absolute;
+			top: 0;
+			right: 0;
+			z-index: 100;
+			background-color: $bgContrast;
+			color: $textColor;
+			border: none;
+			padding: 0.5rem 1rem;
+			cursor: pointer;
+			transition: background-color $animTime ease-in-out;
+			&:hover {
+				background-color: $bg;
+			}
+		}
+	}
 
 	.filter-panel {
 		padding: 1rem;

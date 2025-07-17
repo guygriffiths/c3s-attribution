@@ -43,9 +43,11 @@ interface State {
 	events: Event[]
 	selectedEvent?: FullEvent | null
 
-	timePanelExpanded: boolean
-
+	// TODO Split into a separate UI store?
 	selectedModel?: string
+	timePanelVisible: boolean
+	timePanelExpanded: boolean
+	filtersExpanded: boolean
 	filters: {
 		duration: number
 		intensity: number
@@ -74,8 +76,11 @@ export const useStore = defineStore('main', {
 			endTime: new Date(),
 			events: [],
 			selectedEvent: null,
-			timePanelExpanded: true,
+
+			timePanelExpanded: false,
+			timePanelVisible: true,
 			selectedModel: undefined, // This can be set to a model name to load events from a specific model
+			filtersExpanded: false,
 			filters: {
 				duration: 3,
 				intensity: 0,
@@ -108,9 +113,9 @@ export const useStore = defineStore('main', {
 					return false
 				}
 				// Check duration filter
-				const duration = differenceInDays(event.times[event.times.length - 1] - event.times[0])
+				const duration = differenceInDays(event.times[event.times.length - 1], event.times[0])
 				if (duration < state.filters.duration) {
-					console.log('Skipping short event:', event)
+					// console.log('Skipping short event:', event)
 					return false
 				}
 				// Check intensity filter
@@ -166,7 +171,6 @@ export const useStore = defineStore('main', {
 				if(this.selectedTime < event.times[0] || this.selectedTime > event.times[event.times.length - 1]) {
 					this.selectedTime = new Date(event.times[0])
 				}
-				this.timePanelExpanded = true
 				this.setLoadingDone()
 			}
 		},

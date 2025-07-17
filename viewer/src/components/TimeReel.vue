@@ -40,6 +40,7 @@ const props = defineProps({
 	events: { type: Array<WeatherEvent>, default: () => [] as WeatherEvent[] },
 	selectedEvent: { type: Object as () => WeatherEvent | null, default: null },
 	changingFilter: { type: Boolean, default: false },
+	exploring: { type: Boolean, default: false },
 })
 
 const model: Ref<Date> = defineModel({
@@ -86,8 +87,12 @@ const needleRef = ref<HTMLDivElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 
 // const yearHeight = ref(96)
-const zoom = computed(() => props.selectedEvent || false)
-const rowsToShow = computed(() => (zoom.value ? 1 : 1))
+const zoom = computed(() => props.selectedEvent !== null)
+const rowsToShow = computed(() => {
+	if (zoom.value) return 1
+	if (props.exploring) return 5
+	return 1
+})
 
 const totalDays = 366
 
@@ -158,7 +163,7 @@ const populateEvents = () => {
 
 const eventIsSelected = (event: { id?: number }) =>
 	event.id === props.selectedEvent?.id
-const eventHeight = computed(() => 0.5 / maxSimultaneousEvents.value)
+const eventHeight = computed(() => (props.selectedEvent !== null ? 0.5 : 0.8) / maxSimultaneousEvents.value)
 const isYearVisible = (year: number) => Math.abs(selectedYear.value - year) <= 2
 
 import { debounce } from '@/lib/utils'
@@ -422,6 +427,11 @@ onMounted(() => {
 		window.removeEventListener('keydown', handleKey)
 	})
 })
+
+const topBottomRowFlex = computed(
+	() => `0 0 calc(0.5 * (100% - (100% / ${rowsToShow.value})))`,
+)
+const highlightRowFlex = computed(() => `0 0 calc(100% / ${rowsToShow.value})`)
 </script>
 
 <template>
@@ -505,13 +515,17 @@ onMounted(() => {
 		<div class="year-highlights">
 			<div
 				class="highlight-row fade-top"
-				:class="{ zoom: zoom }"
-				:style="`flex: 0 0 calc( 0.5 * ( 100% - ( 100% / ${rowsToShow} ) )`"
+				:class="{ exploring: props.exploring }"
+				:style="`flex: ${topBottomRowFlex};`"
 			></div>
 			<div
 				class="highlight-row highlight"
-				:style="`flex: 0 0 calc(100% / ${rowsToShow});`"
+				:style="`flex: ${highlightRowFlex};`"
+				:class="{ exploring: props.exploring }"
 			>
+				<h2 class="year-label">
+					{{ selectedYear }}
+				</h2>
 				<div
 					class="needle"
 					ref="needleRef"
@@ -538,6 +552,7 @@ onMounted(() => {
 			</div>
 			<div
 				class="highlight-row fade-bottom"
+				:class="{ exploring: props.exploring }"
 				:style="`flex: 0 0 calc( 0.5 * ( 100% - ( 100% / ${rowsToShow} ) )`"
 			></div>
 		</div>
@@ -619,7 +634,8 @@ $margin: 0 0;
 		stroke-width: 2;
 	}
 	.selected-event-fx-enter-active {
-		transition: stroke-width 0s ease-out calc($animTime + $settleTime + var(--i) * 20ms),
+		transition:
+			stroke-width 0s ease-out calc($animTime + $settleTime + var(--i) * 20ms),
 			opacity 0s ease-out calc($animTime + $settleTime);
 	}
 
@@ -637,7 +653,7 @@ $margin: 0 0;
 		// 	opacity $animTime linear $settleTime;
 		transition:
 			transform 0s ease-in-out,
-		    stroke-width 0s ease-out calc(var(--i) * 20ms),
+			stroke-width 0s ease-out calc(var(--i) * 20ms),
 			opacity 0s ease-out $settleTime;
 	}
 }
@@ -662,6 +678,13 @@ $margin: 0 0;
 	.highlight-row {
 		transition: all $animTime ease-in-out;
 		overflow: hidden;
+
+		.year-label {
+			position: absolute;
+			text-align: center;
+			margin: 0.5rem;
+		}
+
 		&.fade-top {
 			pointer-events: none;
 			background: linear-gradient(
@@ -669,6 +692,13 @@ $margin: 0 0;
 				rgba($fadeColor, 0.3),
 				rgba($fadeColor, 1)
 			);
+			&.exploring {
+				background: linear-gradient(
+					to top,
+					rgba($fadeColor, 0.1),
+					rgba($fadeColor, 0.5)
+				);
+			}
 		}
 		&.fade-bottom {
 			pointer-events: none;
@@ -677,6 +707,13 @@ $margin: 0 0;
 				rgba($fadeColor, 0.3),
 				rgba($fadeColor, 1)
 			);
+			&.exploring {
+				background: linear-gradient(
+					to top,
+					rgba($fadeColor, 0.5),
+					rgba($fadeColor, 0.1)
+				);
+			}
 		}
 		&.highlight {
 			position: relative;
@@ -686,6 +723,9 @@ $margin: 0 0;
 			align-items: stretch;
 			color: #aaaaaa;
 			box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+			&.exploring {
+				box-shadow: 0 0 5px rgba($fadeColor, 0.5);
+			}
 			pointer-events: none;
 			.needle {
 				pointer-events: all;

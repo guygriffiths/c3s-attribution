@@ -92,7 +92,7 @@ const getBackgroundColor = (isEven: boolean) => {
 					:y="0"
 					:width="xScale.bandwidth()"
 					:height="height * 3"
-					:opacity="i % 2 === 0 ? 0.1 : 0.05"
+					:opacity="i % 2 === 0 ? 0.075 : 0.05"
 					:fill="props.selectedEvent?.color || '#f0f0f0'"
 					@click="emits('dateSelected', day)"
 				/>

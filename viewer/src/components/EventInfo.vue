@@ -6,7 +6,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 const props = defineProps({
   selectedEvent: {
     type: Object,
-    required: true
+    required: false
   }
 })
 
