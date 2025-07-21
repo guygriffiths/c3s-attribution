@@ -8,7 +8,7 @@ import {
 	LControlScale,
 	LControlZoom,
 	LWmsTileLayer,
-	LCircleMarker,
+	LGridLayer,
 	LMarker,
 	LPopup,
 	LPolygon,
@@ -23,6 +23,7 @@ import scssVars from '@/assets/styles/scssVars.module.scss'
 import FilterPanel from './FilterPanel.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faFilter, faClose } from '@fortawesome/free-solid-svg-icons'
+import EventHeatmap from './util/EventHeatmap.vue'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
@@ -116,6 +117,49 @@ const selectEvent = (id: number) => {
 	store.selectEvent(id)
 }
 
+const getDataForTile = (coords: {
+	x: number
+	y: number
+	z: number
+}): number[][] => {
+	const data = []
+	for (let y = 0; y < 256; y++) {
+		const row = []
+		for (let x = 0; x < 256; x++) {
+			row.push(Math.random()) // replace with real data
+		}
+		data.push(row)
+	}
+	return data
+}
+
+function getColorForValue(val: number): string {
+	const v = Math.floor(val * 255)
+	return `rgb(${v},${v},${255 - v})`
+}
+
+function createTileFn(coords: any, done: any) {
+	console.log('Creating tile for coords:', coords)
+	return
+	const canvas = document.createElement('canvas')
+	canvas.width = canvas.height = 256
+	const ctx = canvas.getContext('2d')!
+
+	const data = getDataForTile(coords)
+	console.log('Creating tile for coords:', coords, 'with data:', data)
+
+	for (let y = 0; y < 256; y++) {
+		for (let x = 0; x < 256; x++) {
+			const val = data[y][x]
+			ctx.fillStyle = getColorForValue(val)
+			ctx.fillRect(x, y, 1, 1)
+		}
+	}
+
+	done(null, canvas)
+	return canvas
+}
+
 const markerIcon = icon({
 	iconUrl: markerIconImg, // or a URL string
 	iconSize: [25, 41], // width and height
@@ -138,6 +182,59 @@ const getOpacity = (stepsFromNow: number) => {
 	}
 	return Math.max(opacity, 0.01)
 }
+
+import { h, onMounted, ref } from 'vue'
+
+function renderEventTile(props) {
+  const canvas = document.createElement('canvas')
+  canvas.width = props.size
+  canvas.height = props.size
+  const ctx = canvas.getContext('2d')
+
+  // Example: props.dataValues is a 2D array or flat array of pixel values
+  // You may want to map these to pixel positions and colors
+  const dataValues = props.dataValues || []
+
+  // Example color scale function
+  function getColor(val) {
+    // simple blue-red scale (val normalized 0-1)
+    const r = Math.floor(255 * val)
+    const b = 255 - r
+    return `rgb(${r},0,${b})`
+  }
+
+  // Here assume dataValues is a flat array for this tile, size^2 length
+  // You’d want to map dataValues to the right pixels within the tile.
+  // For demo, just draw a pixel per data point:
+  const pixelSize = 4 // size of each pixel rectangle inside tile
+  const pixelsPerRow = props.size / pixelSize
+
+  for (let i = 0; i < dataValues.length; i++) {
+    const val = dataValues[i]
+    const x = (i % pixelsPerRow) * pixelSize
+    const y = Math.floor(i / pixelsPerRow) * pixelSize
+    ctx.fillStyle = getColor(val)
+    ctx.fillRect(x, y, pixelSize, pixelSize)
+  }
+
+  // Return VNode wrapping the canvas element, positioned absolutely
+  return h('canvas', {
+    ref: el => {
+      if (el) {
+        // Replace DOM node content with our canvas to ensure Leaflet uses the right element
+        el.replaceWith(canvas)
+      }
+    },
+    style: {
+      width: `${props.size}px`,
+      height: `${props.size}px`,
+      position: 'absolute',
+      top: '0',
+      left: '0',
+    }
+  })
+}
+
 </script>
 
 <template>
@@ -162,6 +259,10 @@ const getOpacity = (stepsFromNow: number) => {
 
 			<!-- <l-marker :lat-lng="[51.437576, -0.941099]" :icon="markerIcon" /> -->
 			<LTileLayer :url="wmtsUrl" :zIndex="2" :opacity="0.75"></LTileLayer>
+			<LGridLayer :tileSize="256" :child-render="renderEventTile" :dataValues="store.selectedEvent?.slices[
+					differenceInDays(store.selectedTime, store.selectedEvent?.times[0]) || 0
+				]">
+			</LGridLayer>
 			<LMarker
 				v-for="point in store.selectedEvent?.slices[
 					differenceInDays(store.selectedTime, store.selectedEvent?.times[0]) ||

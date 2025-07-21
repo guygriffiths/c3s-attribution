@@ -3,8 +3,8 @@ import { ref, watch } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faFilter } from '@fortawesome/free-solid-svg-icons'
 
-import Toggle from './common/Toggle.vue'
-import FilterSlider from './common/FilterSlider.vue'
+import Toggle from './util/Toggle.vue'
+import FilterSlider from './util/FilterSlider.vue'
 import { useLabels } from '@/lib/labels'
 
 const $l = useLabels()

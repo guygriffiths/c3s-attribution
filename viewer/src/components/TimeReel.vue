@@ -163,7 +163,7 @@ const populateEvents = () => {
 
 const eventIsSelected = (event: { id?: number }) =>
 	event.id === props.selectedEvent?.id
-const eventHeight = computed(() => (props.selectedEvent !== null ? 0.5 : 0.8) / maxSimultaneousEvents.value)
+const eventHeight = computed(() => (props.selectedEvent !== null ? 1 : 0.8) / maxSimultaneousEvents.value)
 const isYearVisible = (year: number) => Math.abs(selectedYear.value - year) <= 2
 
 import { debounce } from '@/lib/utils'

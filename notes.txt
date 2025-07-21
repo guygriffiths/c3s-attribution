@@ -1,38 +1,31 @@
-
-Let's do this:
-* Click on event to select it
-* Zoom to a nice event view, framing event in a map hole
-* Zoom on the timeline at the same time
-
-
-Issues:
-* Map scroll wraps but events don't
-
-
-TODO at some point:
+General
 * Get docker working properly with UID/GID
-* Use a land-sea mask to mark events which are land-only/sea-only
-* Split event into individual days (easy? very easy?) when zoomed for time axis
+* Set up cron job to download latest data and extract events. Split events into historical.jsonl and current.jsonl?
+
+
+Event Generation
+* Run full generation on Bertha
+
+
+
+Web Explorer
+* EventGraphs:
+    - 
 * Colour events by chooser
-* Settings? Show help, unlock things, etc?
-* Big filter. Filter should be an important part - we should have too many events by default, and filter them sensibly to start with
+    - area
     - intensity
-    - size
-    - duration
-    - area affected
-* As the timeline zooms to become the event info axis, fly a polygon from each (non-selected) day to overlap? But perhaps try and show the whole event, or the event's progression
-* It was really hot that day, for ages, why am I not a heatwave? Do it by saving all eventlets in a backup database, sorted by pixel id? It's a big filesystem, but probably not unmanageably so. Certainly not if stored by row OR column
-
-* Explore by geo - point location. See all events ever at this pixel.
-* Explore by (event) - similar events?
-* Explore by similar time
-
-Nah. Explore is like this:
-* Timeline - expand timeline
+    - ?
+* TimeReel
+    - Get the TimeReel expanding nicely to full-screen.
+    - Nicer transitions
 * Event view - lock view, show all events within this region
 * Global view - show heatmap of global events. Click/move a marker - see all events at that pixel
 * Graph views - open the full explore view, with the selected variable highlighted. This will explore "similar" events, or rather all events in some 2d(?) space(s) perhaps centred/zoomed on the current event
+    
 
+Questions
+
+* It was really hot that day, for ages, why am I not a heatwave? Do it by saving all eventlets in a backup database, sorted by pixel id? It's a big filesystem, but probably not unmanageably so. Certainly not if stored by row OR column
 
 
 What info do we return for a selected location?
