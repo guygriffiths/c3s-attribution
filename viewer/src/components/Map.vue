@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import 'leaflet/dist/leaflet.css'
-import { computed, ref, Ref, watch } from 'vue'
+import { onMounted, h, ref, Ref, watch } from 'vue'
 import {
 	LMap,
 	LTileLayer,
@@ -9,25 +9,24 @@ import {
 	LControlZoom,
 	LWmsTileLayer,
 	LGridLayer,
-	LMarker,
-	LPopup,
 	LPolygon,
+	LGeoJson,
 } from '@vue-leaflet/vue-leaflet'
-import { LatLng, LatLngBounds, Map, Point, icon } from 'leaflet'
+import { LatLng, LatLngBounds, Point } from 'leaflet'
+import { Map as LeafletMap } from 'leaflet'
 import { T2M_LAYER, useStore, WMS_ROOT, catScheme } from '@/store/store'
 import { debounce } from '@/lib/utils'
-import markerIconImg from '@/assets/img/marker-icon-2x-c3sred.png'
-import gridpointIconImg from '@/assets/img/gridpoint-icon.png'
 import { differenceInDays } from 'date-fns'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import FilterPanel from './FilterPanel.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faFilter, faClose } from '@fortawesome/free-solid-svg-icons'
-import EventHeatmap from './util/EventHeatmap.vue'
+import L from 'leaflet'
+import * as d3 from 'd3'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
-const wmsRef = ref<InstanceType<typeof LWmsTileLayer> | null>(null)
+const eventHeatmapRef = ref<InstanceType<typeof LGridLayer> | null>(null)
 
 const mapOptions = {
 	zoomControl: false,
@@ -53,7 +52,7 @@ const wmtsUrl = ref(
 
 watch(
 	() => store.isoDatetime,
-	(newVal) => {
+	() => {
 		debounce(() => {
 			console.warn('Do not forget to recomment this')
 			// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
@@ -65,8 +64,7 @@ watch(
 	() => store.selectedEvent,
 	(newVal) => {
 		if (newVal && mapRef.value) {
-			const map: Map = mapRef.value.leafletObject as Map
-			// console.log('fitting bounds', newVal.bbox, newVal.regions)
+			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
 			try {
 				// TODO - 32px is hardcoded padding, yuck
 				map.fitBounds(
@@ -88,6 +86,25 @@ watch(
 			} catch (e) {
 				console.error('Error fitting bounds:', e)
 			}
+		}
+	},
+)
+
+watch(
+	() => store.wrafRegion,
+	(newVal) => {
+		if (newVal === 'none') {
+			store.regionsToSelectBy = undefined
+		} else {
+			fetch(`/regions/region-${newVal}.geojson`)
+				.then((response) => response.json())
+				.then((data: GeoJSON.FeatureCollection) => {
+					store.regionsToSelectBy = data
+					console.log('Regions to select by:', store.regionsToSelectBy)
+				})
+				.catch((error) => {
+					console.error('Error fetching regions:', error)
+				})
 		}
 	},
 )
@@ -133,108 +150,163 @@ const getDataForTile = (coords: {
 	return data
 }
 
-function getColorForValue(val: number): string {
-	const v = Math.floor(val * 255)
-	return `rgb(${v},${v},${255 - v})`
-}
-
-function createTileFn(coords: any, done: any) {
-	console.log('Creating tile for coords:', coords)
-	return
-	const canvas = document.createElement('canvas')
-	canvas.width = canvas.height = 256
-	const ctx = canvas.getContext('2d')!
-
-	const data = getDataForTile(coords)
-	console.log('Creating tile for coords:', coords, 'with data:', data)
-
-	for (let y = 0; y < 256; y++) {
-		for (let x = 0; x < 256; x++) {
-			const val = data[y][x]
-			ctx.fillStyle = getColorForValue(val)
-			ctx.fillRect(x, y, 1, 1)
-		}
-	}
-
-	done(null, canvas)
-	return canvas
-}
-
-const markerIcon = icon({
-	iconUrl: markerIconImg, // or a URL string
-	iconSize: [25, 41], // width and height
-	iconAnchor: [13, 41], // point of the icon which will correspond to marker's location
-	popupAnchor: [0, -41], // point from which the popup should open
-})
-const gridpointIcon = icon({
-	iconUrl: gridpointIconImg, // or a URL string
-	iconSize: [7, 7], // width and height
-	iconAnchor: [4, 4], // point of the icon which will correspond to marker's location
-	popupAnchor: [4, 4], // point from which the popup should open
-})
-
 const getOpacity = (stepsFromNow: number) => {
+	if (stepsFromNow === 0) {
+		return 1
+	}
 	// const stepsFromNow = Math.abs(differenceInDays(store.selectedTime, store.selectedEvent.times[idx]))
 	const maxSteps = 6
-	const opacity = 0.5 - (1 * stepsFromNow) / maxSteps
+	const opacity = 0.5 - (0.5 * stepsFromNow) / maxSteps
 	if (stepsFromNow > maxSteps) {
 		return 0
 	}
 	return Math.max(opacity, 0.01)
 }
 
-import { h, onMounted, ref } from 'vue'
+const TILE_SIZE = 256
+watch(
+	() => store.selectedTime,
+	() => {
+		if (eventHeatmapRef.value && eventHeatmapRef.value.leafletObject) {
+			eventHeatmapRef.value.leafletObject.redraw()
+		}
+	},
+)
 
-function renderEventTile(props) {
-  const canvas = document.createElement('canvas')
-  canvas.width = props.size
-  canvas.height = props.size
-  const ctx = canvas.getContext('2d')
+const tileGeometryCache = new Map()
+const LL_STEP = 0.25
 
-  // Example: props.dataValues is a 2D array or flat array of pixel values
-  // You may want to map these to pixel positions and colors
-  const dataValues = props.dataValues || []
+const snap025 = (n: number) => Math.round(n * 4) / 4
+const EPS = 1e-9
 
-  // Example color scale function
-  function getColor(val) {
-    // simple blue-red scale (val normalized 0-1)
-    const r = Math.floor(255 * val)
-    const b = 255 - r
-    return `rgb(${r},0,${b})`
-  }
+const getTileGeometry = (
+	coords: { x: number; y: number; z: number },
+	leafletObj: any,
+) => {
+	const key = `${coords.z}-${coords.x}-${coords.y}`
+	if (tileGeometryCache.has(key)) return tileGeometryCache.get(key)
 
-  // Here assume dataValues is a flat array for this tile, size^2 length
-  // You’d want to map dataValues to the right pixels within the tile.
-  // For demo, just draw a pixel per data point:
-  const pixelSize = 4 // size of each pixel rectangle inside tile
-  const pixelsPerRow = props.size / pixelSize
+	const bounds = leafletObj._tileCoordsToBounds(coords)
+	const map = leafletObj._map
+	const z = coords.z
+	const originX = coords.x * TILE_SIZE
+	const originY = coords.y * TILE_SIZE
+	const step = LL_STEP
 
-  for (let i = 0; i < dataValues.length; i++) {
-    const val = dataValues[i]
-    const x = (i % pixelsPerRow) * pixelSize
-    const y = Math.floor(i / pixelsPerRow) * pixelSize
-    ctx.fillStyle = getColor(val)
-    ctx.fillRect(x, y, pixelSize, pixelSize)
-  }
+	const latValues = []
+	for (
+		let lat = bounds.getSouth() - step;
+		lat <= bounds.getNorth() + step;
+		lat += step
+	) {
+		latValues.push(snap025(lat))
+	}
+	const lonValues = []
+	for (
+		let lon = bounds.getWest() - step;
+		lon <= bounds.getEast() + step;
+		lon += step
+	) {
+		lonValues.push(snap025(lon))
+	}
 
-  // Return VNode wrapping the canvas element, positioned absolutely
-  return h('canvas', {
-    ref: el => {
-      if (el) {
-        // Replace DOM node content with our canvas to ensure Leaflet uses the right element
-        el.replaceWith(canvas)
-      }
-    },
-    style: {
-      width: `${props.size}px`,
-      height: `${props.size}px`,
-      position: 'absolute',
-      top: '0',
-      left: '0',
-    }
-  })
+	// Calculate consistent width/height for tiles
+	const w = Math.ceil(
+		map.project(L.latLng(latValues[0], lonValues[1]), z).x -
+			map.project(L.latLng(latValues[0], lonValues[0]), z).x,
+	)
+	const h = Math.ceil(
+		map.project(L.latLng(latValues[0], lonValues[0]), z).y -
+			map.project(L.latLng(latValues[1], lonValues[0]), z).y,
+	)
+	const wAdjusted = w + 1
+	const hAdjusted = h + 1
+
+	const geometry = new Array(latValues.length * lonValues.length)
+	let index = 0
+
+	for (const lat of latValues) {
+		for (const lon of lonValues) {
+			const point = map.project(L.latLng(lat, lon), z)
+			const x = Math.floor(point.x - originX)
+			const y = Math.floor(point.y - originY)
+			// if (x < 0 || x > TILE_SIZE - 1 || y < 0 || y > TILE_SIZE - 1) {
+			// 	geometry[index++] = null
+			// } else {
+			geometry[index++] = {
+				x: x - Math.floor(wAdjusted / 2),
+				y: y - Math.floor(hAdjusted / 2),
+				w: wAdjusted,
+				h: hAdjusted,
+			}
+			// }
+		}
+	}
+	const latMap = new Map(latValues.map((v, i) => [v.toFixed(3), i]))
+	const lonMap = new Map(lonValues.map((v, i) => [v.toFixed(3), i]))
+
+	const geomFunc = (lat: number, lon: number) => {
+		const latIndex = latMap.get(snap025(lat).toFixed(3))
+		const lonIndex = lonMap.get(snap025(lon).toFixed(3))
+		if (latIndex == null || lonIndex == null) return null
+		return geometry[latIndex * lonValues.length + lonIndex]
+	}
+
+	tileGeometryCache.set(key, geomFunc)
+	return geomFunc
 }
 
+const getColor = (val: number) => {
+	const cScale = d3.scaleLinear().domain([300, 320]).range([0, 1]).clamp(true)
+	return d3.interpolateTurbo(cScale(val))
+}
+
+const renderEventTile = (props: any) => () => {
+	const canvas = document.createElement('canvas')
+	canvas.width = TILE_SIZE
+	canvas.height = TILE_SIZE
+	const layer = eventHeatmapRef.value
+	if (layer?.leafletObject !== undefined) {
+		const ctx = canvas.getContext('2d')
+		if (!ctx) {
+			console.error('Failed to get canvas context')
+			return h('div', 'Error rendering tile')
+		}
+
+		const selectedIndex =
+			differenceInDays(store.selectedTime, store.selectedEvent?.times[0]!) || 0
+		const latLonValues = store.selectedEvent?.slices[selectedIndex] || []
+		const dataValues = store.selectedEvent?.values[selectedIndex] || []
+
+		const geometry = getTileGeometry(props.coords, layer.leafletObject)
+
+		for (let i = 0; i < latLonValues.length; i++) {
+			const latLon = latLonValues[i]
+			const dataValue = dataValues[i]
+			if (dataValue === undefined) continue
+
+			const geom = geometry(latLon[0], latLon[1])
+			if (!geom) continue
+
+			const color = getColor(dataValue)
+			ctx.fillStyle = color
+			ctx.fillRect(geom.x, geom.y, geom.w, geom.h)
+		}
+	} else {
+		console.warn('Layer not ready yet')
+		return h('div', 'Loading...')
+	}
+
+	return h('canvas', {
+		width: TILE_SIZE,
+		height: TILE_SIZE,
+		ref: (el) => {
+			if (el && el !== canvas) {
+				el.replaceWith(canvas)
+			}
+		},
+	})
+}
 </script>
 
 <template>
@@ -257,21 +329,31 @@ function renderEventTile(props) {
 				:zIndex="1"
 			></LTileLayer>
 
-			<!-- <l-marker :lat-lng="[51.437576, -0.941099]" :icon="markerIcon" /> -->
-			<LTileLayer :url="wmtsUrl" :zIndex="2" :opacity="0.75"></LTileLayer>
-			<LGridLayer :tileSize="256" :child-render="renderEventTile" :dataValues="store.selectedEvent?.slices[
-					differenceInDays(store.selectedTime, store.selectedEvent?.times[0]) || 0
-				]">
-			</LGridLayer>
-			<LMarker
-				v-for="point in store.selectedEvent?.slices[
-					differenceInDays(store.selectedTime, store.selectedEvent?.times[0]) ||
-						0
-				]"
-				:lat-lng="point"
-				:icon="gridpointIcon"
+			<LTileLayer
+				class="bg-map"
+				:url="wmtsUrl"
+				:zIndex="2"
+				:opacity="0.75"
+			></LTileLayer>
+			<LGridLayer
+				ref="eventHeatmapRef"
+				class="event-heatmap"
+				:tileSize="TILE_SIZE"
+				:child-render="renderEventTile"
+				pane="overlayPane"
 			>
-			</LMarker>
+			</LGridLayer>
+			<LGeoJson
+				v-if="store.regionsToSelectBy"
+				:geojson="store.regionsToSelectBy"
+				:options-style="{
+					// @ts-ignore
+					className: 'region-select',
+				}"
+				class="region-select"
+				@click="(e) => console.log('Region clicked', e)"
+			>
+			</LGeoJson>
 			<LPolygon
 				v-for="(event, idx) in store.currentEvents"
 				:key="event.id"
@@ -287,20 +369,22 @@ function renderEventTile(props) {
 				v-for="(region, idx) in store.selectedEvent?.regions"
 				:key="idx"
 				:lat-lngs="region"
-				:weight="0"
-				:fill="true"
-				:fill-opacity="
-					getOpacity(
-						Math.abs(
-							differenceInDays(
-								store.selectedTime,
-								store.selectedEvent.times[idx],
-							),
-						),
-					)
+				:weight="1"
+				:fill="false"
+				:opacity="
+					store.selectedEvent
+						? getOpacity(
+								Math.abs(
+									differenceInDays(
+										store.selectedTime,
+										store.selectedEvent.times[idx],
+									),
+								),
+							)
+						: 0
 				"
-				:color="catScheme[store.selectedEvent.id % catScheme.length]"
-				@click="selectEvent(store.selectedEvent.id)"
+				:color="catScheme[store.selectedEvent?.id! % catScheme.length]"
+				@click="selectEvent(store.selectedEvent?.id!)"
 			>
 			</LPolygon>
 			<LControl position="topright" class="filter-container">
@@ -433,6 +517,22 @@ function renderEventTile(props) {
 					</select>
 				</div> -->
 			</LControl>
+			<LControl
+				:max-width="200"
+				:metric="true"
+				:imperial="false"
+				position="topleft"
+				class="map-scale"
+			>
+				<select name="wraf-region" v-model="store.wrafRegion">
+					<option value="none">None</option>
+					<option value="wraf-01">WRAF 0.1 Mm²</option>
+					<option value="wraf-05">WRAF 0.5 Mm²</option>
+					<option value="wraf-2">WRAF 2 Mm²</option>
+					<option value="wraf-5">WRAF 5 Mm²</option>
+					<option value="wraf-10">WRAF 10 Mm²</option>
+				</select></LControl
+			>
 			<LControlScale
 				:max-width="200"
 				:metric="true"
@@ -473,6 +573,17 @@ function renderEventTile(props) {
 
 	.filter-panel {
 		padding: 1rem;
+	}
+
+	:deep(.region-select) {
+		stroke: rgb(0.25, 0.25, 0.25);
+		stroke-width: 1px;
+		fill: rgba(0, 0, 0, 0.4);
+		cursor: pointer;
+		&:hover {
+			fill: rgba(0, 0, 0, 0.5);
+			stroke-width: 2px;
+		}
 	}
 
 	:deep(.leaflet-control-zoom),

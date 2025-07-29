@@ -2,7 +2,7 @@
 import { onMounted, Ref, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLabels } from '@/lib/labels'
-import { useStore } from '@/store/store'
+import { FullEvent, useStore } from '@/store/store'
 import Map from './Map.vue'
 import Panel from './util/Panel.vue'
 import TimeReel from './TimeReel.vue'
@@ -109,7 +109,7 @@ const toggleLabel = computed(() =>
 				<font-awesome-icon :icon="faWandMagicSparkles" />
 			</button>
 			<EventGraphs
-				:selected-event="store.selectedEvent"
+				:selected-event="store.selectedEvent as FullEvent"
 				:time="store.selectedTime"
 				@date-selected="store.selectedTime = $event"
 			></EventGraphs>
@@ -129,10 +129,6 @@ const toggleLabel = computed(() =>
 	max-width: 100vw;
 	max-height: 100vh;
 	position: relative;
-
-	.panel {
-		// opacity: 0.9;
-	}
 
 	#buttons-debug {
 		position: absolute;

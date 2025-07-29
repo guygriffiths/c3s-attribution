@@ -43,6 +43,8 @@ interface State {
 	events: Event[]
 	selectedEvent?: FullEvent | null
 
+	lat2Index?: (lat: number) => number
+	lon2Index?: (lon: number) => number
 	// TODO Split into a separate UI store?
 	selectedModel?: string
 	timePanelVisible: boolean
@@ -55,6 +57,9 @@ interface State {
 		includeOceanEvents : boolean
 	}
 	draggingFilter: boolean
+
+	wrafRegion?: 'none' | 'wraf-01' | 'wraf-05' | 'wraf-2' | 'wraf-5' | 'wraf-10'
+	regionsToSelectBy?: GeoJSON.FeatureCollection
 
 }
 
@@ -77,6 +82,8 @@ export const useStore = defineStore('main', {
 			events: [],
 			selectedEvent: null,
 
+			lat2Index: d3.scaleLinear().domain([-90, 90]).range([0, 721]).clamp(true).unknown(-1).interpolate(() => t => Math.floor(t)),
+			lon2Index: d3.scaleLinear().domain([-180, 180]).range([0, 1440]).clamp(true).unknown(-1).interpolate(() => t => Math.floor(t)),
 			timePanelExpanded: false,
 			timePanelVisible: true,
 			selectedModel: undefined, // This can be set to a model name to load events from a specific model
@@ -88,6 +95,7 @@ export const useStore = defineStore('main', {
 				includeOceanEvents: true, // Whether to include ocean events in the filter
 			},
 			draggingFilter: false,
+			regionsToSelectBy: undefined, // This can be set to a GeoJSON FeatureCollection to select events by region
 		}
 	},
 	getters: {
@@ -191,9 +199,11 @@ export const useStore = defineStore('main', {
 			this.setLoading()
 			let path = `/events.jsonl`
 			if(this.selectedModel) {
+				// DEBUG - Can be removed later
 				console.log('Loading events for model:', this.selectedModel)
 				path = `/data/output-debug-${this.selectedModel}/events.jsonl`
 			}
+
 			fetch(path)
 				.then((response) => {
 					if (!response.ok) {

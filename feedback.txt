@@ -1,3 +1,12 @@
 Skeleton Demo Feedback
 ======================
 
+WRAF regions for temp
+
+Ranking based on temp/area - WMO
+
+Heatwave definition?
+
+Absolute values not %iles in general
+
+Perhaps dynamic ranking within an area. "This is the 3rd largest heatwave ever in Europe". Answer questions like that
