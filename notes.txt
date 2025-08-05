@@ -32,4 +32,9 @@ What info do we return for a selected location?
 What about background when exploring event? What is useful? Don't say "the mean over the period of the event". Also what about backgrounds in general.
 
 
+Unsorted TODO List:
+
+* Set zoom centre on buttons with: map.setZoomAround([lat, lng], map.getZoom() + 1);
+* proper color scale for excessive pixels
+* Probably gonna have to set up ncWMS or a TMS
 

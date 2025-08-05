@@ -134,6 +134,22 @@ const selectEvent = (id: number) => {
 	store.selectEvent(id)
 }
 
+const getDataForTile = (coords: {
+	x: number
+	y: number
+	z: number
+}): number[][] => {
+	const data = []
+	for (let y = 0; y < 256; y++) {
+		const row = []
+		for (let x = 0; x < 256; x++) {
+			row.push(Math.random()) // replace with real data
+		}
+		data.push(row)
+	}
+	return data
+}
+
 const getOpacity = (stepsFromNow: number) => {
 	if (stepsFromNow === 0) {
 		return 1
@@ -147,9 +163,8 @@ const getOpacity = (stepsFromNow: number) => {
 	return Math.max(opacity, 0.01)
 }
 
-const TILE_SIZE = 256
 watch(
-	() => store.selectedTime,
+	() => [store.selectedTime, store.selectedEvent],
 	() => {
 		if (eventHeatmapRef.value && eventHeatmapRef.value.leafletObject) {
 			eventHeatmapRef.value.leafletObject.redraw()
@@ -157,25 +172,30 @@ watch(
 	},
 )
 
-const tileGeometryCache = new Map()
+// const tileGeometryCache = new Map()
+const TILE_SIZE = 256
 const LL_STEP = 0.25
 
 const snap025 = (n: number) => Math.round(n * 4) / 4
-// const EPS = 1e-9
 
-// Gets the geometry for a tile based on its coordinates
-// Uses a cache. This will be used for any future rendering of the same tile - i.e. will be time invariant
 const getTileGeometry = (
-	coords: { x: number; y: number; z: number },
+	coords: any,
 	leafletObj: any,
 ) => {
-	const key = `${coords.z}-${coords.x}-${coords.y}`
-	// TODO - use a more robust cache invalidation strategy
-	if (tileGeometryCache.has(key)) return tileGeometryCache.get(key)
+	// const key = `${z}-${x}-${y}`
+	// if (tileGeometryCache.has(key)) return tileGeometryCache.get(key)
 
-	const bounds = leafletObj._tileCoordsToBounds(coords)
+	// const bounds = leafletObj._tileCoordsToBounds(coords)
+	// console.log('getTileGeometry', coords, leafletObj)
+	// TODO Cache this? I think it's more-or-less different for each event/tile combo. Not actually, but practically.
+	const nwPoint = L.point(coords.x * TILE_SIZE, coords.y * TILE_SIZE);
+	const sePoint = L.point((coords.x + 1) * TILE_SIZE, (coords.y + 1) * TILE_SIZE);
+
+	const nw = leafletObj._map.unproject(nwPoint, coords.z);
+	const se = leafletObj._map.unproject(sePoint, coords.z);
+
+	const bounds =  L.latLngBounds(nw, se);
 	const map = leafletObj._map
-	const z = coords.z
 	const originX = coords.x * TILE_SIZE
 	const originY = coords.y * TILE_SIZE
 	const step = LL_STEP
@@ -199,12 +219,12 @@ const getTileGeometry = (
 
 	// Calculate consistent width/height for tiles
 	const w = Math.ceil(
-		map.project(L.latLng(latValues[0], lonValues[1]), z).x -
-			map.project(L.latLng(latValues[0], lonValues[0]), z).x,
+		map.project(L.latLng(latValues[0], lonValues[1]), coords.z).x -
+			map.project(L.latLng(latValues[0], lonValues[0]), coords.z).x,
 	)
 	const h = Math.ceil(
-		map.project(L.latLng(latValues[0], lonValues[0]), z).y -
-			map.project(L.latLng(latValues[1], lonValues[0]), z).y,
+		map.project(L.latLng(latValues[0], lonValues[0]), coords.z).y -
+			map.project(L.latLng(latValues[1], lonValues[0]), coords.z).y,
 	)
 	const wAdjusted = w + 1
 	const hAdjusted = h + 1
@@ -214,15 +234,19 @@ const getTileGeometry = (
 
 	for (const lat of latValues) {
 		for (const lon of lonValues) {
-			const point = map.project(L.latLng(lat, lon), z)
+			const point = map.project(L.latLng(lat, lon), coords.z)
 			const x = Math.floor(point.x - originX)
 			const y = Math.floor(point.y - originY)
+			// if (x < 0 || x > TILE_SIZE - 1 || y < 0 || y > TILE_SIZE - 1) {
+			// 	geometry[index++] = null
+			// } else {
 			geometry[index++] = {
 				x: x - Math.floor(wAdjusted / 2),
 				y: y - Math.floor(hAdjusted / 2),
 				w: wAdjusted,
 				h: hAdjusted,
 			}
+			// }
 		}
 	}
 	const latMap = new Map(latValues.map((v, i) => [v.toFixed(3), i]))
@@ -235,7 +259,7 @@ const getTileGeometry = (
 		return geometry[latIndex * lonValues.length + lonIndex]
 	}
 
-	tileGeometryCache.set(key, geomFunc)
+	// tileGeometryCache.set(key, geomFunc)
 	return geomFunc
 }
 
@@ -244,158 +268,107 @@ const getColor = (val: number) => {
 	return d3.interpolateTurbo(cScale(val))
 }
 
-const tileImageCache = new Map<string, HTMLCanvasElement>()
-interface TileCoord {
-	x: number
-	y: number
-	z: number
+interface EventTileKey {
+	coords: {
+		x: number
+		y: number
+		z: number
+	}
+	t: number
+	id: number
+	key: string
 }
 
-function getVisibleTileCoords(map: L.Map): TileCoord[] {
-	const zoom = map.getZoom()
-	const tileSize = 256
-	const bounds = map.getPixelBounds()
-	if (!bounds || !bounds.min || !bounds.max) return []
-	const tileBounds = L.bounds(
-		bounds.min.divideBy(tileSize).floor(),
-		bounds.max.divideBy(tileSize).floor(),
+const eventTileKey = (
+	coords: { x: number; y: number; z: number },
+	t: number,
+	id: number,
+): EventTileKey => ({
+	coords,
+	t,
+	id,
+	key: `${coords.x}-${coords.y}-${coords.z}-${t}-${id}`,
+})
+
+const tileImageCache = new Map<string, HTMLCanvasElement>()
+
+const getCanvasFromCache = (key: EventTileKey) => {
+	if (tileImageCache.has(key.key)) {
+		// console.log('Cache hit for tile:', key.key)
+		return tileImageCache.get(key.key)!
+	}
+
+	const canvas = document.createElement('canvas')
+	canvas.width = TILE_SIZE
+	canvas.height = TILE_SIZE
+	const ctx = canvas.getContext('2d')
+	if (!ctx) {
+		console.error('Failed to get canvas context')
+		return canvas
+	}
+
+	const layer = eventHeatmapRef.value
+	if (layer?.leafletObject == undefined) {
+		return canvas
+	}
+
+	const selectedIndex =
+		differenceInDays(store.selectedTime, store.selectedEvent?.times[0]!) || 0
+	const latLonValues = store.selectedEvent?.slices[selectedIndex] || []
+	const dataValues = store.selectedEvent?.values[selectedIndex] || []
+
+	const geometry = getTileGeometry(key.coords, layer.leafletObject)
+
+	for (let i = 0; i < latLonValues.length; i++) {
+		const latLon = latLonValues[i]
+		const dataValue = dataValues[i]
+		if (dataValue === undefined) continue
+
+		const geom = geometry(latLon[0], latLon[1])
+		if (!geom) continue
+
+		const color = getColor(dataValue)
+		ctx.fillStyle = color
+		ctx.fillRect(geom.x, geom.y, geom.w, geom.h)
+	}
+
+	tileImageCache.set(key.key, canvas)
+
+	return canvas
+}
+
+const drawEventTile = (props: any) => () => {
+	const key = eventTileKey(
+		props.coords,
+		store.selectedEvent
+			? differenceInDays(store.selectedTime, store.selectedEvent.times[0])
+			: 0,
+		store.selectedEvent?.id || 0,
 	)
 
-	const tiles: TileCoord[] = []
-	for (let x = tileBounds.min!.x; x <= tileBounds.max!.x; x++) {
-		for (let y = tileBounds.min!.y; y <= tileBounds.max!.y; y++) {
-			tiles.push({ x, y, z: zoom })
-		}
-	}
-	return tiles
-}
+	const canvas = document.createElement('canvas')
+	canvas.width = TILE_SIZE
+	canvas.height = TILE_SIZE
+	const ctx = canvas.getContext('2d')
 
-watch(
-	() => [store.selectedEvent, zoom],
-	(newVal) => {
-		if (newVal && eventHeatmapRef.value) {
-			// renderSelectedEventTimesteps()
-		}
-	},
-)
+	const tileCanvas = getCanvasFromCache(key)
 
-const tileCanvas = document.createElement('canvas')
-tileCanvas.width = TILE_SIZE
-tileCanvas.height = TILE_SIZE
-const ctx = tileCanvas.getContext('2d')
-if (!ctx) {
-	console.error('Failed to get canvas context')
-} else {
-	ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
-	ctx.fillRect(0, 0, TILE_SIZE / 3, TILE_SIZE / 3)
-}
-
-const drawPrerenderedTile = (props: any, canvas: HTMLCanvasElement) => {
-	// return () => h('div', `${props.coords.x},${props.coords.y},${props.coords.z}`)
-	const tileCoords = props.coords as TileCoord
-	const timeIndex =
-		store.selectedEvent?.times.findIndex(
-			(t: Date) =>
-				new Date(t).getTime() === new Date(store.selectedTime).getTime(),
-		) ?? 0
-	const cacheKey = `${timeIndex}-${store.selectedEvent!.id || 0}-${tileCoords.x}-${tileCoords.y}-${tileCoords.z}`
-	if (tileImageCache.has(cacheKey)) {
-		const cachedCanvas = tileCanvas //tileImageCache.get(cacheKey)
-		if (cachedCanvas) {
-			canvas.getContext('2d')?.drawImage(cachedCanvas, 0, 0)
-		}
-		return () => h('canvas', {
-			width: TILE_SIZE,
-			height: TILE_SIZE,
-			ref: (el) => {
-				if (el && el !== canvas) {
-					// @ts-ignore
-					el.replaceWith(canvas)
-				}
-			},
-		})
+	if (ctx !== null) {
+		ctx.drawImage(tileCanvas, 0, 0)
 	} else {
-		return h('canvas', {
-			width: TILE_SIZE,
-			height: TILE_SIZE,
-			ref: (el) => {
-				if (el && el !== canvas) {
-					// @ts-ignore
-					el.replaceWith(canvas)
-				}
-			},
-		})
+		console.error('Failed to get canvas context for event tile')
 	}
-}
 
-const renderSelectedEventTimesteps = () => {
-	console.log('Rendering selected event timesteps')
-	if (!store.selectedEvent || !eventHeatmapRef.value) return
-	for (
-		let timeIndex = 0;
-		timeIndex < store.selectedEvent.times.length;
-		timeIndex++
-	) {
-		for (let tileCoords of getVisibleTileCoords(
-			mapRef.value!.leafletObject as LeafletMap,
-		)) {
-			const cacheKey = `${timeIndex}-${store.selectedEvent.id}-${tileCoords.x}-${tileCoords.y}-${tileCoords.z}`
-			if (tileImageCache.has(cacheKey)) continue
-			console.log(`Rendering tile: ${cacheKey}`)
-
-			const tileCanvas = document.createElement('canvas')
-			tileCanvas.width = TILE_SIZE
-			tileCanvas.height = TILE_SIZE
-			const layer = eventHeatmapRef.value
-			const ctx = tileCanvas.getContext('2d')
-			if (!ctx) {
-				console.error('Failed to get tileCanvas context')
-				return h('div', 'Error rendering tile')
+	return h('canvas', {
+		width: TILE_SIZE,
+		height: TILE_SIZE,
+		ref: (el) => {
+			if (el && el !== canvas) {
+				// @ts-ignore
+				el.replaceWith(canvas)
 			}
-
-			const selectedIndex =
-				differenceInDays(store.selectedTime, store.selectedEvent?.times[0]!) ||
-				0
-			const latLonValues = store.selectedEvent?.slices[selectedIndex] || []
-			const dataValues = store.selectedEvent?.values[selectedIndex] || []
-
-			const geometry = getTileGeometry(tileCoords, layer.leafletObject)
-
-			let dataDrawnInTile = false
-			if (dataValues.length === 0) {
-				// We have no data for this tile, so we can skip rendering
-			} else {
-				for (let i = 0; i < latLonValues.length; i++) {
-					const latLon = latLonValues[i]
-					const dataValue = dataValues[i]
-					if (dataValue === undefined) continue
-
-					const geom = geometry(latLon[0], latLon[1])
-					if (!geom) continue
-					if (
-						geom.x + geom.w < 0 ||
-						geom.x > TILE_SIZE ||
-						geom.y + geom.h < 0 ||
-						geom.y > TILE_SIZE
-					) {
-						continue // Skip if geometry is outside tile bounds
-					}
-
-					const color = getColor(dataValue)
-					ctx.fillStyle = color
-					ctx.fillRect(geom.x, geom.y, geom.w, geom.h)
-					dataDrawnInTile = true
-				}
-			}
-			if (dataDrawnInTile) {
-				if (tileCanvas instanceof HTMLCanvasElement) {
-					tileImageCache.set(cacheKey, tileCanvas)
-				} else {
-					console.error('Failed to render tile:', tileCanvas)
-				}
-			}
-		}
-	}
+		},
+	})
 }
 </script>
 
@@ -429,7 +402,7 @@ const renderSelectedEventTimesteps = () => {
 				ref="eventHeatmapRef"
 				class="event-heatmap"
 				:tileSize="TILE_SIZE"
-				:child-render="drawPrerenderedTile"
+				:child-render="drawEventTile"
 				pane="overlayPane"
 			>
 			</LGridLayer>
@@ -455,7 +428,7 @@ const renderSelectedEventTimesteps = () => {
 				@click="selectEvent(event.id)"
 			>
 			</LPolygon>
-			<!-- <LPolygon
+			<LPolygon
 				v-for="(region, idx) in store.selectedEvent?.regions"
 				:key="idx"
 				:lat-lngs="region"
@@ -476,7 +449,7 @@ const renderSelectedEventTimesteps = () => {
 				:color="catScheme[store.selectedEvent?.id! % catScheme.length]"
 				@click="selectEvent(store.selectedEvent?.id!)"
 			>
-			</LPolygon> -->
+			</LPolygon>
 			<LControl position="topright" class="filter-container">
 				<button @click="store.filtersExpanded = !store.filtersExpanded">
 					<FontAwesomeIcon :icon="store.filtersExpanded ? faClose : faFilter" />
