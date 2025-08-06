@@ -37,4 +37,5 @@ Unsorted TODO List:
 * Set zoom centre on buttons with: map.setZoomAround([lat, lng], map.getZoom() + 1);
 * proper color scale for excessive pixels
 * Probably gonna have to set up ncWMS or a TMS
+* Lock time reel when event selected - keys, mouse, track (all of which need dealing with separately anyway)
 
