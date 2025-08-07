@@ -1,8 +1,8 @@
 import { multiPolygon, polygon } from '@turf/helpers'
-import { bboxPolygon, booleanDisjoint } from '@turf/turf'
+import { bbox, bboxPolygon, booleanIntersects } from '@turf/turf'
 import * as d3 from 'd3'
 import { differenceInDays } from 'date-fns'
-import { Feature, MultiPolygon, Polygon, Position } from 'geojson'
+import { BBox, MultiPolygon, Polygon } from 'geojson'
 import { defineStore } from 'pinia'
 
 type LayerDetails = any
@@ -79,6 +79,16 @@ export const T2M_LAYER = 'era5/t2m'
 const getColor = (i: number) => d3.interpolateWarm((i * 0.61803398875) % 1)
 export const catScheme = Array.from({ length: 100 }, (_, i) => getColor(i))
 
+function doBboxesOverlap(a: BBox, b: BBox): boolean {
+  return !(
+    a[2] < b[0] || // a.maxX < b.minX
+    a[0] > b[2] || // a.minX > b.maxX
+    a[3] < b[1] || // a.maxY < b.minY
+    a[1] > b[3]    // a.minY > b.maxY
+  )
+}
+
+
 export const useStore = defineStore('main', {
 	state: (): State => {
 		return {
@@ -126,6 +136,12 @@ export const useStore = defineStore('main', {
 		eventSelected: (state) => {
 			return state.selectedEvent !== null && state.selectedEvent !== undefined
 		},
+		exploringRegion: (state) => {
+			return (
+				state.filters.wrafRegion !== null &&
+				state.filters.wrafRegion !== undefined
+			)
+		},
 		isLoading: (state) => state.loadingCount > 0,
 		isoDatetime: (state) => {
 			// This always returns the datetime in UTC, which is what we need
@@ -135,32 +151,13 @@ export const useStore = defineStore('main', {
 			// Find the index of the selected time in the times array
 			return differenceInDays(state.selectedTime, state.startTime)
 		},
-		wrafTurfRegion: (state) => {
-			if (state.filters.wrafRegion) {
-				console.log(
-					'Converting WRAF region to Turf polygon:',
-					state.filters.wrafRegion,
-				)
-				// Convert the WRAF region to a Turf polygon
-				const region = state.filters.wrafRegion as Feature<
-					Polygon | MultiPolygon
-				>
-				return polygon(region.geometry.coordinates as Position[][])
-			}
-			return null
-		},
 		filteredEvents: (state) => {
-			const region = state.filters.wrafRegion
-				? (state.filters.wrafRegion as Feature<Polygon | MultiPolygon>)
-				: null
-			// Convert the WRAF region
+			state.setLoading()
 			const turfRegion = state.filters.wrafRegion
-				? region!.geometry.type === 'Polygon'
-					? polygon(region!.geometry.coordinates)
-					: multiPolygon(region!.geometry.coordinates)
+				? state.filters.wrafRegion.geometry.type === 'Polygon'
+					? polygon(state.filters.wrafRegion.geometry.coordinates)
+					: multiPolygon(state.filters.wrafRegion.geometry.coordinates)
 				: null
-
-			// Filter events based on the current filters
 			const fe = state.events.filter((event: ExtremeEvent) => {
 				// Check if the event is an ocean event if the filter is enabled
 				if (!state.filters.includeOceanEvents && event.ocean_only) {
@@ -195,15 +192,20 @@ export const useStore = defineStore('main', {
 				// Check WRAF region filter
 				if (state.filters.wrafRegion) {
 					// console.log('Checking WRAF region filter for event:', region)
-					return !booleanDisjoint(
-						turfRegion,
-						bboxPolygon([
-							event.bbox[1],
-							event.bbox[0],
-							event.bbox[3],
-							event.bbox[2],
-						]),
-					)
+					const regionBbox = bbox(turfRegion!)
+					const eventBbox = [
+						event.bbox[1],
+						event.bbox[0],
+						event.bbox[3],
+						event.bbox[2],
+					] as BBox
+
+					// Quick reject: skip if bounding boxes don't intersect
+					if (!doBboxesOverlap(regionBbox, eventBbox)) return false
+
+					// Precise check
+					if (!booleanIntersects(turfRegion!, bboxPolygon(eventBbox))) return false
+
 				}
 				// If all filters pass, include the event
 				return true
@@ -215,6 +217,7 @@ export const useStore = defineStore('main', {
 				state.events.length,
 				'total events',
 			)
+			state.setLoadingDone()
 			return fe
 		},
 		// Returns the (filtered) events which are active at the selected time (i.e. plotted on the map)

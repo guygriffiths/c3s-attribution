@@ -27,6 +27,7 @@ import {
 	wrafLevelChanged,
 	getZeitgeistOpacity,
 } from '@/lib/map-utils'
+import { bbox } from '@turf/turf'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
@@ -73,6 +74,20 @@ watch(
 	},
 )
 
+watch( () => store.filters.wrafRegion,
+	(newVal) => {
+		if (newVal && mapRef.value) {
+			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
+			const bounds = bbox(store.filters.wrafRegion)	
+			console.log('need to find bbox of region', bounds)
+			map.fitBounds([
+				[bounds[1], bounds[0]],
+				[bounds[3], bounds[2]],
+			])
+		}
+	},
+)
+
 watch(
 	() => store.wrafLevel,
 	(newVal) => {
@@ -85,6 +100,7 @@ const selectRegion = (event: any) => {
 		const region = event.layer.feature as Feature<Polygon | MultiPolygon>
 		store.filters.wrafRegion = region
 		console.log('Selected region:', region)
+
 	} else {
 		console.warn('No layer or feature found in click event:', event)
 	}
@@ -166,8 +182,19 @@ const renderTile = (props: any) =>
 			>
 			</LGridLayer>
 			<LGeoJson
-				v-if="store.regionsToSelectBy"
+				v-if="store.regionsToSelectBy && !store.filters.wrafRegion"
 				:geojson="store.regionsToSelectBy"
+				:options-style="() => ({
+					// @ts-ignore
+					className: 'region-select',
+				})"
+				class="region-select"
+				@click="selectRegion"
+			>
+			</LGeoJson>
+			<LGeoJson
+				v-if="store.filters.wrafRegion"
+				:geojson="store.filters.wrafRegion"
 				:options-style="() => ({
 					// @ts-ignore
 					className: 'region-select',
