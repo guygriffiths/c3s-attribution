@@ -7,6 +7,27 @@ Event Generation
 * Run full generation on Bertha
 
 
+THE VARIABLES
+they define what graphs we show, and what we explore by similar. swhen we're looking at regions we want to rank events by variable - "this is the 4th hottest heatwave in the last 30 years"; "this is the 2nd largest one in the last 50" etc.
+
+I think we need 3 at least. but that 3 is fine.
+AREA
+MIN/MAX/PEAK (DAY/NIGHT for min/max?)
+
+everything will have
+DURATION
+
+is that 3 always enough to get 6, colour wheel style?
+
+Area plus duration could be magnitude.
+Area plus mini max peak could be intensity.
+MinMax Peak plus duration could be discomfort.
+
+Which means that for the time series we can always plot some kind of intensity.
+On the summary stats, we can always write down what the magnitude is.
+
+
+
 
 Web Explorer
 * EventGraphs:

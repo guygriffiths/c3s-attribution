@@ -468,6 +468,7 @@ class EventletFactory:
             "id": full_event["id"],
             "times": full_event["times"],
             "regions": full_event["regions"],
+            "total_region": full_event["total_region"],
             "bbox": full_event["bbox"],
             "peak_value": (
                 np.max(full_event["peak_values"]) if full_event["peak_values"] else None

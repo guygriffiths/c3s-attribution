@@ -2,7 +2,8 @@
 import { onMounted, Ref, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLabels } from '@/lib/labels'
-import { FullEvent, useStore } from '@/store/store'
+import { useStore } from '@/store/store'
+import type { FullExtremeEvent } from '@/store/store'
 import Map from './Map.vue'
 import Panel from './util/Panel.vue'
 import TimeReel from './TimeReel.vue'
@@ -75,6 +76,9 @@ const toggleLabel = computed(() =>
 			</button>
 		</Panel>
 		<Panel id="event-frame-panel" class="top" :active="store.eventSelected">
+			<button class="close-button" @click="store.selectedEvent = null">
+				<font-awesome-icon :icon="faClose" />
+			</button>
 			<div id="event-frame">
 				<button
 					class="explore-button"
@@ -109,7 +113,7 @@ const toggleLabel = computed(() =>
 				<font-awesome-icon :icon="faWandMagicSparkles" />
 			</button>
 			<EventGraphs
-				:selected-event="store.selectedEvent as FullEvent"
+				:selected-event="store.selectedEvent as FullExtremeEvent"
 				:time="store.selectedTime"
 				@date-selected="store.selectedTime = $event"
 			></EventGraphs>

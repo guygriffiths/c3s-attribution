@@ -1,10 +1,13 @@
+import { multiPolygon, polygon } from '@turf/helpers'
+import { bboxPolygon, booleanDisjoint } from '@turf/turf'
 import * as d3 from 'd3'
 import { differenceInDays } from 'date-fns'
+import { Feature, MultiPolygon, Polygon, Position } from 'geojson'
 import { defineStore } from 'pinia'
 
 type LayerDetails = any
 
-interface Event {
+interface ExtremeEvent {
 	times: Date[]
 	slices: any[]
 	featureLevel?: number
@@ -16,9 +19,12 @@ interface Event {
 	feature: boolean
 	ocean_only?: boolean // Whether the event is only in ocean regions
 	id: number
+
+	intensity?: number // Intensity of the event, if applicable
+	color?: string // Color for the event, can be used for visualization
 }
 
-export interface FullEvent {
+export interface FullExtremeEvent {
 	id: number
 	times: Date[]
 	regions: any[]
@@ -36,17 +42,19 @@ export interface FullEvent {
 interface State {
 	lang: Language
 	loadingCount: number
+
 	selectedTime: Date
 	layerDetails: LayerDetails | null
 	startTime: Date
 	endTime: Date
-	events: Event[]
-	selectedEvent?: FullEvent | null
+	events: ExtremeEvent[]
+	selectedEvent?: FullExtremeEvent | null
 
 	lat2Index?: (lat: number) => number
 	lon2Index?: (lon: number) => number
 	// TODO Split into a separate UI store?
 	selectedModel?: string
+
 	timePanelVisible: boolean
 	timePanelExpanded: boolean
 	filtersExpanded: boolean
@@ -54,13 +62,15 @@ interface State {
 		duration: number
 		intensity: number
 		size: number
-		includeOceanEvents : boolean
+		includeOceanEvents: boolean
+		wrafRegion: GeoJSON.Feature<Polygon | MultiPolygon> | null
 	}
 	draggingFilter: boolean
 
-	wrafRegion?: 'none' | 'wraf-01' | 'wraf-05' | 'wraf-2' | 'wraf-5' | 'wraf-10'
+	wrafLevel: 'none' | 'wraf-01' | 'wraf-05' | 'wraf-2' | 'wraf-5' | 'wraf-10'
+	// This is the set of regions to select events by, if any
+	// Corresponds to the WRAF level selected
 	regionsToSelectBy?: GeoJSON.FeatureCollection
-
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -82,8 +92,20 @@ export const useStore = defineStore('main', {
 			events: [],
 			selectedEvent: null,
 
-			lat2Index: d3.scaleLinear().domain([-90, 90]).range([0, 721]).clamp(true).unknown(-1).interpolate(() => t => Math.floor(t)),
-			lon2Index: d3.scaleLinear().domain([-180, 180]).range([0, 1440]).clamp(true).unknown(-1).interpolate(() => t => Math.floor(t)),
+			lat2Index: d3
+				.scaleLinear()
+				.domain([-90, 90])
+				.range([0, 721])
+				.clamp(true)
+				.unknown(-1)
+				.interpolate(() => (t) => Math.floor(t)),
+			lon2Index: d3
+				.scaleLinear()
+				.domain([-180, 180])
+				.range([0, 1440])
+				.clamp(true)
+				.unknown(-1)
+				.interpolate(() => (t) => Math.floor(t)),
 			timePanelExpanded: false,
 			timePanelVisible: true,
 			selectedModel: undefined, // This can be set to a model name to load events from a specific model
@@ -91,10 +113,12 @@ export const useStore = defineStore('main', {
 			filters: {
 				duration: 3,
 				intensity: 0,
-				size: 0, 
+				size: 0,
 				includeOceanEvents: true, // Whether to include ocean events in the filter
+				wrafRegion: null, // This can be set to a WRAF region name to filter events by region
 			},
 			draggingFilter: false,
+			wrafLevel: 'none',
 			regionsToSelectBy: undefined, // This can be set to a GeoJSON FeatureCollection to select events by region
 		}
 	},
@@ -111,17 +135,46 @@ export const useStore = defineStore('main', {
 			// Find the index of the selected time in the times array
 			return differenceInDays(state.selectedTime, state.startTime)
 		},
+		wrafTurfRegion: (state) => {
+			if (state.filters.wrafRegion) {
+				console.log(
+					'Converting WRAF region to Turf polygon:',
+					state.filters.wrafRegion,
+				)
+				// Convert the WRAF region to a Turf polygon
+				const region = state.filters.wrafRegion as Feature<
+					Polygon | MultiPolygon
+				>
+				return polygon(region.geometry.coordinates as Position[][])
+			}
+			return null
+		},
 		filteredEvents: (state) => {
+			const region = state.filters.wrafRegion
+				? (state.filters.wrafRegion as Feature<Polygon | MultiPolygon>)
+				: null
+			// Convert the WRAF region
+			const turfRegion = state.filters.wrafRegion
+				? region!.geometry.type === 'Polygon'
+					? polygon(region!.geometry.coordinates)
+					: multiPolygon(region!.geometry.coordinates)
+				: null
 
 			// Filter events based on the current filters
-			const fe= state.events.filter((event) => {
+			const fe = state.events.filter((event: ExtremeEvent) => {
 				// Check if the event is an ocean event if the filter is enabled
 				if (!state.filters.includeOceanEvents && event.ocean_only) {
-					console.log('Skipping ocean event:', JSON.stringify(state.filters.includeOceanEvents))
+					console.log(
+						'Skipping ocean event:',
+						JSON.stringify(state.filters.includeOceanEvents),
+					)
 					return false
 				}
 				// Check duration filter
-				const duration = differenceInDays(event.times[event.times.length - 1], event.times[0])
+				const duration = differenceInDays(
+					event.times[event.times.length - 1],
+					event.times[0],
+				)
 				if (duration < state.filters.duration) {
 					// console.log('Skipping short event:', event)
 					return false
@@ -138,15 +191,41 @@ export const useStore = defineStore('main', {
 					console.log('Skipping small event:', event)
 					return false
 				}
+
+				// Check WRAF region filter
+				if (state.filters.wrafRegion) {
+					// console.log('Checking WRAF region filter for event:', region)
+					return !booleanDisjoint(
+						turfRegion,
+						bboxPolygon([
+							event.bbox[1],
+							event.bbox[0],
+							event.bbox[3],
+							event.bbox[2],
+						]),
+					)
+				}
 				// If all filters pass, include the event
 				return true
 			})
-			console.log('Filtered events:', fe.length, 'from', state.events.length, 'total events')
+			console.log(
+				'Filtered events:',
+				fe.length,
+				'from',
+				state.events.length,
+				'total events',
+			)
 			return fe
 		},
-		// Returns the events which are active at the selected time (i.e. plotted on the map)
-		currentEvents: (state) => {
-			return state.filteredEvents.filter((event) => {
+		// Returns the (filtered) events which are active at the selected time (i.e. plotted on the map)
+		// TODO make it respond to a range, and use this is region explore
+		currentEvents: (state: State) => {
+			if (state.filters.wrafRegion) {
+				console.log('not filtering by time, only by region')
+				return state.filteredEvents
+			}
+			// @ts-ignore
+			return state.filteredEvents.filter((event: ExtremeEvent) => {
 				const startDate = new Date(event.times[0])
 				const endDate = new Date(event.times[event.times.length - 1])
 				startDate.setHours(0, 0, 0, 0)
@@ -169,13 +248,16 @@ export const useStore = defineStore('main', {
 					path = `/data/output-debug-${this.selectedModel}/events/event-${id}.json`
 				}
 				const resp = await fetch(path)
-				const event = (await resp.json())
+				const event = await resp.json()
 				// This should always be the case...
 				event.id = id
 				event.times = event.times.map((time: string) => new Date(time))
 				event.color = catScheme[event.id % catScheme.length]
-				this.selectedEvent = event as FullEvent
-				if(this.selectedTime < event.times[0] || this.selectedTime > event.times[event.times.length - 1]) {
+				this.selectedEvent = event as FullExtremeEvent
+				if (
+					this.selectedTime < event.times[0] ||
+					this.selectedTime > event.times[event.times.length - 1]
+				) {
 					this.selectedTime = new Date(event.times[0])
 				}
 				this.setLoadingDone()
@@ -186,7 +268,7 @@ export const useStore = defineStore('main', {
 		},
 		toggleEventSelectedDebug() {
 			this.selectedEvent =
-				this.selectedEvent === null ? (new Object() as FullEvent) : null
+				this.selectedEvent === null ? (new Object() as FullExtremeEvent) : null
 		},
 		setLoading() {
 			this.loadingCount++
@@ -197,7 +279,7 @@ export const useStore = defineStore('main', {
 		init() {
 			this.setLoading()
 			let path = `/events.jsonl`
-			if(this.selectedModel) {
+			if (this.selectedModel) {
 				// DEBUG - Can be removed later
 				console.log('Loading events for model:', this.selectedModel)
 				path = `/data/output-debug-${this.selectedModel}/events.jsonl`
@@ -235,7 +317,7 @@ export const useStore = defineStore('main', {
 					})
 
 					// this.events = data.filter((_, i) => i % 4 === 0) as Event[]
-					this.events = data as Event[]
+					this.events = data as ExtremeEvent[]
 					console.log('Events loaded:', this.events)
 					// this.events.forEach((event) => {
 					// 	event.times = event.times.map((time: string) => new Date(time))
@@ -249,3 +331,5 @@ export const useStore = defineStore('main', {
 		},
 	},
 })
+
+export type MainStore = ReturnType<typeof useStore>
