@@ -392,7 +392,7 @@ class EventletFactory:
         lats, lons = zip(*all_coords)
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
-        event_id = stable_cluster_hash(all_times[0], centroids[0])
+        event_id = get_id(all_times[0], centroids[0])
         peak_values = to_serialisable(
             [
                 np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
@@ -536,6 +536,14 @@ def stable_cluster_hash(time, centroid):
     s = f"{str(time)}_{centroid[0]:.6f}_{centroid[1]:.6f}"
     hash_bytes = hashlib.sha256(s.encode("utf-8")).digest()
     return int.from_bytes(hash_bytes[:4], byteorder="big")  # 32 bits
+
+def get_id(time, centroid):
+    """
+    Generate a stable ID for an event based on time and centroid.
+    This is a simple hash function that combines the time and centroid coordinates.
+    """
+    return f"{time.strftime('%Y%m%d')}{centroid[0]:.6f}{centroid[1]:.6f}".replace('.', '')
+    # return stable_cluster_hash(time, centroid)
 
 
 def downstream_worker(q, clusterer):
