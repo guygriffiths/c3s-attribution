@@ -1,13 +1,14 @@
-import { multiPolygon, polygon } from '@turf/helpers'
-import { bbox, bboxPolygon, booleanIntersects } from '@turf/turf'
+import { filterEvents } from '@/lib/utils'
 import * as d3 from 'd3'
-import { differenceInDays } from 'date-fns'
-import { BBox, MultiPolygon, Polygon } from 'geojson'
+import { differenceInDays, getDayOfYear } from 'date-fns'
+import Flatbush from 'flatbush'
+import { MultiPolygon, Polygon } from 'geojson'
 import { defineStore } from 'pinia'
+import { watch } from 'vue'
 
 type LayerDetails = any
 
-interface ExtremeEvent {
+export interface ExtremeEvent {
 	times: Date[]
 	slices: any[]
 	featureLevel?: number
@@ -19,7 +20,7 @@ interface ExtremeEvent {
 	feature: boolean
 	ocean_only?: boolean // Whether the event is only in ocean regions
 	id: number
-
+	total_region: [number, number][]
 	intensity?: number // Intensity of the event, if applicable
 	color?: string // Color for the event, can be used for visualization
 }
@@ -48,7 +49,8 @@ interface State {
 	startTime: Date
 	endTime: Date
 	events: ExtremeEvent[]
-	selectedEvent?: FullExtremeEvent | null
+
+	selectedEvent: FullExtremeEvent | null
 
 	lat2Index?: (lat: number) => number
 	lon2Index?: (lon: number) => number
@@ -64,30 +66,23 @@ interface State {
 		size: number
 		includeOceanEvents: boolean
 		wrafRegion: GeoJSON.Feature<Polygon | MultiPolygon> | null
+		selectedPoint: [number, number] | null
 	}
+	filteredEvents: ExtremeEvent[]
 	draggingFilter: boolean
 
 	wrafLevel: 'none' | 'wraf-01' | 'wraf-05' | 'wraf-2' | 'wraf-5' | 'wraf-10'
 	// This is the set of regions to select events by, if any
 	// Corresponds to the WRAF level selected
 	regionsToSelectBy?: GeoJSON.FeatureCollection
+	eventIndex?: Flatbush // Spatial index for events, if needed
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
 export const T2M_LAYER = 'era5/t2m'
-// export const catScheme = [...d3.schemeDark2, ...d3.schemeCategory10]
-const getColor = (i: number) => d3.interpolateWarm((i * 0.61803398875) % 1)
-export const catScheme = Array.from({ length: 100 }, (_, i) => getColor(i))
 
-function doBboxesOverlap(a: BBox, b: BBox): boolean {
-  return !(
-    a[2] < b[0] || // a.maxX < b.minX
-    a[0] > b[2] || // a.minX > b.maxX
-    a[3] < b[1] || // a.maxY < b.minY
-    a[1] > b[3]    // a.minY > b.maxY
-  )
-}
-
+const rotateScheme = (i: number) => d3.interpolateWarm((i * 0.61803398875) % 1)
+export const catScheme = Array.from({ length: 100 }, (_, i) => rotateScheme(i))
 
 export const useStore = defineStore('main', {
 	state: (): State => {
@@ -126,10 +121,12 @@ export const useStore = defineStore('main', {
 				size: 0,
 				includeOceanEvents: true, // Whether to include ocean events in the filter
 				wrafRegion: null, // This can be set to a WRAF region name to filter events by region
+				selectedPoint: null, // This is used to store a point selected on the map for filtering
 			},
+			filteredEvents: [],
 			draggingFilter: false,
 			wrafLevel: 'none',
-			regionsToSelectBy: undefined, // This can be set to a GeoJSON FeatureCollection to select events by region
+			regionsToSelectBy: undefined, // Will store the loaded WRAF regions. The actual selected region is in filters.wrafRegion
 		}
 	},
 	getters: {
@@ -138,6 +135,7 @@ export const useStore = defineStore('main', {
 		},
 		exploringRegion: (state) => {
 			return (
+				!state.selectedEvent &&
 				state.filters.wrafRegion !== null &&
 				state.filters.wrafRegion !== undefined
 			)
@@ -151,80 +149,11 @@ export const useStore = defineStore('main', {
 			// Find the index of the selected time in the times array
 			return differenceInDays(state.selectedTime, state.startTime)
 		},
-		filteredEvents: (state) => {
-			state.setLoading()
-			const turfRegion = state.filters.wrafRegion
-				? state.filters.wrafRegion.geometry.type === 'Polygon'
-					? polygon(state.filters.wrafRegion.geometry.coordinates)
-					: multiPolygon(state.filters.wrafRegion.geometry.coordinates)
-				: null
-			const fe = state.events.filter((event: ExtremeEvent) => {
-				// Check if the event is an ocean event if the filter is enabled
-				if (!state.filters.includeOceanEvents && event.ocean_only) {
-					console.log(
-						'Skipping ocean event:',
-						JSON.stringify(state.filters.includeOceanEvents),
-					)
-					return false
-				}
-				// Check duration filter
-				const duration = differenceInDays(
-					event.times[event.times.length - 1],
-					event.times[0],
-				)
-				if (duration < state.filters.duration) {
-					// console.log('Skipping short event:', event)
-					return false
-				}
-				// Check intensity filter
-				const intensity = event.intensity || 0 // Default to 0 if intensity is not defined
-				if (intensity < state.filters.intensity) {
-					console.log('Skipping weak event:', event)
-					return false
-				}
-				// Check size filter
-				const sizePercentile = event.size || 0
-				if (sizePercentile < state.filters.size) {
-					console.log('Skipping small event:', event)
-					return false
-				}
-
-				// Check WRAF region filter
-				if (state.filters.wrafRegion) {
-					// console.log('Checking WRAF region filter for event:', region)
-					const regionBbox = bbox(turfRegion!)
-					const eventBbox = [
-						event.bbox[1],
-						event.bbox[0],
-						event.bbox[3],
-						event.bbox[2],
-					] as BBox
-
-					// Quick reject: skip if bounding boxes don't intersect
-					if (!doBboxesOverlap(regionBbox, eventBbox)) return false
-
-					// Precise check
-					if (!booleanIntersects(turfRegion!, bboxPolygon(eventBbox))) return false
-
-				}
-				// If all filters pass, include the event
-				return true
-			})
-			console.log(
-				'Filtered events:',
-				fe.length,
-				'from',
-				state.events.length,
-				'total events',
-			)
-			state.setLoadingDone()
-			return fe
-		},
 		// Returns the (filtered) events which are active at the selected time (i.e. plotted on the map)
 		// TODO make it respond to a range, and use this is region explore
 		currentEvents: (state: State) => {
 			if (state.filters.wrafRegion) {
-				console.log('not filtering by time, only by region')
+				console.log('Filtering events by WRAF region')
 				return state.filteredEvents
 			}
 			// @ts-ignore
@@ -236,11 +165,36 @@ export const useStore = defineStore('main', {
 				return state.selectedTime >= startDate && state.selectedTime <= endDate
 			})
 		},
+		dayCounts: (state) => {
+			// Create a map of day counts for each month
+			const counts = new Map<number, Array<number>>()
+			state.filteredEvents.forEach((event) => {
+				event.times.forEach((time) => {
+					const year = time.getUTCFullYear()
+					const day = getDayOfYear(time)
+					if (!counts.has(year)) {
+						counts.set(year, Array(366).fill(0))
+					}
+					counts.get(year)![day - 1]++
+				})
+			})
+			for (
+				let year = state.startTime.getUTCFullYear();
+				year <= state.endTime.getUTCFullYear();
+				year++
+			) {
+				if (!counts.has(year)) {
+					counts.set(year, Array(366).fill(0))
+				}
+			}
+			return counts
+		},
 	},
 	actions: {
 		async selectEvent(id: number | null) {
 			if (id === null) {
 				this.selectedEvent = null
+				return
 			}
 			if (this.selectedEvent?.id === id) {
 				this.selectedEvent = null
@@ -264,6 +218,16 @@ export const useStore = defineStore('main', {
 					this.selectedTime = new Date(event.times[0])
 				}
 				this.setLoadingDone()
+			}
+		},
+		async selectRegion(region: GeoJSON.Feature<Polygon | MultiPolygon> | null) {
+			if (region === null) {
+				this.filters.wrafRegion = null
+			} else {
+				this.filters.wrafRegion = region
+			}
+			if (this.wrafLevel !== 'none') {
+				// If we have a WRAF level selected, we need to load the regions for that level
 			}
 		},
 		toggleTimePanel() {
@@ -302,6 +266,7 @@ export const useStore = defineStore('main', {
 				})
 				.then((data) => {
 					this.endTime = new Date(0)
+					let col = 0
 					data.forEach((event: any) => {
 						// console.log('Processing event:', event)
 						event.times = event.times.map((time: string) => new Date(time))
@@ -316,12 +281,35 @@ export const useStore = defineStore('main', {
 						}
 						endDate.setHours(23, 59, 59, 999)
 
-						event.color = catScheme[event.id % catScheme.length]
+						event.times.forEach((time: Date) => {
+							const year = time.getUTCFullYear()
+							const dayOfYear = getDayOfYear(time)
+						})
+						event.color = catScheme[col++ % catScheme.length]
 					})
 
 					// this.events = data.filter((_, i) => i % 4 === 0) as Event[]
 					this.events = data as ExtremeEvent[]
 					console.log('Events loaded:', this.events)
+					this.eventIndex = new Flatbush(this.events.length, 2)
+					this.events.forEach((event, i) => {
+						const bbox = event.bbox
+						if (bbox) {
+							// Add the bounding box to the spatial index
+							this.eventIndex!.add(
+								bbox[0], // minX
+								bbox[1], // minY
+								bbox[2], // maxX
+								bbox[3], // maxY
+							)
+						} else {
+							console.warn(
+								`Event ${event.id} has no bounding box, skipping index addition`,
+							)
+						}
+					})
+					this.eventIndex!.finish()
+					console.log('Spatial index created for events:', this.eventIndex)
 					// this.events.forEach((event) => {
 					// 	event.times = event.times.map((time: string) => new Date(time))
 
@@ -331,6 +319,39 @@ export const useStore = defineStore('main', {
 				.catch((error) => {
 					console.error('There was a problem with the fetch operation:', error)
 				})
+
+			watch(
+				() => [this.filters, this.events, this.eventIndex],
+				this.runFilters,
+				{ deep: true, immediate: true },
+			)
+		},
+		async runFilters() {
+			this.setLoading()
+			this.filteredEvents = filterEvents(
+				this.events,
+				this.filters,
+				this.eventIndex,
+				false,
+			)
+
+			// Full filter in worker
+			// const result = await worker.send({
+			// 	events: this.filteredEvents,
+			// 	filters: this.filters,
+			// 	eventIndex: this.eventIndex,
+			// })
+
+			// Triggers Vue to re-render the map
+			await new Promise((resolve) => setTimeout(resolve, 0))
+
+			this.filteredEvents = filterEvents(
+				this.filteredEvents,
+				this.filters,
+				this.eventIndex,
+				true,
+			)
+			this.setLoadingDone()
 		},
 	},
 })

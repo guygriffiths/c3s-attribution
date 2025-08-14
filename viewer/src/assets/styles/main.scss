@@ -43,6 +43,13 @@ button {
 		background-color: $primary;
 		color: $bgContrast;
 	}
+
+	border: none;
+	padding: 0.5rem 1rem;
+	transition: background-color $animTime ease-in-out;
+	&:hover {
+		background-color: $bg;
+	}
 }
 
 .explore-button {
@@ -69,7 +76,7 @@ button {
 		top: 35%;
 		transform: translateY(-50%);
 	}
-	
+
 	&.bottom {
 		top: 70%;
 		transform: translateY(-50%);
@@ -79,7 +86,7 @@ button {
 .panel {
 	display: flex;
 	flex-direction: column;
-	border-radius: 6px;
+	border-radius: $frameBorderRadius;
 	justify-content: center;
 	align-items: center;
 	box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;

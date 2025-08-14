@@ -20,11 +20,11 @@ import {
 } from 'vue'
 import { catScheme } from '@/store/store'
 import { useLabels } from '@/lib/labels'
+import * as d3 from 'd3'
+import scssVars from '@/assets/styles/scssVars.module.scss'
 
 interface WeatherEvent {
-	id: number
-	// startDate: Date
-	// endDate: Date
+	id: string
 	times: Date[]
 	color?: string
 	y?: number
@@ -38,9 +38,11 @@ const props = defineProps({
 	start: { type: Date, default: () => new Date(1970, 0, 1) },
 	end: { type: Date, default: () => new Date(2024, 0, 1) },
 	events: { type: Array<WeatherEvent>, default: () => [] as WeatherEvent[] },
+	dayCounts: { type: Map<number, Array<number>>, default: () => new Map() },
 	selectedEvent: { type: Object as () => WeatherEvent | null, default: null },
 	changingFilter: { type: Boolean, default: false },
 	exploring: { type: Boolean, default: false },
+	vertical: { type: Boolean, default: false },
 })
 
 const model: Ref<Date> = defineModel({
@@ -86,12 +88,12 @@ const setDate = (date: Date) => {
 const needleRef = ref<HTMLDivElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 
-// const yearHeight = ref(96)
 const zoom = computed(() => props.selectedEvent !== null)
 const rowsToShow = computed(() => {
 	if (zoom.value) return 1
-	if (props.exploring) return 5
-	return 1
+	if (props.exploring) return 20
+	if (props.vertical) return 40
+	return 2
 })
 
 const totalDays = 366
@@ -109,15 +111,22 @@ const years = computed(() =>
 	),
 )
 const eventsByYear = ref<Map<number, WeatherEvent[]>>(new Map())
-const maxSimultaneousEvents = ref(0)
-
+const maxSimultaneousEvents = computed(() => {
+	// Find max of props.dayCounts here
+	if (props.dayCounts.size === 0) return 1
+	return Math.max(
+		...Array.from(props.dayCounts.values()).map((counts) =>
+			Math.max(...counts),
+		),
+	)
+})
 const dayStr = (day: number) => {
 	day = Math.max(1, Math.min(day, totalDays))
 	const date = setDayOfYear(new Date(selectedYear.value, 0, 1), day)
 	return format(date, 'do MMMM')
 }
 
-const monthsForYear = (year: number) => {
+const monthsForYear = (year: number, alternateYears: boolean = false) => {
 	const months = [
 		{ name: $l.value.months.jan, length: 31 },
 		{ name: $l.value.months.feb, length: year % 4 === 0 ? 29 : 28 },
@@ -137,11 +146,22 @@ const monthsForYear = (year: number) => {
 	return months.map((month, i) => {
 		const monthStartX = startX
 		startX += month.length
+		const color = alternateYears
+			? year % 2 === 0
+				? i % 2 === 0
+					? 'rgba(0, 0, 0, 0.1)'
+					: 'rgba(0, 0, 0, 0.15)'
+				: i % 2 === 0
+					? 'rgba(0, 0, 0, 0.05)'
+					: 'rgba(0, 0, 0, 0.0)'
+			: i % 2 === 0
+				? 'rgba(0, 0, 0, 0.1)'
+				: 'rgba(0, 0, 0, 0.05)'
 		return {
 			name: month.name,
 			startX: monthStartX,
 			length: month.length,
-			color: i % 2 === 0 ? 'rgba(0, 0, 0, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+			color,
 		}
 	})
 }
@@ -153,26 +173,25 @@ const populateEvents = () => {
 			year,
 		)
 
-		maxSimultaneousEvents.value = Math.max(
-			maxSimultaneousEvents.value,
-			maxEvents,
-		)
 		eventsByYear.value.set(year, eventsForYear)
 	})
 }
 
 const eventIsSelected = (event: { id?: number }) =>
 	event.id === props.selectedEvent?.id
-const eventHeight = computed(() => (props.selectedEvent !== null ? 1 : 0.8) / maxSimultaneousEvents.value)
-const isYearVisible = (year: number) => Math.abs(selectedYear.value - year) <= 2
+const eventHeight = computed(
+	() => (props.selectedEvent !== null ? 1 : 0.8) / maxSimultaneousEvents.value,
+)
+const isYearVisible = (year: number) =>
+	Math.abs(selectedYear.value - year) <= 1 + Math.ceil(rowsToShow.value / 2)
 
 import { debounce } from '@/lib/utils'
 
 watch(
 	() => props.events,
 	() => {
-		debounce(() => populateEvents(), 25)
-		// populateEvents()
+		// debounce(() => populateEvents(), 25)
+		populateEvents()
 	},
 	{ immediate: true, deep: false },
 )
@@ -182,8 +201,15 @@ const dragMode = ref<'horizontal' | 'vertical' | null>(null)
 let startX = 0
 let startY = 0
 const yOffset = computed(() => {
-	const scrollPos = model.value.getUTCFullYear() - startYear.value + 1
-	return scrollPos - Math.floor(rowsToShow.value / 2)
+	// with 4 rows: 1981: -0.5, 1982: 0.5, 1983: 1.5, 1984: 2.5
+	// with 3 rows: 1981: 0, 1982: 1, 1983: 2
+	// with 2 rows: 1981: 0.5, 1982: 1.5, 1983: 2.5
+	// with 1 row: 1981: 1, 1982: 2, 1983: 3
+	// with "0" rows: 1981: 1.5, 1982: 2.5, 1983: 3.5
+
+	return (
+		model.value.getUTCFullYear() - startYear.value + 1.5 - rowsToShow.value / 2
+	)
 })
 
 const startDrag = (event: MouseEvent) => {
@@ -348,6 +374,9 @@ function assignTimelinePositions(events: WeatherEvent[], targetYear: number) {
 				: getDayOfYear(last)
 
 		sliced.push({ ...e, startX, endX })
+		if(e.id === '20231227-1050000040500000') {
+			// console.log('wtfmf?', e, first, last, startX, endX)
+		}
 	}
 
 	// Step 2: Assign y-positions using a greedy row-packing algorithm
@@ -394,16 +423,12 @@ const needleOffset = computed(() => {
 })
 
 const positionY = (y: number) => {
+	// return 0.5 * y * eventHeight.value
 	if (y % 2 === 0) {
 		return -0.5 * eventHeight.value * y
 	} else {
 		return 0.5 * eventHeight.value * (y + 1)
 	}
-	// if (y % 2 === 0) {
-	// 	return -0.5 * eventHeight.value * (maxSimultaneousEvents.value - y)
-	// } else {
-	// 	return 0.5 * eventHeight.value * (maxSimultaneousEvents.value -  y + 1)
-	// }
 }
 
 onMounted(() => {
@@ -432,6 +457,55 @@ const topBottomRowFlex = computed(
 	() => `0 0 calc(0.5 * (100% - (100% / ${rowsToShow.value})))`,
 )
 const highlightRowFlex = computed(() => `0 0 calc(100% / ${rowsToShow.value})`)
+
+const getAreaForYear = (year: number) => {
+	if (!props.dayCounts.has(year)) return ''
+	const data: Array<{ x: number; y: number }> = props.dayCounts
+		.get(year)!
+		.map((d, i) => ({
+			x: i,
+			y: d,
+		}))
+	const xScale = d3.scaleLinear().domain([0, 366]).range([1.5, 367.5])
+	const yScale = d3
+		.scaleLinear()
+		.domain([0, 1.05*maxSimultaneousEvents.value])
+		.range([0, 0.5])
+	const areaStr = d3
+		.area()
+		.x((d) => xScale(d.x))
+		.y0((d) => -yScale(d.y))
+		.y1((d) => yScale(d.y))
+		.defined((d) => d.x >= 0 && d.x < 366)
+		.curve(d3.curveMonotoneX)(data! || [])
+	if (year === 2024) {
+		// console.log(`Line for year ${year}: ${areaStr}`)
+	}
+	return areaStr || ''
+}
+
+const yearLines: Record<number, string> = {}
+watch(
+	() => [props.dayCounts, props.vertical],
+	() => {
+		for (const year of years.value) {
+			const newD = getAreaForYear(year)
+			const animTime = parseFloat(scssVars.animTime.replaceAll('s', '')) * 1000
+			d3.select(`#events-line-${year}`)
+				.transition()
+				.duration(animTime)
+				.attr('d', newD)
+				.on('end', () => {
+					if (props.dayCounts.has(year)) {
+						yearLines[year] = newD
+					} else {
+						yearLines[year] = ''
+					}
+				})
+		}
+	},
+	{ immediate: true, deep: true },
+)
 </script>
 
 <template>
@@ -449,34 +523,77 @@ const highlightRowFlex = computed(() => `0 0 calc(100% / ${rowsToShow.value})`)
 				<g
 					v-for="year in years"
 					:key="year"
-					v-show="() => true || isYearVisible(year)"
 					:transform="`translate(0, ${0.5 + year - startYear})`"
 				>
 					<rect
-						v-for="(month, i) in monthsForYear(year)"
+						v-for="(month, i) in monthsForYear(
+							year,
+							props.vertical || props.exploring,
+						)"
 						:key="`${year}${i}`"
 						class="background"
-						:x="month.startX"
-						:width="month.length"
-						:y="-0.5"
-						:height="1"
+						:x="!props.vertical ? month.startX : -0.5"
+						:width="!props.vertical ? month.length : 366"
+						:y="!props.vertical ? -0.5 : -0.5 + month.startX / 366"
+						:height="!props.vertical ? 1 : month.length / 366"
 						:fill="month.color"
 						:opacity="zoom ? 0 : 1"
 					/>
+					<path
+						:key="`${year}-line`"
+						class="event-line"
+						:id="`events-line-${year}`"
+						:d="yearLines[year] || getAreaForYear(year)"
+						vector-effect="non-scaling-stroke"
+						:stroke-width="props.vertical ? 1 : 3"
+						:opacity="
+							!props.exploring && !props.vertical && year === selectedYear
+								? 0.25
+								: 1.0
+						"
+						:transform="
+							props.vertical
+								? `
+							translate(${totalDays / 2},0)
+							scale(${totalDays}, 1)  
+							rotate(90)
+							scale(${1 / totalDays}, 1)
+							translate(${-totalDays / 2}, 0)
+							`
+								: ''
+						"
+					/>
 					<transition-group tag="g" name="daily-event-fx">
 						<rect
-							v-for="event in eventsByYear.get(year)"
+							v-for="event in eventsByYear
+								.get(year)
+								?.filter(() => !props.vertical && year == selectedYear) || []"
 							class="event-bar"
+							:data-id="event.id"
 							:key="event.id"
-							:x="event.startX! - 0.5"
-							:width="event.endX! - event.startX! + 1"
+							:x="
+								!props.vertical
+									? event.startX! - 0.5
+									: totalDays * (0.5 + positionY(event.y!) - eventHeight)
+							"
+							:width="
+								!props.vertical
+									? event.endX! - event.startX! + 1
+									: totalDays * eventHeight
+							"
 							:y="
-								eventIsSelected(event)
-									? -0.5
-									: positionY(event.y!) - 0.5 * eventHeight
+								!props.vertical
+									? eventIsSelected(event)
+										? -0.5
+										: positionY(event.y!) - 0.5 * eventHeight
+									: -0.5 + (event.startX! - 0.5) / totalDays
 							"
 							:height="
-								eventIsSelected(event) ? 3 * eventHeight : 0.8 * eventHeight
+								!props.vertical
+									? eventIsSelected(event)
+										? 3 * eventHeight
+										: 0.9 * eventHeight
+									: (event.endX! - event.startX! + 1) / totalDays
 							"
 							:fill="event.color"
 							:class="{
@@ -484,7 +601,13 @@ const highlightRowFlex = computed(() => `0 0 calc(100% / ${rowsToShow.value})`)
 								unselected:
 									!eventIsSelected(event) && props.selectedEvent !== null,
 							}"
-							:opacity="eventIsSelected(event) ? 0 : 1"
+							:opacity="
+								eventIsSelected(event) ||
+								props.exploring ||
+								year !== selectedYear
+									? 0
+									: 1
+							"
 							@click="eventClicked(event)"
 						/>
 					</transition-group>
@@ -512,7 +635,7 @@ const highlightRowFlex = computed(() => `0 0 calc(100% / ${rowsToShow.value})`)
 			</transition-group>
 		</svg>
 
-		<div class="year-highlights">
+		<div class="year-highlights" v-if="!props.vertical">
 			<div
 				class="highlight-row fade-top"
 				:class="{ exploring: props.exploring }"
@@ -596,7 +719,7 @@ $margin: 0 0;
 
 		transition:
 			all $settleTime ease-in-out $animTime,
-			opacity 0s linear;
+			opacity $animTime ease-in-out;
 
 		&.selected {
 			transition:
@@ -606,11 +729,21 @@ $margin: 0 0;
 
 		&.unselected {
 			transition:
-				all $settleTime ease-in-out $animTime,
+				all $settleTime ease-in-out,
 				opacity 0 linear;
 			// TODO looks iffy
 			opacity: 1;
 		}
+	}
+
+	.event-line {
+		stroke: $c3sred;
+		// stroke-width: 0.025;
+		fill: $c3sred;
+		fill-opacity: 0.25;
+		pointer-events: none;
+		transition:
+			opacity $animTime ease-in-out;
 	}
 
 	.day-box {
@@ -620,9 +753,18 @@ $margin: 0 0;
 
 	.daily-event-fx-enter-from {
 		opacity: 0;
+		transition: opacity $animTime ease-in-out;
 	}
 	.daily-event-fx-enter-to {
 		opacity: 1;
+	}
+
+	.daily-event-fx-leave-from {
+		opacity: 1;
+		transition: opacity $animTime ease-in-out;
+	}
+	.daily-event-fx-leave-to {
+		opacity: 0;
 	}
 
 	.selected-event-fx-enter-from {

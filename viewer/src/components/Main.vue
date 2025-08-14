@@ -18,6 +18,7 @@ import {
 	faClose,
 	faChevronDown,
 } from '@fortawesome/free-solid-svg-icons'
+import RegionPanel from './RegionPanel.vue'
 
 const $l = useLabels()
 const store = useStore()
@@ -26,6 +27,12 @@ onMounted(async () => {})
 const toggleLabel = computed(() =>
 	store.timePanelVisible ? $l.value.hideTimePanel : $l.value.showTimePanel,
 )
+const toggleTimePanelExpanded = () => {
+	store.timePanelExpanded = !store.timePanelExpanded
+	if (store.timePanelExpanded) {
+		store.timePanelVisible = true
+	}
+}
 </script>
 
 <template>
@@ -35,26 +42,29 @@ const toggleLabel = computed(() =>
 			id="time-panel"
 			:active="store.timePanelVisible || store.eventSelected"
 			class="bottom peek"
-			:class="{ side: store.eventSelected, expanded: store.timePanelExpanded }"
+			:class="{
+				event: store.eventSelected,
+				expanded: store.timePanelExpanded,
+				region: !store.eventSelected && store.exploringRegion,
+			}"
 		>
 			<TimeReel
 				id="times"
 				:start="store.startTime"
 				:end="store.endTime"
 				:events="store.filteredEvents"
+				:day-counts="store.dayCounts"
 				:selected-event="store.selectedEvent"
 				v-model="store.selectedTime"
 				:changing-filter="store.draggingFilter"
 				@event-selected="store.selectEvent"
 				:exploring="store.timePanelExpanded"
+				:vertical="store.exploringRegion"
 			></TimeReel>
 			<button
 				class="panel-hide"
-				@click="
-					store.timePanelVisible = !store.timePanelVisible;
-					if (!store.timePanelVisible) store.timePanelExpanded = false
-				"
-				v-show="!store.eventSelected"
+				@click="toggleTimePanelExpanded"
+				v-show="!store.eventSelected && !store.exploringRegion"
 			>
 				<font-awesome-icon
 					:icon="!store.timePanelExpanded ? faChevronUp : faAnglesUp"
@@ -64,11 +74,8 @@ const toggleLabel = computed(() =>
 			<button
 				v-if="store.timePanelVisible"
 				class="panel-expand"
-				@click="
-					store.timePanelExpanded = !store.timePanelExpanded;
-					if (store.timePanelExpanded) store.timePanelVisible = true
-				"
-				v-show="!store.eventSelected"
+				@click="toggleTimePanelExpanded"
+				v-show="!store.eventSelected && !store.exploringRegion"
 			>
 				<font-awesome-icon
 					:icon="!store.timePanelExpanded ? faWandMagicSparkles : faChevronDown"
@@ -76,16 +83,16 @@ const toggleLabel = computed(() =>
 			</button>
 		</Panel>
 		<Panel id="event-frame-panel" class="top" :active="store.eventSelected">
-			<button class="close-button" @click="store.selectedEvent = null">
+			<button class="close-button" @click="store.selectEvent(null)">
 				<font-awesome-icon :icon="faClose" />
 			</button>
+			<button
+				class="explore-button"
+				@click="console.log('explore local events')"
+			>
+				<font-awesome-icon :icon="faWandMagicSparkles" />
+			</button>
 			<div id="event-frame">
-				<button
-					class="explore-button"
-					@click="console.log('explore local events')"
-				>
-					<font-awesome-icon :icon="faWandMagicSparkles" />
-				</button>
 				<div class="decor"></div>
 			</div>
 			<EventInfo
@@ -94,7 +101,7 @@ const toggleLabel = computed(() =>
 			></EventInfo>
 		</Panel>
 		<Panel id="event-panel" class="top" :active="store.eventSelected">
-			<button
+			<!-- <button
 				class="explore-button"
 				@click="console.log('explore local events')"
 			>
@@ -111,13 +118,19 @@ const toggleLabel = computed(() =>
 				@click="console.log('explore local events')"
 			>
 				<font-awesome-icon :icon="faWandMagicSparkles" />
-			</button>
+			</button> -->
 			<EventGraphs
-				:selected-event="store.selectedEvent as FullExtremeEvent"
+				:selected-event="store.selectedEvent"
 				:time="store.selectedTime"
 				@date-selected="store.selectedTime = $event"
 			></EventGraphs>
 		</Panel>
+		<RegionPanel
+			id="region-panel"
+			class="left"
+			:active="store.exploringRegion"
+			@close="store.filters.wrafRegion = null"
+		></RegionPanel>
 	</div>
 </template>
 
@@ -173,27 +186,37 @@ const toggleLabel = computed(() =>
 	}
 
 	#time-panel {
-		// width: 100%;
-		left: 1.5rem;
-		right: 1.5rem;
-		bottom: 1.5rem;
-		height: 20%;
+		width: calc(100% - 2 * $panelMargin);
+		left: $panelMargin;
+		bottom: $panelMargin;
+		height: 40%;
 		&.expanded {
-			height: 75%;
+			height: calc(100% - 2 * $panelMargin);
 		}
 
 		z-index: 20;
 
 		transition: all $animTime linear;
 
-		&.side {
+		&.event {
 			left: 50%;
-			height: 15%;
+			width: calc(50% - $panelMargin);
+			height: $eventTimePanelHeight;
 			// padding-bottom: calc(15% - 0.75rem);
 			border-top: none;
 			border-top-right-radius: 0;
 			border-top-left-radius: 0;
 			border-bottom-left-radius: 0;
+		}
+
+		&.region {
+			left: $panelMargin;
+			bottom: $panelMargin;
+			height: calc(100% - 2 * $panelMargin);
+			width: $vTimePanelWidth;
+			box-shadow: none;
+			border-top-right-radius: 0;
+			border-bottom-right-radius: 0;
 		}
 
 		#times {
@@ -221,8 +244,21 @@ const toggleLabel = computed(() =>
 		border-bottom-left-radius: 6px;
 		pointer-events: none;
 
+		.close-button {
+			position: absolute;
+			top: 0.5rem;
+			left: 0.5rem;
+			z-index: 20;
+			background-color: transparent;
+			border: none;
+			color: $textColor;
+			&:hover {
+				color: $c3sred;
+			}
+		}
+
 		#event-frame {
-			pointer-events: none;
+			// pointer-events: none;
 			flex: 0 0 50%;
 			border-top: 3rem solid $panelBg;
 			border-top-left-radius: 6px;
@@ -255,13 +291,24 @@ const toggleLabel = computed(() =>
 	#event-panel {
 		top: 1.5rem;
 		right: 1.5rem;
-		bottom: calc(15% + 1.5rem);
+		bottom: calc($eventTimePanelHeight + 1.5rem);
 		left: 50%;
 		border-radius: 0;
 		border-top-right-radius: 6px;
 		border-bottom: none;
 		padding-top: 1rem;
+		display: flex;
 		// box-shadow: rgba(0, 0, 0, 0.5) 3px 0px 3px 0px;
+	}
+
+	#region-panel {
+		width: calc(100% - 2 * $panelMargin);
+		height: calc(100% - 2 * $panelMargin);
+		padding-left: $vTimePanelWidth;
+		top: $panelMargin;
+		left: $panelMargin;
+		// bottom: $panelMargin;;
+		// right: $panelMargin;;
 	}
 }
 </style>

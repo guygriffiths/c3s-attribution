@@ -4403,6 +4403,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"flatbush@npm:^4.4.1":
+  version: 4.4.1
+  resolution: "flatbush@npm:4.4.1"
+  dependencies:
+    flatqueue: "npm:^2.0.3"
+  checksum: 10c0/3793ebf695eaaf5322108f664561b85f8dafa53e4b465a697a244bb571d551089ffe68ab31f77685926668aa1255fbdcce958b64a4d64566919fc1b4e4f27410
+  languageName: node
+  linkType: hard
+
+"flatqueue@npm:^2.0.3":
+  version: 2.0.3
+  resolution: "flatqueue@npm:2.0.3"
+  checksum: 10c0/6ecc53d81b171d60c17dd775f44731e04d4ab4ed4496d5e2b883bdf2fd08d0853d57f1f26d4e33bc41d991a3beed74d18e4eec5d98a82fec30d1918900f1631f
+  languageName: node
+  linkType: hard
+
 "flatted@npm:^3.2.9":
   version: 3.3.3
   resolution: "flatted@npm:3.3.3"
@@ -6364,6 +6380,7 @@ __metadata:
     eslint: "npm:^9.21.0"
     eslint-config-prettier: "npm:^10.0.2"
     eslint-plugin-vue: "npm:^9.32.0"
+    flatbush: "npm:^4.4.1"
     js-cookie: "npm:^3.0.5"
     leaflet: "npm:^1.9.4"
     papaparse: "npm:^5.5.2"

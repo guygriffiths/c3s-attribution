@@ -10,6 +10,7 @@ const labelsEn = {
 	showTimePanel: 'Show time panel',
 	hideTimePanel: 'Hide time panel',
 	filter: 'Filter events',
+	closeRegionPanel: 'Exit region exploration',
 	months: {
 		jan: 'Jan',
 		feb: 'Feb',
@@ -24,8 +25,6 @@ const labelsEn = {
 		nov: 'Nov',
 		dec: 'Dec',
 	},
-	main: 'Main page',
-	mainTitle: 'Main content goes here',
 	e404Title: 'Page not found',
 	e404: 'The page you are looking for does not exist, please navigate to another page using the menus at the top of the page.',
 	errorTitle: 'Error',

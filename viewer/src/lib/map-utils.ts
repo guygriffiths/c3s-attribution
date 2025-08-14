@@ -1,11 +1,11 @@
 import scssVars from '@/assets/styles/scssVars.module.scss'
 
-export const fitMapToBounds = (map: L.Map, newVal: any) => {
+export const fitMapToBounds = (map: L.Map, event: ExtremeEvent) => {
 	// TODO - 32px is hardcoded padding, yuck
 	map.fitBounds(
 		[
-			[newVal.bbox[0], newVal.bbox[1]],
-			[newVal.bbox[2], newVal.bbox[3]],
+			[event.bbox[0], event.bbox[1]],
+			[event.bbox[2], event.bbox[3]],
 		],
 		{
 			paddingTopLeft: [64, 64],

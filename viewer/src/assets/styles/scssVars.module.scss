@@ -1,4 +1,3 @@
-
 // Official colors
 $c3sred: rgb(151, 24, 65);
 $panelBg: rgb(255, 255, 255);
@@ -8,7 +7,7 @@ $bg: rgb(197, 228, 236);
 $bgContrast: rgb(196, 237, 247);
 $textColor: rgb(27, 11, 9);
 $primary: rgb(50, 108, 184);
-$highlight: rgb(211,54,130);
+$highlight: rgb(211, 54, 130);
 
 $animTime: 0.3s;
 $settleTime: 0.3s;
@@ -17,6 +16,17 @@ $headerHeight: 4rem;
 $gap: 0.5rem;
 $footerHeight: 2.25rem;
 
+$eventTimePanelHeight: 35%;
+
+$frameBorderRadius: 0.5rem;
+
+$frameBorderWidth: 1.5rem;
+$vTimePanelWidth: 5rem;
+$panelMargin: 1rem;
+
 :export {
-    animTime: $animTime;
+	animTime: $animTime;
+	frameBorderWidth: $frameBorderWidth;
+	vTimePanelWidth: $vTimePanelWidth;
+	panelMargin: $panelMargin;
 }

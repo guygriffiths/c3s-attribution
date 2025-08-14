@@ -1,10 +1,10 @@
+import { filterEvents } from '@/lib/utils'
 import registerPromiseWorker from 'promise-worker/register'
 
 registerPromiseWorker((message: any) => {
-	const { messageContent } = message.message
+	const { events, filters, eventIndex } = message
 
-	console.log('Worker received message:', messageContent)
-	// Perform some processing with the message
-	
-	return
+	const fullResult = filterEvents(events, filters, eventIndex, true)
+
+	return { filteredEvents: fullResult }
 })

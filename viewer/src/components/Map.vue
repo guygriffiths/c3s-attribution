@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import 'leaflet/dist/leaflet.css'
-import { ref, Ref, watch } from 'vue'
+import { computed, nextTick, ref, Ref, watch } from 'vue'
 import {
 	LMap,
 	LTileLayer,
@@ -28,17 +28,30 @@ import {
 	getZeitgeistOpacity,
 } from '@/lib/map-utils'
 import { bbox } from '@turf/turf'
+import RegionControl from './util/RegionControl.vue'
+import {
+	vTimePanelWidth,
+	panelMargin,
+	frameBorderWidth,
+} from '@/assets/styles/scssVars.module.scss'
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
 const eventHeatmapRef = ref<InstanceType<typeof LGridLayer> | null>(null)
+
+const currentEvents = computed(() => {
+	if (store.filters.wrafRegion) {
+		return store.filteredEvents
+	}
+	return store.currentEvents
+})
 
 const mapOptions = {
 	zoomControl: false,
 	zoomSnap: 1,
 	zoomDelta: 1,
 	wheelPxPerZoomLevel: 240,
-	fadeAnimation: false
+	fadeAnimation: false,
 }
 const centerPoint: Ref<Point> = ref(new LatLng(0, 0) as unknown as Point)
 const zoom = ref(3)
@@ -53,37 +66,83 @@ const bgLayer = {
 const wmtsUrl = ref(
 	`https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${store.isoDatetime}`,
 )
-
-watch(
-	() => store.isoDatetime,
-	() => {
-		debounce(() => {
-			console.warn('Do not forget to recomment this')
-			// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
-		}, 500)
-	},
-)
+const updateWmtsUrl = debounce((newVal: string) => {
+	console.log(
+		'Updating WMTS URL to:',
+		newVal,
+		' (nah, not really. You should probably uncomment the next line at some point)',
+	)
+	// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
+}, 500)
+watch(() => store.isoDatetime, updateWmtsUrl)
 
 watch(
 	() => store.selectedEvent,
 	(newVal) => {
-		if (newVal && mapRef.value) {
+		const id = newVal?.id
+		if (!store.eventSelected) {
+			// @ts-ignore
+			lastBbox.value = mapRef.value?.leafletObject.getBounds()
+		} else if (store.selectedEvent?.id == id) {
+			if (lastBbox.value && mapRef.value) {
+				// @ts-ignore
+				mapRef.value.leafletObject.fitBounds(lastBbox.value)
+			}
+		}
+		if (id && mapRef.value) {
 			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
-			fitMapToBounds(map, newVal)
+			fitMapToBounds(map, id)
 		}
 	},
 )
 
-watch( () => store.filters.wrafRegion,
+watch(
+	() => store.filters.wrafRegion,
 	(newVal) => {
 		if (newVal && mapRef.value) {
 			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
-			const bounds = bbox(store.filters.wrafRegion)	
-			console.log('need to find bbox of region', bounds)
-			map.fitBounds([
-				[bounds[1], bounds[0]],
-				[bounds[3], bounds[2]],
-			])
+			const bounds = bbox(newVal)
+
+			function toPx(value: string): number {
+				if (value.endsWith('%')) {
+					return (window.innerWidth * parseFloat(value)) / 100
+				}
+				if (value.endsWith('rem')) {
+					return (
+						parseFloat(value) *
+						parseFloat(getComputedStyle(document.documentElement).fontSize)
+					)
+				}
+				if (value.endsWith('px')) {
+					return parseFloat(value)
+				}
+				return parseFloat(value) // fallback
+			}
+
+			const peepholeWidth =
+				window.innerWidth -
+				toPx(vTimePanelWidth) -
+				2 * toPx(panelMargin) -
+				2 * toPx(frameBorderWidth)
+
+			const peepholeHeight = window.innerHeight / 2 - toPx(frameBorderWidth)
+
+			const padLeft =
+				toPx(panelMargin) + toPx(vTimePanelWidth) + toPx(frameBorderWidth)
+			const padTop = toPx(panelMargin) + toPx(frameBorderWidth)
+			const padRight = window.innerWidth - (padLeft + peepholeWidth)
+			const padBottom = window.innerHeight - (padTop + peepholeHeight)
+
+			map.fitBounds(
+				[
+					[bounds[1], bounds[0]],
+					[bounds[3], bounds[2]],
+				],
+				{
+					paddingTopLeft: [padLeft, padTop],
+					paddingBottomRight: [padRight, padBottom],
+				},
+			)
 		}
 	},
 )
@@ -98,15 +157,17 @@ watch(
 const selectRegion = (event: any) => {
 	if (event.layer && event.layer.feature) {
 		const region = event.layer.feature as Feature<Polygon | MultiPolygon>
-		store.filters.wrafRegion = region
+		store.selectRegion(region)
 		console.log('Selected region:', region)
-
 	} else {
 		console.warn('No layer or feature found in click event:', event)
 	}
 }
 
 const getEventRegion = (event: any) => {
+	if (store.exploringRegion) {
+		return event.total_region || [] // We want to see the entire event footprint, because we are viewing across all times
+	}
 	const idx = event.times.findIndex(
 		(t: Date) =>
 			new Date(t).getTime() === new Date(store.selectedTime).getTime(),
@@ -118,16 +179,9 @@ const getEventRegion = (event: any) => {
 }
 
 const lastBbox = ref<LatLngBounds | null>(null)
+
+// TODO centralise this, so either we watch it and zoom in/out, or we do it all here and not in the store
 const selectEvent = (id: number) => {
-	if (!store.eventSelected) {
-		// @ts-ignore
-		lastBbox.value = mapRef.value?.leafletObject.getBounds()
-	} else if (id == store.selectedEvent?.id) {
-		if (lastBbox.value && mapRef.value) {
-			// @ts-ignore
-			mapRef.value.leafletObject.fitBounds(lastBbox.value)
-		}
-	}
 	store.selectEvent(id)
 }
 
@@ -169,6 +223,7 @@ const renderTile = (props: any) =>
 				:url="wmtsUrl"
 				:zIndex="2"
 				:opacity="0.75"
+				v-if="!store.exploringRegion"
 			></LTileLayer>
 			<LGridLayer
 				ref="eventHeatmapRef"
@@ -184,10 +239,12 @@ const renderTile = (props: any) =>
 			<LGeoJson
 				v-if="store.regionsToSelectBy && !store.filters.wrafRegion"
 				:geojson="store.regionsToSelectBy"
-				:options-style="() => ({
-					// @ts-ignore
-					className: 'region-select',
-				})"
+				:options-style="
+					() => ({
+						// @ts-ignore
+						className: 'region-select',
+					})
+				"
 				class="region-select"
 				@click="selectRegion"
 			>
@@ -195,22 +252,29 @@ const renderTile = (props: any) =>
 			<LGeoJson
 				v-if="store.filters.wrafRegion"
 				:geojson="store.filters.wrafRegion"
-				:options-style="() => ({
-					// @ts-ignore
-					className: 'region-select',
-				})"
+				:options-style="
+					() => ({
+						// @ts-ignore
+						className: 'region-select',
+					})
+				"
 				class="region-select"
-				@click="selectRegion"
+				@click="store.filters.wrafRegion = null"
 			>
 			</LGeoJson>
 			<LPolygon
-				v-for="(event, idx) in store.currentEvents"
+				v-for="(event, idx) in currentEvents"
 				:key="event.id"
 				:lat-lngs="getEventRegion(event)"
-				:weight="3"
+				:weight="store.exploringRegion ? 0 : 3"
 				:fill="true"
+				:fill-opacity="
+					store.exploringRegion
+						? Math.max(0.01, 1 / Math.pow(currentEvents.length, 0.8))
+						: 0.05
+				"
 				:opacity="1"
-				:color="catScheme[event.id % catScheme.length]"
+				:color="store.exploringRegion ? 'rgb(151, 24, 65)' : event.color"
 				@click="selectEvent(event.id)"
 			>
 			</LPolygon>
@@ -366,22 +430,9 @@ const renderTile = (props: any) =>
 					</select>
 				</div> -->
 			</LControl>
-			<LControl
-				:max-width="200"
-				:metric="true"
-				:imperial="false"
-				position="topleft"
-				class="map-scale"
-			>
-				<select name="wraf-region" v-model="store.wrafLevel">
-					<option value="none">None</option>
-					<option value="wraf-01">WRAF 0.1 Mm²</option>
-					<option value="wraf-05">WRAF 0.5 Mm²</option>
-					<option value="wraf-2">WRAF 2 Mm²</option>
-					<option value="wraf-5">WRAF 5 Mm²</option>
-					<option value="wraf-10">WRAF 10 Mm²</option>
-				</select></LControl
-			>
+			<LControl position="topleft" class="region-control">
+				<RegionControl />
+			</LControl>
 			<LControlScale
 				:max-width="200"
 				:metric="true"
@@ -430,6 +481,7 @@ const renderTile = (props: any) =>
 		fill: rgba(0, 0, 0, 0.4);
 		cursor: pointer;
 		&:hover {
+			// cursor: pointer;
 			fill: rgba(0, 0, 0, 0.5);
 			stroke-width: 2px;
 		}
