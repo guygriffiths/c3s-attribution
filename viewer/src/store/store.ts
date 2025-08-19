@@ -20,7 +20,7 @@ interface State {
 	endTime: Date
 	events: ExtremeEvent[]
 
-	selectedEvent: FullExtremeEvent | null
+	selectedEvent: ExtremeEventFull | null
 
 	lat2Index?: (lat: number) => number
 	lon2Index?: (lon: number) => number
@@ -59,7 +59,7 @@ export const useStore = defineStore('main', {
 		return {
 			lang: 'en',
 			loadingCount: 0,
-			viewMode: 'explore',
+			viewMode: 'heatmap',
 
 			selectedTime: new Date(Date.UTC(2024, 4, 28, 0, 0, 0)),
 			layerDetails: null,
@@ -163,7 +163,7 @@ export const useStore = defineStore('main', {
 		},
 	},
 	actions: {
-		async selectEvent(id: number | null) {
+		async selectEvent(id: string | null) {
 			if (id === null) {
 				this.selectedEvent = null
 				return
@@ -182,7 +182,7 @@ export const useStore = defineStore('main', {
 				event.id = id
 				event.times = event.times.map((time: string) => new Date(time))
 				event.color = catScheme[event.id % catScheme.length]
-				this.selectedEvent = event as FullExtremeEvent
+				this.selectedEvent = event as ExtremeEventFull
 				if (
 					this.selectedTime < event.times[0] ||
 					this.selectedTime > event.times[event.times.length - 1]
@@ -198,19 +198,18 @@ export const useStore = defineStore('main', {
 			} else {
 				this.filters.wrafRegion = region
 			}
-			if (this.wrafLevel !== 'none') {
-				// If we have a WRAF level selected, we need to load the regions for that level
-			}
 		},
 		toggleTimePanel() {
 			this.timePanelExpanded = !this.timePanelExpanded
 		},
 		toggleEventSelectedDebug() {
 			this.selectedEvent =
-				this.selectedEvent === null ? (new Object() as FullExtremeEvent) : null
+				this.selectedEvent === null ? (new Object() as ExtremeEventFull) : null
 		},
-		setLoading() {
+		async setLoading() {
 			this.loadingCount++
+			// Triggers Vue to re-render the map
+			await new Promise((resolve) => setTimeout(resolve, 0))
 		},
 		setLoadingDone() {
 			this.loadingCount--
@@ -291,7 +290,7 @@ export const useStore = defineStore('main', {
 				.catch((error) => {
 					console.error('There was a problem with the fetch operation:', error)
 				})
-				this.runFilters()
+			this.runFilters()
 			watch(
 				() => [this.filters, this.events, this.eventIndex],
 				this.runFilters,
@@ -300,6 +299,7 @@ export const useStore = defineStore('main', {
 		},
 		async runFilters() {
 			this.setLoading()
+
 			this.filteredEvents = filterEvents(
 				this.events,
 				this.filters,
@@ -307,15 +307,14 @@ export const useStore = defineStore('main', {
 				false,
 			)
 
-			// Full filter in worker
+			// Full filter in worker if this gets too slow
+			// But at the moment, it's the canvas update and Vue/Leafet rendering that is slow
+			//
 			// const result = await worker.send({
 			// 	events: this.filteredEvents,
 			// 	filters: this.filters,
 			// 	eventIndex: this.eventIndex,
 			// })
-
-			// Triggers Vue to re-render the map
-			await new Promise((resolve) => setTimeout(resolve, 0))
 
 			this.filteredEvents = filterEvents(
 				this.filteredEvents,
@@ -323,6 +322,7 @@ export const useStore = defineStore('main', {
 				this.eventIndex,
 				true,
 			)
+			// This needs to get set by the leaflet layers
 			this.setLoadingDone()
 		},
 	},

@@ -6,3 +6,9 @@ declare module '*.vue' {
 	const component: DefineComponent<{}, {}, any>
 	export default component
 }
+
+
+declare module '*.module.scss' {
+  const content: { [key: string]: string }
+  export default content
+}

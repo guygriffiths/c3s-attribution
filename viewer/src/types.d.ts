@@ -15,26 +15,20 @@ declare global {
 		centroid: [number, number]
 		size: number
 		feature: boolean
-		ocean_only?: boolean // Whether the event is only in ocean regions
-		id: number
+		ocean_only?: boolean
+		id: string
 		total_region: [number, number][]
-		intensity?: number // Intensity of the event, if applicable
-		color?: string // Color for the event, can be used for visualization
+		intensity?: number
+		color?: string
 	}
 
-	interface FullExtremeEvent {
-		id: number
-		times: Date[]
-		regions: any[]
-		slices: any[]
+	interface ExtremeEventFull extends ExtremeEvent {
 		values: any[]
 		centroids: [[number, number]]
-		bbox: [number, number, number, number]
 		total_area: number
 		areas: number[]
 		peak_values: number[]
 		mean_values: number[]
-		color?: string
 	}
 }
 

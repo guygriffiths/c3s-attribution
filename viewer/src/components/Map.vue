@@ -29,11 +29,8 @@ import {
 } from '@/lib/map-utils'
 import { bbox } from '@turf/turf'
 import RegionControl from './util/RegionControl.vue'
-import {
-	vTimePanelWidth,
-	panelMargin,
-	frameBorderWidth,
-} from '@/assets/styles/scssVars.module.scss'
+import scssVars from '@/assets/styles/scssVars.module.scss'
+const { vTimePanelWidth, panelMargin, frameBorderWidth } = scssVars
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
@@ -45,7 +42,6 @@ const currentEvents = computed(() => {
 	}
 	return store.currentEvents
 })
-
 
 import L from 'leaflet'
 import ModeToggle from './util/ModeToggle.vue'
@@ -98,7 +94,7 @@ watch(
 		}
 		if (id && mapRef.value) {
 			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
-			fitMapToBounds(map, id)
+			fitMapToBounds(map, store.selectedEvent!)
 		}
 	},
 )
@@ -195,7 +191,7 @@ const getEventRegion = (event: any) => {
 const lastBbox = ref<LatLngBounds | null>(null)
 
 // TODO centralise this, so either we watch it and zoom in/out, or we do it all here and not in the store
-const selectEvent = (id: number) => {
+const selectEvent = (id: string) => {
 	store.selectEvent(id)
 }
 
@@ -208,9 +204,20 @@ watch(
 	},
 )
 
+let pendingDone = false
+
+function onLayerAddBatch() {
+  if (!pendingDone) {
+    pendingDone = true
+    nextTick(() => {
+      store.setLoadingDone()
+      pendingDone = false
+    })
+  }
+}
+
 const renderTile = (props: any) =>
 	drawEventTile(props, store, eventPixelsRef.value)
-
 </script>
 
 <template>
@@ -262,6 +269,8 @@ const renderTile = (props: any) =>
 				"
 				class="region-select"
 				@click="selectRegion"
+				@add="store.setLoadingDone()"
+				@layeradd="onLayerAddBatch"
 			>
 			</LGeoJson>
 			<LGeoJson
@@ -290,7 +299,7 @@ const renderTile = (props: any) =>
 				"
 				:opacity="1"
 				:color="store.viewMode === 'heatmap' ? 'rgb(151, 24, 65)' : event.color"
-				:options="{renderer: canvasRenderer}"
+				:options="{ renderer: canvasRenderer }"
 				@click="selectEvent(event.id)"
 			>
 			</LPolygon>
@@ -447,8 +456,8 @@ const renderTile = (props: any) =>
 				</div> -->
 			</LControl>
 			<LControl position="topleft" class="region-control">
-				<RegionControl />
 				<ModeToggle v-model="store.viewMode" />
+				<RegionControl v-show="store.viewMode === 'heatmap'" />
 			</LControl>
 			<LControlScale
 				:max-width="200"

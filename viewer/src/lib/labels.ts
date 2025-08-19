@@ -11,6 +11,7 @@ const labelsEn = {
 	hideTimePanel: 'Hide time panel',
 	filter: 'Filter events',
 	closeRegionPanel: 'Exit region exploration',
+	selectByRegion: 'Select by region',
 	months: {
 		jan: 'Jan',
 		feb: 'Feb',
@@ -89,6 +90,7 @@ const locales: Record<Language, TimeLocaleDefinition> = {
 }
 
 const LabelsKey: InjectionKey<ComputedRef<Labels>> = Symbol('labels')
+
 function useLabels() {
 	return inject(
 		LabelsKey,
