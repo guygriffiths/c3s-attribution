@@ -581,20 +581,28 @@ def main():
 
     # for dbscan in [False, True]:
     #     for perc in [98, 99]:
+    stat = 'max'
+    perc = '99.0'
+    thresh = 28
+    nr = 9
+
+
     data_var, ref_data, land_sea_mask = load_data(
-        "/data/era5_20*.nc", f"/data/era5_ref{98}.nc", f"/data/era5_land_sea.nc"
+        f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
+        f"/data/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
+        f"/data/era5_land_sea_mask.nc"
     )
     time_dim = data_var["valid_time"]
-    out_path = f"/data/output"
+    out_path = f"/data/output-{stat}-{perc}-{thresh}-nr{nr}"
     os.makedirs(out_path, exist_ok=True)
     os.makedirs(f"{out_path}/events", exist_ok=True)
 
     factory = EventletFactory(
         data_var,
-        threshold=273.15 + 30,
+        threshold=273.15 + thresh,
         ref_data=ref_data,
         land_sea_mask=land_sea_mask,
-        neighbor_radius=10,
+        neighbor_radius=nr,
         output_path=out_path,
         use_dbscan=False,
     )
