@@ -23,8 +23,6 @@ export const filterEvents = (
 ): ExtremeEvent[] => {
   let spatialCandidates: Set<number> | null = null
 
-  console.log('Filtering events, full:', full, filters.wrafRegion)
-
   if (filters.wrafRegion && eventIndex) {
     const geom = filters.wrafRegion.geometry
     const turfRegion =

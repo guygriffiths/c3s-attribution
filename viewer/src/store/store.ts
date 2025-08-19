@@ -7,42 +7,12 @@ import { defineStore } from 'pinia'
 import { watch } from 'vue'
 
 type LayerDetails = any
-
-export interface ExtremeEvent {
-	times: Date[]
-	slices: any[]
-	featureLevel?: number
-	regions: any[]
-	maxArea: number
-	bbox: [number, number, number, number]
-	centroid: [number, number]
-	size: number
-	feature: boolean
-	ocean_only?: boolean // Whether the event is only in ocean regions
-	id: number
-	total_region: [number, number][]
-	intensity?: number // Intensity of the event, if applicable
-	color?: string // Color for the event, can be used for visualization
-}
-
-export interface FullExtremeEvent {
-	id: number
-	times: Date[]
-	regions: any[]
-	slices: any[]
-	values: any[]
-	centroids: [[number, number]]
-	bbox: [number, number, number, number]
-	total_area: number
-	areas: number[]
-	peak_values: number[]
-	mean_values: number[]
-	color?: string
-}
+type ViewMode = 'explore' | 'heatmap'
 
 interface State {
 	lang: Language
 	loadingCount: number
+	viewMode: ViewMode
 
 	selectedTime: Date
 	layerDetails: LayerDetails | null
@@ -89,6 +59,8 @@ export const useStore = defineStore('main', {
 		return {
 			lang: 'en',
 			loadingCount: 0,
+			viewMode: 'explore',
+
 			selectedTime: new Date(Date.UTC(2024, 4, 28, 0, 0, 0)),
 			layerDetails: null,
 			// times: [],
@@ -152,8 +124,8 @@ export const useStore = defineStore('main', {
 		// Returns the (filtered) events which are active at the selected time (i.e. plotted on the map)
 		// TODO make it respond to a range, and use this is region explore
 		currentEvents: (state: State) => {
-			if (state.filters.wrafRegion) {
-				console.log('Filtering events by WRAF region')
+			if (state.viewMode === 'heatmap') {
+				console.log('Heatmap mode, returning all filtered events')
 				return state.filteredEvents
 			}
 			// @ts-ignore
@@ -319,7 +291,7 @@ export const useStore = defineStore('main', {
 				.catch((error) => {
 					console.error('There was a problem with the fetch operation:', error)
 				})
-
+				this.runFilters()
 			watch(
 				() => [this.filters, this.events, this.eventIndex],
 				this.runFilters,

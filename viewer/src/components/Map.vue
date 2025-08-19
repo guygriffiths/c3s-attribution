@@ -37,7 +37,7 @@ import {
 
 const store = useStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
-const eventHeatmapRef = ref<InstanceType<typeof LGridLayer> | null>(null)
+const eventPixelsRef = ref<InstanceType<typeof LGridLayer> | null>(null)
 
 const currentEvents = computed(() => {
 	if (store.filters.wrafRegion) {
@@ -46,12 +46,19 @@ const currentEvents = computed(() => {
 	return store.currentEvents
 })
 
+
+import L from 'leaflet'
+import ModeToggle from './util/ModeToggle.vue'
+// create a single canvas renderer for all polygons
+const canvasRenderer = L.canvas({ padding: 0.5 })
+
 const mapOptions = {
 	zoomControl: false,
 	zoomSnap: 1,
 	zoomDelta: 1,
 	wheelPxPerZoomLevel: 240,
 	fadeAnimation: false,
+	// renderer: canvasRenderer,
 }
 const centerPoint: Ref<Point> = ref(new LatLng(0, 0) as unknown as Point)
 const zoom = ref(3)
@@ -101,6 +108,7 @@ watch(
 	(newVal) => {
 		if (newVal && mapRef.value) {
 			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
+			lastBbox.value = map.getBounds()
 			const bounds = bbox(newVal)
 
 			function toPx(value: string): number {
@@ -143,6 +151,12 @@ watch(
 					paddingBottomRight: [padRight, padBottom],
 				},
 			)
+		} else if (newVal === null && mapRef.value) {
+			console.log('Resetting map bounds to last bbox', lastBbox.value)
+			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
+			if (lastBbox.value) {
+				map.fitBounds(lastBbox.value)
+			}
 		}
 	},
 )
@@ -188,14 +202,15 @@ const selectEvent = (id: number) => {
 watch(
 	() => [store.selectedTime, store.selectedEvent],
 	() => {
-		if (eventHeatmapRef.value && eventHeatmapRef.value.leafletObject) {
-			eventHeatmapRef.value.leafletObject.redraw()
+		if (eventPixelsRef.value && eventPixelsRef.value.leafletObject) {
+			eventPixelsRef.value.leafletObject.redraw()
 		}
 	},
 )
 
 const renderTile = (props: any) =>
-	drawEventTile(props, store, eventHeatmapRef.value)
+	drawEventTile(props, store, eventPixelsRef.value)
+
 </script>
 
 <template>
@@ -223,11 +238,11 @@ const renderTile = (props: any) =>
 				:url="wmtsUrl"
 				:zIndex="2"
 				:opacity="0.75"
-				v-if="!store.exploringRegion"
+				v-if="store.viewMode === 'explore'"
 			></LTileLayer>
+
 			<LGridLayer
-				ref="eventHeatmapRef"
-				class="event-heatmap"
+				ref="eventPixelsRef"
 				:tileSize="TILE_SIZE"
 				:child-render="renderTile"
 				:options="{
@@ -266,15 +281,16 @@ const renderTile = (props: any) =>
 				v-for="(event, idx) in currentEvents"
 				:key="event.id"
 				:lat-lngs="getEventRegion(event)"
-				:weight="store.exploringRegion ? 0 : 3"
+				:weight="store.viewMode === 'heatmap' ? 0 : 3"
 				:fill="true"
 				:fill-opacity="
-					store.exploringRegion
-						? Math.max(0.01, 1 / Math.pow(currentEvents.length, 0.8))
+					store.viewMode === 'heatmap'
+						? Math.max(0.05, 1 / Math.pow(currentEvents.length, 0.8))
 						: 0.05
 				"
 				:opacity="1"
-				:color="store.exploringRegion ? 'rgb(151, 24, 65)' : event.color"
+				:color="store.viewMode === 'heatmap' ? 'rgb(151, 24, 65)' : event.color"
+				:options="{renderer: canvasRenderer}"
 				@click="selectEvent(event.id)"
 			>
 			</LPolygon>
@@ -432,6 +448,7 @@ const renderTile = (props: any) =>
 			</LControl>
 			<LControl position="topleft" class="region-control">
 				<RegionControl />
+				<ModeToggle v-model="store.viewMode" />
 			</LControl>
 			<LControlScale
 				:max-width="200"

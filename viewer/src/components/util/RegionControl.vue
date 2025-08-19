@@ -60,6 +60,7 @@ const sizeScheme = d3.interpolateWarm
 			<template v-for="(size, i) in sizes" :key="size">
 				<button
 					:style="{ backgroundColor: sizeScheme(i / 5) }"
+
 					:title="`${size[0]} Mm²`"
 					@click="selectSize(i)"
 				>
@@ -67,7 +68,7 @@ const sizeScheme = d3.interpolateWarm
 				</button>
 			</template>
 				<button
-					:style="{ backgroundColor: 'black' }"
+					:style="{ backgroundColor: 'black', color: 'white' }"
 					title="None"
 					@click="selectSize(null)"
 				>
