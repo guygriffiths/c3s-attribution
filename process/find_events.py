@@ -542,8 +542,15 @@ def get_id(time, centroid):
     Generate a stable ID for an event based on time and centroid.
     This is a simple hash function that combines the time and centroid coordinates.
     """
-    return f"{time.strftime('%Y%m%d')}{centroid[0]:.6f}{centroid[1]:.6f}".replace('.', '')
-    # return stable_cluster_hash(time, centroid)
+    # snap to nearest 0.1°
+    lat = round(centroid[0], 1)
+    lon = round(centroid[1], 1)
+
+    # shift negatives to positives
+    lat_code = int(round((lat + 90) * 10))   # 0 → 1800 range
+    lon_code = int(round((lon + 180) * 10))  # 0 → 3600 range
+
+    return f"{time.strftime('%Y%m%d')}{lat_code:04d}{lon_code:04d}"
 
 
 def downstream_worker(q, clusterer):
