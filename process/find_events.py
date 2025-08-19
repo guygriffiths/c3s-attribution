@@ -423,7 +423,7 @@ class EventletFactory:
 
                     # print(f"Indices for hull {i}: {lat_indices}, {lon_indices}, {self.land_sea_mask.values.shape}")
                     mask_values = self.land_sea_mask.values[0, lat_indices, lon_indices]
-                    if not np.all(mask_values < 0):
+                    if not np.all(mask_values == 0):
                         all_ocean = False
                         break
             ocean_only = all_ocean
