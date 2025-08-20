@@ -12,6 +12,7 @@ import {
 import * as d3 from 'd3'
 import { useLabels } from '@/lib/labels'
 import scssModule from '@/assets/styles/scssVars.module.scss'
+import { LatLng } from 'leaflet'
 
 const store = useStore()
 const $l = useLabels()
@@ -30,16 +31,35 @@ const sizes: [
 const selectedSize = ref<number | null>(null)
 
 const selectSize = async (idx: number | null) => {
-	store.setLoading() // start loading immediately
+	if (idx !== null) {
+		store.setLoading() // start loading immediately
+	}
 	selectedSize.value = idx
 	store.wrafLevel = idx === null ? 'none' : sizes[idx][2]
+	store.selectedPointFilter = null
 }
-
+const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
 const selectPoint = () => {
+	store.setLoading() // start loading immediately
 	selectedSize.value = null
 	store.wrafLevel = 'none'
-	// stub for your point handling
-	console.log('Point selection triggered')
+
+	store.selectedPointFilter = ECMWF_BONN
+	if (navigator.geolocation) {
+		navigator.geolocation.getCurrentPosition(
+			(position) => {
+				const { latitude, longitude } = position.coords
+				store.selectedPointFilter = [latitude, longitude]
+			},
+			() => {
+				console.warn('Unable to retrieve your location. Using ECMWF location.')
+				store.selectedPointFilter = ECMWF_BONN
+			},
+		)
+	}
+	store.fastFilterEvents = store.getPointFilteredEvents(
+		store.selectedPointFilter,
+	)
 }
 
 const sizeScheme = d3.interpolateWarm
@@ -51,6 +71,7 @@ const sizeScheme = d3.interpolateWarm
 			<FontAwesomeIcon :icon="faDrawPolygon" />
 			<!-- <span>{{ $l.selectByRegion}}</span> -->
 		</div>
+		<!-- <p> {{ store.selectedPointFilter }}</p> -->
 
 		<div>
 			<button
@@ -65,6 +86,7 @@ const sizeScheme = d3.interpolateWarm
 				<button
 					:style="{ backgroundColor: sizeScheme(i / 5) }"
 					:title="`${size[0]} Mm²`"
+					:class="{ selected: selectedSize === i }"
 					@click="selectSize(i)"
 				>
 					{{ size[1] }}
@@ -73,6 +95,9 @@ const sizeScheme = d3.interpolateWarm
 
 			<button
 				:style="{ backgroundColor: scssModule.c3sred, color: 'white' }"
+				:class="{
+					selected: selectedSize === null && store.selectedPointFilter !== null,
+				}"
 				title="Point"
 				@click="selectPoint"
 			>
@@ -108,6 +133,11 @@ const sizeScheme = d3.interpolateWarm
 		margin: 0 0.05rem;
 		font-family: 'Raleway', sans-serif;
 		font-weight: bolder;
+
+		&.selected {
+			border: 2px solid rgba(0, 0, 0, 0.5);
+			box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+		}
 	}
 }
 </style>

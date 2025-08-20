@@ -1,8 +1,11 @@
 import { filterEvents } from '@/lib/utils'
+import { point, polygon } from '@turf/helpers'
+import { booleanContains } from '@turf/turf'
 import * as d3 from 'd3'
 import { differenceInDays, getDayOfYear } from 'date-fns'
 import Flatbush from 'flatbush'
 import { MultiPolygon, Polygon } from 'geojson'
+import { LatLng, Point } from 'leaflet'
 import { defineStore } from 'pinia'
 import { watch } from 'vue'
 
@@ -13,6 +16,7 @@ interface State {
 	lang: Language
 	loadingCount: number
 	viewMode: ViewMode
+	mapCentre: Point
 
 	selectedTime: Date
 	layerDetails: LayerDetails | null
@@ -36,16 +40,18 @@ interface State {
 		size: number
 		includeOceanEvents: boolean
 		wrafRegion: GeoJSON.Feature<Polygon | MultiPolygon> | null
-		selectedPoint: [number, number] | null
 	}
+	// We don't want to trigger a full filter run on every point selection, so this is a separate filter
+	selectedPointFilter: [number, number] | null
 	filteredEvents: ExtremeEvent[]
 	draggingFilter: boolean
+	fastFilterEvents: ExtremeEvent[] // This is the set of events that are filtered by the fast filter for draggina and other UI interactions
 
 	wrafLevel: 'none' | 'wraf-01' | 'wraf-05' | 'wraf-2' | 'wraf-5' | 'wraf-10'
 	// This is the set of regions to select events by, if any
 	// Corresponds to the WRAF level selected
-	regionsToSelectBy?: GeoJSON.FeatureCollection
-	eventIndex?: Flatbush // Spatial index for events, if needed
+	regionsToSelectBy: GeoJSON.FeatureCollection | null
+	spatialIndex: Flatbush | null // Spatial index for events, if needed
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -60,8 +66,9 @@ export const useStore = defineStore('main', {
 			lang: 'en',
 			loadingCount: 0,
 			viewMode: 'heatmap',
+			mapCentre: new LatLng(0, 0) as unknown as Point, // Default center point for the map
 
-			selectedTime: new Date(Date.UTC(2024, 4, 28, 0, 0, 0)),
+			selectedTime: new Date(Date.UTC(2020, 4, 28, 0, 0, 0)),
 			layerDetails: null,
 			// times: [],
 			startTime: new Date(),
@@ -93,12 +100,14 @@ export const useStore = defineStore('main', {
 				size: 0,
 				includeOceanEvents: true, // Whether to include ocean events in the filter
 				wrafRegion: null, // This can be set to a WRAF region name to filter events by region
-				selectedPoint: null, // This is used to store a point selected on the map for filtering
 			},
+			selectedPointFilter: null, // This is used to store a point selected on the map for filtering
 			filteredEvents: [],
 			draggingFilter: false,
+			fastFilterEvents: [], // This is the set of events that are filtered by the fast filter for dragging and other UI interactions
 			wrafLevel: 'none',
-			regionsToSelectBy: undefined, // Will store the loaded WRAF regions. The actual selected region is in filters.wrafRegion
+			regionsToSelectBy: null, // Will store the loaded WRAF regions. The actual selected region is in filters.wrafRegion
+			spatialIndex: null, // Spatial index for events, if needed
 		}
 	},
 	getters: {
@@ -214,6 +223,27 @@ export const useStore = defineStore('main', {
 		setLoadingDone() {
 			this.loadingCount--
 		},
+		getPointFilteredEvents(pointToFilter: [number, number]) {
+			if (!this.spatialIndex) {
+				console.warn('Spatial index not initialized, cannot filter by point')
+				return []
+			}
+
+			const [lat, lon] = pointToFilter
+			const p = point([lon, lat]) // Turf expects [x, y] = [lon, lat]
+
+			// Query the index: Flatbush returns candidate IDs whose bbox intersects the point
+			const candidateIds = this.spatialIndex.search(lat, lon, lat, lon).map((id) => this.events[id].id)
+			const candidateSet = new Set(candidateIds)
+
+			return this.filteredEvents.filter((event) => {
+				if (!candidateSet.has(event.id)) return false
+				const totalPoly = polygon([
+					event.total_region.map(([lat, lon]) => [lon, lat]),
+				])
+				return booleanContains(totalPoly, p)
+			})
+		},
 		init() {
 			this.setLoading()
 			let path = `/events.jsonl`
@@ -257,17 +287,36 @@ export const useStore = defineStore('main', {
 							const dayOfYear = getDayOfYear(time)
 						})
 						event.color = catScheme[col++ % catScheme.length]
+
+						// normalize total_region longitudes to avoid IDL issues
+						const lons = event.total_region.map(
+							([_, lon]: [number, number]) => lon,
+						)
+						const maxLon = Math.max(...lons)
+						const minLon = Math.min(...lons)
+
+						if (maxLon - minLon > 180) {
+							console.log('normalising', JSON.stringify(event.total_region))
+							// crosses the dateline: shift any lon < 0 by +360
+							event.total_region = event.total_region.map(
+								([lat, lon]: [number, number]) => {
+									const newLon = lon < 0 ? lon + 360 : lon
+									return [lat, newLon]
+								},
+							)
+							console.log('normalised', event.total_region)
+						}
 					})
 
 					// this.events = data.filter((_, i) => i % 4 === 0) as Event[]
 					this.events = data as ExtremeEvent[]
 					console.log('Events loaded:', this.events)
-					this.eventIndex = new Flatbush(this.events.length, 2)
+					this.spatialIndex = new Flatbush(this.events.length, 2)
 					this.events.forEach((event, i) => {
 						const bbox = event.bbox
 						if (bbox) {
 							// Add the bounding box to the spatial index
-							this.eventIndex!.add(
+							this.spatialIndex!.add(
 								bbox[0], // minX
 								bbox[1], // minY
 								bbox[2], // maxX
@@ -279,8 +328,8 @@ export const useStore = defineStore('main', {
 							)
 						}
 					})
-					this.eventIndex!.finish()
-					console.log('Spatial index created for events:', this.eventIndex)
+					this.spatialIndex!.finish()
+					console.log('Spatial index created for events:', this.spatialIndex)
 					// this.events.forEach((event) => {
 					// 	event.times = event.times.map((time: string) => new Date(time))
 
@@ -292,7 +341,8 @@ export const useStore = defineStore('main', {
 				})
 			this.runFilters()
 			watch(
-				() => [this.filters, this.events, this.eventIndex],
+				() => [this.filters, this.events, this.spatialIndex],
+
 				this.runFilters,
 				{ deep: true, immediate: true },
 			)
@@ -303,7 +353,7 @@ export const useStore = defineStore('main', {
 			this.filteredEvents = filterEvents(
 				this.events,
 				this.filters,
-				this.eventIndex,
+				this.spatialIndex,
 				false,
 			)
 
@@ -313,13 +363,13 @@ export const useStore = defineStore('main', {
 			// const result = await worker.send({
 			// 	events: this.filteredEvents,
 			// 	filters: this.filters,
-			// 	eventIndex: this.eventIndex,
+			// 	spatialIndex: this.spatialIndex,
 			// })
 
 			this.filteredEvents = filterEvents(
 				this.filteredEvents,
 				this.filters,
-				this.eventIndex,
+				this.spatialIndex,
 				true,
 			)
 			// This needs to get set by the leaflet layers

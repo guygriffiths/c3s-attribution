@@ -31,7 +31,7 @@ select {
 
 button {
 	font-size: 1rem;
-	background-color: $bgContrast;
+	background-color: $c3sblue;
 	color: $textColor;
 	border: 1px solid $primary;
 	border-radius: 0.5rem;
@@ -40,16 +40,13 @@ button {
 	cursor: pointer;
 
 	&:hover {
-		background-color: $primary;
+		background-color: $c3sred;
 		color: $bgContrast;
 	}
 
 	border: none;
 	padding: 0.5rem 1rem;
 	transition: background-color $animTime ease-in-out;
-	&:hover {
-		background-color: $bg;
-	}
 }
 
 .explore-button {

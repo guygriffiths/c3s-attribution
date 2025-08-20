@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import 'leaflet/dist/leaflet.css'
-import { computed, nextTick, ref, Ref, watch } from 'vue'
+import { computed, onMounted, nextTick, ref, Ref, watch } from 'vue'
 import {
 	LMap,
 	LTileLayer,
@@ -10,6 +10,8 @@ import {
 	LGridLayer,
 	LPolygon,
 	LGeoJson,
+	LMarker,
+	LLayerGroup,
 } from '@vue-leaflet/vue-leaflet'
 import { LatLng, LatLngBounds, Point } from 'leaflet'
 import { Map as LeafletMap } from 'leaflet'
@@ -45,8 +47,9 @@ const currentEvents = computed(() => {
 
 import L from 'leaflet'
 import ModeToggle from './util/ModeToggle.vue'
+import { map } from 'd3'
 // create a single canvas renderer for all polygons
-const canvasRenderer = L.canvas({ padding: 0.5 })
+const canvasRenderer = L.canvas({ padding: 0.5, pane: 'eventPane' })
 
 const mapOptions = {
 	zoomControl: false,
@@ -54,10 +57,9 @@ const mapOptions = {
 	zoomDelta: 1,
 	wheelPxPerZoomLevel: 240,
 	fadeAnimation: false,
-	// renderer: canvasRenderer,
 }
-const centerPoint: Ref<Point> = ref(new LatLng(0, 0) as unknown as Point)
-const zoom = ref(3)
+
+const zoom = ref(2)
 
 const bgLayer = {
 	name: 'Stadia OSM Bright',
@@ -175,7 +177,7 @@ const selectRegion = (event: any) => {
 }
 
 const getEventRegion = (event: any) => {
-	if (store.exploringRegion) {
+	if (store.viewMode === 'heatmap') {
 		return event.total_region || [] // We want to see the entire event footprint, because we are viewing across all times
 	}
 	const idx = event.times.findIndex(
@@ -207,39 +209,72 @@ watch(
 let pendingDone = false
 
 function onLayerAddBatch() {
-  if (!pendingDone) {
-    pendingDone = true
-    nextTick(() => {
-      store.setLoadingDone()
-      pendingDone = false
-    })
-  }
+	if (!pendingDone) {
+		pendingDone = true
+		nextTick(() => {
+			store.setLoadingDone()
+			pendingDone = false
+		})
+	}
 }
 
 const renderTile = (props: any) =>
 	drawEventTile(props, store, eventPixelsRef.value)
+
+const updatePointSelector = (event: any) => {
+	if (store.selectedPointFilter && mapRef.value) {
+		const marker = event.target as L.Marker
+		const latLng = marker.getLatLng()
+		store.selectedPointFilter = [latLng.lat, latLng.lng]
+		store.fastFilterEvents = store.getPointFilteredEvents(store.selectedPointFilter!)
+	} else {
+		console.warn('No point selector to update')
+	}
+}
+
+const paneReady = ref(false)
+const addEventPane = () => {
+	const map = mapRef.value?.leafletObject as LeafletMap
+	if (!map) {
+		console.error('Map not initialized')
+		return
+	}
+
+	// create a pane just below overlayPane
+	map.createPane('eventPane')
+	const pane = map.getPane('eventPane')!
+
+	// set zIndex: just under overlay (z=400)
+	pane.style.zIndex = '399'
+	// optional: style here, or target via CSS
+	paneReady.value = true
+}
 </script>
 
 <template>
-	<div class="map">
+	<div
+		class="map"
+		:class="{ 'selecting-point': store.selectedPointFilter !== null }"
+	>
 		<LMap
 			ref="mapRef"
 			v-model:zoom="zoom"
-			:center="centerPoint"
+			:center="store.mapCentre"
 			:max-zoom="12"
 			:min-zoom="1"
 			:options="mapOptions"
 			style="z-index: 1"
+			:world-copy-jump="true"
 			:zoom-animation="true"
-			@ready=""
+			@ready="addEventPane"
 		>
+			<!-- Background layers -->
 			<LTileLayer
 				:url="bgLayer.url"
 				:attribution="bgLayer.attribution"
 				layer-type="base"
 				:zIndex="1"
 			></LTileLayer>
-
 			<LTileLayer
 				class="bg-map"
 				:url="wmtsUrl"
@@ -248,61 +283,42 @@ const renderTile = (props: any) =>
 				v-if="store.viewMode === 'explore'"
 			></LTileLayer>
 
-			<LGridLayer
-				ref="eventPixelsRef"
-				:tileSize="TILE_SIZE"
-				:child-render="renderTile"
-				:options="{
-					fadeAnimation: false,
-				}"
-				pane="overlayPane"
-			>
-			</LGridLayer>
-			<LGeoJson
-				v-if="store.regionsToSelectBy && !store.filters.wrafRegion"
-				:geojson="store.regionsToSelectBy"
-				:options-style="
-					() => ({
-						// @ts-ignore
-						className: 'region-select',
-					})
-				"
-				class="region-select"
-				@click="selectRegion"
-				@add="store.setLoadingDone()"
-				@layeradd="onLayerAddBatch"
-			>
-			</LGeoJson>
-			<LGeoJson
-				v-if="store.filters.wrafRegion"
-				:geojson="store.filters.wrafRegion"
-				:options-style="
-					() => ({
-						// @ts-ignore
-						className: 'region-select',
-					})
-				"
-				class="region-select"
-				@click="store.filters.wrafRegion = null"
-			>
-			</LGeoJson>
+			<!-- Events -->
+			<!-- All of the "current" events -->
+			<!-- This could just be all events if we're in heatmap mode -->
 			<LPolygon
-				v-for="(event, idx) in currentEvents"
+				v-for="event in currentEvents"
 				:key="event.id"
 				:lat-lngs="getEventRegion(event)"
 				:weight="store.viewMode === 'heatmap' ? 0 : 3"
 				:fill="true"
 				:fill-opacity="
 					store.viewMode === 'heatmap'
-						? Math.max(0.05, 1 / Math.pow(currentEvents.length, 0.8))
+						? Math.min(
+								0.8,
+								Math.max(0.05, 1 / Math.pow(currentEvents.length, 0.8)),
+							)
 						: 0.05
 				"
-				:opacity="1"
 				:color="store.viewMode === 'heatmap' ? 'rgb(151, 24, 65)' : event.color"
 				:options="{ renderer: canvasRenderer }"
 				@click="selectEvent(event.id)"
 			>
 			</LPolygon>
+			<!-- Fast filter events -->
+			<LPolygon
+				v-for="event in store.fastFilterEvents"
+				:key="event.id"
+				:lat-lngs="event.total_region || []"
+				:weight="0"
+				:fill="true"
+				:fill-opacity="
+					0.2
+				"
+				:color="scssVars.c3sred"
+			>
+			</LPolygon>
+			<!-- When an event is selected, draw a ghost trail of its regions over time -->
 			<LPolygon
 				v-for="(region, idx) in store.selectedEvent?.regions"
 				:key="idx"
@@ -321,10 +337,65 @@ const renderTile = (props: any) =>
 							)
 						: 0
 				"
-				:color="catScheme[store.selectedEvent?.id! % catScheme.length]"
+				:color="store.selectedEvent?.color || scssVars.c3sred"
 				@click="selectEvent(store.selectedEvent?.id!)"
 			>
 			</LPolygon>
+			<!-- Event pixel values -->
+			<!-- Uses a custom grid layer to render event pixels otherwise it's too slow -->
+			<LGridLayer
+				ref="eventPixelsRef"
+				:tileSize="TILE_SIZE"
+				:child-render="renderTile"
+				:options="{
+					fadeAnimation: false,
+				}"
+				pane="overlayPane"
+			>
+			</LGridLayer>
+
+			<!-- Selectable elements etc -->
+			<!-- Possible regions to select by -->
+			<LGeoJson
+				v-if="store.regionsToSelectBy && !store.filters.wrafRegion"
+				:geojson="store.regionsToSelectBy"
+				:options-style="
+					() => ({
+						// @ts-ignore
+						className: 'region-select',
+					})
+				"
+				class="region-select"
+				@click="selectRegion"
+				@add="store.setLoadingDone()"
+				@layeradd="onLayerAddBatch"
+			>
+			</LGeoJson>
+			<!-- The actual selected region -->
+			<LGeoJson
+				v-if="store.filters.wrafRegion"
+				:geojson="store.filters.wrafRegion"
+				:options-style="
+					() => ({
+						// @ts-ignore
+						className: 'region-select',
+					})
+				"
+				class="region-select"
+				@click="store.filters.wrafRegion = null"
+			>
+			</LGeoJson>
+			<!-- Point to select by -->
+			<LMarker
+				v-if="store.selectedPointFilter"
+				ref="markerRef"
+				:lat-lng="store.selectedPointFilter"
+				:draggable="true"
+				@move="updatePointSelector"
+				@add="store.setLoadingDone()"
+			/>
+
+			<!-- Controls -->
 			<LControl position="topright" class="filter-container">
 				<button @click="store.filtersExpanded = !store.filtersExpanded">
 					<FontAwesomeIcon :icon="store.filtersExpanded ? faClose : faFilter" />
@@ -478,6 +549,16 @@ const renderTile = (props: any) =>
 	width: 100%;
 	height: 100%;
 
+	&.selecting-point {
+		:deep(.leaflet-event-pane) {
+			opacity: 0.0;
+		}
+	}
+	:deep(.leaflet-event-pane) {
+		opacity: 1.0;
+		transition: opacity $animTime ease-in-out;
+	}
+
 	.filter-container {
 		position: relative;
 		button {
@@ -485,15 +566,7 @@ const renderTile = (props: any) =>
 			top: 0;
 			right: 0;
 			z-index: 100;
-			background-color: $bgContrast;
-			color: $textColor;
-			border: none;
-			padding: 0.5rem 1rem;
-			cursor: pointer;
-			transition: background-color $animTime ease-in-out;
-			&:hover {
-				background-color: $bg;
-			}
+			color: rgb(251, 251, 236);
 		}
 	}
 
