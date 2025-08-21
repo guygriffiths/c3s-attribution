@@ -464,6 +464,8 @@ class EventletFactory:
             "ocean_only": ocean_only,
         }
 
+        unique_coords = {tuple(coord) for t_slice in ev.slices for pixel_list in t_slice for coord in pixel_list}
+        pixel_set = [list(coord) for coord in unique_coords]
         catalogue_event = {
             "id": full_event["id"],
             "times": full_event["times"],
@@ -480,6 +482,7 @@ class EventletFactory:
             ),
             "total_area": full_event["total_area"],
             "ocean_only": ocean_only,
+            "pixel_set": pixel_set,
         }
 
         with open(f"{self.output_path}/events.jsonl", "a") as f:
@@ -591,7 +594,7 @@ def main():
     stat = 'max'
     perc = '99.0'
     thresh = 28
-    nr = 9
+    nr = 6
 
 
     data_var, ref_data, land_sea_mask = load_data(
