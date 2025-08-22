@@ -410,26 +410,49 @@ class EventletFactory:
 
         ocean_only = False
         if self.land_sea_mask is not None:
-            # Check if all points in the event are over ocean
             all_ocean = True
+            lat_asc = np.all(np.diff(self.land_sea_mask.latitude) > 0)
+            lats = self.land_sea_mask.latitude.values
+            if not lat_asc:
+                lats = lats[::-1]  # ascending for searchsorted
+
             for i in range(len(ev.slices)):
                 if ev.hull(i) is not None:
                     coords = np.array(ev.slices[i])
-                    lat_indices = np.searchsorted(self.land_sea_mask.latitude, coords[:, 0])
+                    # Latitude indices
+                    lat_indices = np.searchsorted(lats, coords[:, 0])
                     lat_indices = np.clip(lat_indices, 0, self.land_sea_mask.latitude.size - 1)
+                    if not lat_asc:
+                        lat_indices = self.land_sea_mask.latitude.size - 1 - lat_indices
 
+                    # Longitude indices
                     lon_indices = np.searchsorted(self.land_sea_mask.longitude, coords[:, 1])
                     lon_indices = np.clip(lon_indices, 0, self.land_sea_mask.longitude.size - 1)
 
-                    # print(f"Indices for hull {i}: {lat_indices}, {lon_indices}, {self.land_sea_mask.values.shape}")
                     mask_values = self.land_sea_mask.values[0, lat_indices, lon_indices]
                     if not np.all(mask_values == 0):
                         all_ocean = False
                         break
             ocean_only = all_ocean
 
+
         if ocean_only:
-            print(f"Event {event_id} is ocean-only")
+            print(f"Event {event_id} is ocean-only, with centroid {centroids[0]}")
+        
+        # Flatten all coordinates and values
+        all_coords = np.vstack(ev.slices)          # shape: [total_pixels, 2]
+        all_values = np.concatenate(ev.values)     # shape: [total_pixels]
+
+        # Convert coordinates to tuples so we can use np.unique
+        coords_view = all_coords.view([('', all_coords.dtype)] * 2)  # trick to get unique rows
+        unique_coords, inverse_idx = np.unique(coords_view, return_inverse=True)
+
+        # Compute max per unique coordinate
+        pixel_peak_values = np.zeros(len(unique_coords), dtype=all_values.dtype)
+        np.maximum.at(pixel_peak_values, inverse_idx, all_values)
+
+        # Convert unique_coords back to normal [[lat, lon], ...] list if needed
+        pixel_set = [list(c) for c in unique_coords.view(all_coords.dtype).reshape(-1, 2)]
 
         full_event = {
             "id": event_id,
@@ -462,10 +485,11 @@ class EventletFactory:
             "mean_values": mean_values,
             "mean_value": mean_value,
             "ocean_only": ocean_only,
+            "pixel_set": pixel_set,
+            "pixel_count": len(pixel_set),
+            "pixel_peak_values": to_serialisable(pixel_peak_values),
         }
 
-        unique_coords = {tuple(coord) for t_slice in ev.slices for pixel_list in t_slice for coord in pixel_list}
-        pixel_set = [list(coord) for coord in unique_coords]
         catalogue_event = {
             "id": full_event["id"],
             "times": full_event["times"],
