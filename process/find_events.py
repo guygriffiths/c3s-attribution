@@ -537,6 +537,8 @@ def to_serialisable(obj):
         return int(obj)
     elif isinstance(obj, (np.floating, np.float32, np.float64)):
         return float(obj)
+    elif isinstance(obj, set):
+        return list(obj)
     elif isinstance(obj, (list, tuple)):
         return [to_serialisable(i) for i in obj]
     elif isinstance(obj, dict):
