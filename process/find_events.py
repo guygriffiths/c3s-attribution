@@ -535,7 +535,7 @@ class EventletFactory:
             ),
             "total_area": full_event["total_area"],
             "ocean_only": ocean_only,
-            "pixel_set": pixel_set,
+            "pixel_set": to_serialisable(pixel_set),
         }
 
         with open(f"{self.output_path}/events.jsonl", "a") as f:

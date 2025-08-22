@@ -4,7 +4,7 @@ import cdsapi
 
 c = cdsapi.Client()
 
-years = [str(y) for y in range(1990, 2010)]
+years = [str(y) for y in range(1979, 1990)] + [str(y) for y in range(2021, 2025)]
 years.reverse()
 
 for year in years:
