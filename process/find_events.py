@@ -440,19 +440,20 @@ class EventletFactory:
             print(f"Event {event_id} is ocean-only, with centroid {centroids[0]}")
         
         # Flatten all coordinates and values
-        all_coords = np.vstack(ev.slices)          # shape: [total_pixels, 2]
-        all_values = np.concatenate(ev.values)     # shape: [total_pixels]
+        # Gather all coordinates and corresponding values across slices
+        all_coords = np.vstack([np.array(t_slice) for t_slice in ev.slices])  # shape (total_pixels, 2)
+        all_values = np.hstack([np.array(vals).flatten() for vals in ev.values])  # shape (total_pixels,)
 
-        # Convert coordinates to tuples so we can use np.unique
-        coords_view = all_coords.view([('', all_coords.dtype)] * 2)  # trick to get unique rows
+        # Convert coords to a structured view so np.unique can deduplicate rows
+        coords_view = all_coords.view([('', all_coords.dtype)] * 2)
         unique_coords, inverse_idx = np.unique(coords_view, return_inverse=True)
 
         # Compute max per unique coordinate
         pixel_peak_values = np.zeros(len(unique_coords), dtype=all_values.dtype)
         np.maximum.at(pixel_peak_values, inverse_idx, all_values)
 
-        # Convert unique_coords back to normal [[lat, lon], ...] list if needed
-        pixel_set = [list(c) for c in unique_coords.view(all_coords.dtype).reshape(-1, 2)]
+        # Convert unique_coords back to normal [[lat, lon], ...] list
+        pixel_set = [list(coord) for coord in unique_coords]
 
         full_event = {
             "id": event_id,
