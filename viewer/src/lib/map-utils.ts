@@ -1,4 +1,7 @@
+import iconPng from '@/assets/img/marker-icon-2x-c3sred.png'
 import scssVars from '@/assets/styles/scssVars.module.scss'
+import L from 'leaflet'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 
 export const fitMapToBounds = (map: L.Map, event: ExtremeEvent) => {
 	// TODO - 32px is hardcoded padding, yuck
@@ -49,3 +52,12 @@ export const getZeitgeistOpacity = (stepsFromNow: number) => {
 	return Math.max(opacity, 0.01)
 }
 
+export const markerIcon = L.icon({
+	iconUrl: iconPng,
+	shadowUrl: markerShadow,
+	iconSize: [25, 41],
+	iconAnchor: [12, 41],
+	popupAnchor: [1, -34],
+	tooltipAnchor: [16, -28],
+	shadowSize: [41, 41],
+})

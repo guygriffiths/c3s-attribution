@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useStore } from '@/store/store'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
@@ -8,6 +8,8 @@ import {
 	faMapMarkerAlt,
 	faClose,
 	faBan,
+	faPen,
+	faPenAlt,
 } from '@fortawesome/free-solid-svg-icons'
 import * as d3 from 'd3'
 import { useLabels } from '@/lib/labels'
@@ -28,38 +30,68 @@ const sizes: [
 	[5, 'L', 'wraf-5'],
 	[10, 'XL', 'wraf-10'],
 ]
-const selectedSize = ref<number | null>(null)
+const selectedSize = computed(() => {
+	if (store.wrafLevel === 'none') return null
+	return sizes.findIndex((s) => s[2] === store.wrafLevel)
+})
 
 const selectSize = async (idx: number | null) => {
 	if (idx !== null) {
 		store.setLoading() // start loading immediately
 	}
-	selectedSize.value = idx
 	store.wrafLevel = idx === null ? 'none' : sizes[idx][2]
 	store.selectedPointFilter = null
+	store.drawingRegion = false
+	store.filters.wrafRegion = null
 }
 const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
-const selectPoint = () => {
-	store.setLoading() // start loading immediately
-	selectedSize.value = null
-	store.wrafLevel = 'none'
-
-	store.selectedPointFilter = ECMWF_BONN
-	if (navigator.geolocation) {
-		navigator.geolocation.getCurrentPosition(
-			(position) => {
-				const { latitude, longitude } = position.coords
-				store.selectedPointFilter = [latitude, longitude]
-			},
-			() => {
-				console.warn('Unable to retrieve your location. Using ECMWF location.')
-				store.selectedPointFilter = ECMWF_BONN
-			},
-		)
+const setSelectingPoint = () => {
+	// If we are already in this mode, turn it off
+	if (store.selectedPointFilter !== null) {
+		store.selectedPointFilter = null
+		store.regionFilteredEvents = []
+		store.runFilters()
+		return
 	}
-	store.fastFilterEvents = store.getPointFilteredEvents(
-		store.selectedPointFilter,
-	)
+	store.setLoading() // start loading immediately
+	store.wrafLevel = 'none'
+	store.drawingRegion = false
+	store.filters.wrafRegion = null
+
+	if(store.lastPoint) {
+		store.selectedPointFilter = [store.lastPoint[0], store.lastPoint[1]]
+	} else {
+		store.selectedPointFilter = ECMWF_BONN
+		if (navigator.geolocation) {
+			navigator.geolocation.getCurrentPosition(
+				(position) => {
+					const { latitude, longitude } = position.coords
+					store.selectedPointFilter = [latitude, longitude]
+				},
+				() => {
+					console.warn('Unable to retrieve your location. Using ECMWF location.')
+					store.selectedPointFilter = ECMWF_BONN
+				},
+			)
+		}
+	}
+
+	store.getPointFilteredEvents(store.selectedPointFilter[0], store.selectedPointFilter[1])
+	store.fixPointFilteredEvents()
+}
+
+const drawRegion = () => {
+	store.wrafLevel = 'none'
+	store.selectedPointFilter = null
+	store.filters.wrafRegion = null
+	store.regionFilteredEvents = []
+	store.drawingRegion = !store.drawingRegion
+	if(store.drawingRegion) {
+		// TODO - this should be set in the store anyway. We should watch it, then set the full filter going on a worker thread. That way we can pre-calc a bunch of simplified regions for events (but *larger* - must fully encapsulate total_region) throw them through the fast filter, and use the exact filter in the background. And by *full*, we can do a proper check of every pixel's inclusion (which we have
+		// store.regionFilteredEvents = []
+	}
+
+
 }
 
 const sizeScheme = d3.interpolateWarm
@@ -75,7 +107,13 @@ const sizeScheme = d3.interpolateWarm
 
 		<div>
 			<button
-				:style="{ backgroundColor: 'black', color: 'white' }"
+				class="none-button"
+				:class="{
+					selected:
+						selectedSize === null &&
+						store.selectedPointFilter === null &&
+						store.filters.wrafRegion === null,
+				}"
 				title="None"
 				@click="selectSize(null)"
 			>
@@ -84,7 +122,10 @@ const sizeScheme = d3.interpolateWarm
 
 			<template v-for="(size, i) in sizes" :key="size">
 				<button
-					:style="{ backgroundColor: sizeScheme(i / 5) }"
+					:style="{
+						backgroundColor: sizeScheme(i / 5),
+						color: selectedSize === i ? sizeScheme(i / 5) : 'white',
+					}"
 					:title="`${size[0]} Mm²`"
 					:class="{ selected: selectedSize === i }"
 					@click="selectSize(i)"
@@ -94,12 +135,23 @@ const sizeScheme = d3.interpolateWarm
 			</template>
 
 			<button
-				:style="{ backgroundColor: scssModule.c3sred, color: 'white' }"
+				:style="{ backgroundColor: scssModule.c3sred }"
+				:class="{
+					selected:
+						store.drawingRegion,
+				}"
+				title="Point"
+				@click="drawRegion"
+			>
+				<FontAwesomeIcon :icon="faPenAlt" />
+			</button>
+			<button
+				:style="{ backgroundColor: scssModule.c3sred }"
 				:class="{
 					selected: selectedSize === null && store.selectedPointFilter !== null,
 				}"
 				title="Point"
-				@click="selectPoint"
+				@click="setSelectingPoint"
 			>
 				<FontAwesomeIcon :icon="faMapMarkerAlt" />
 			</button>
@@ -107,7 +159,9 @@ const sizeScheme = d3.interpolateWarm
 	</div>
 </template>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/scssVars.module.scss' as *;
+
 .region-control {
 	display: flex;
 	flex-direction: column;
@@ -115,6 +169,9 @@ const sizeScheme = d3.interpolateWarm
 	position: relative;
 	margin-top: 0.75rem;
 	margin-left: 0.25rem;
+	background-color: rgba($c3sblue, 0.33);
+	padding: 0;
+	border-radius: 0.5rem;
 
 	.label {
 		font-weight: bolder;
@@ -133,10 +190,20 @@ const sizeScheme = d3.interpolateWarm
 		margin: 0 0.05rem;
 		font-family: 'Raleway', sans-serif;
 		font-weight: bolder;
+		color: rgb(255, 255, 255);
 
-		&.selected {
-			border: 2px solid rgba(0, 0, 0, 0.5);
-			box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+		&.none-button {
+			background-color: rgb(64, 64, 64);
+			&.selected {
+				color: rgb(64, 64, 64);
+				svg {
+					color: rgb(64, 64, 64) !important;
+					filter: drop-shadow(0 0 1px rgb(255, 255, 255))
+						drop-shadow(0 0 2px rgb(255, 255, 255))
+						drop-shadow(0 0 5px rgb(255, 255, 255))
+						drop-shadow(0 0 10px rgb(255, 255, 255));
+				}
+			}
 		}
 	}
 }

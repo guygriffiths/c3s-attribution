@@ -6,7 +6,6 @@ import {
 	polygon,
 	simplify
 } from '@turf/turf'
-import { differenceInDays } from 'date-fns'
 import Flatbush from 'flatbush'
 import { Position } from 'geojson'
 
@@ -101,23 +100,21 @@ export const filterEvents = (
 
 		if (!filters.includeOceanEvents && event.ocean_only) return false
 
-		const duration =
-			1 + differenceInDays(event.times[event.times.length - 1], event.times[0])
-		if (duration < filters.duration) return false
+		if (event.duration < filters.duration) return false
 
-		const intensity = event.intensity || 0
+		const intensity = event.peak_value || 0
 		if (intensity < filters.intensity) return false
 
-		const sizePercentile = event.size || 0
-		if (sizePercentile < filters.size) return false
+		const pixelCount = event.pixel_count || 0
+		if (pixelCount < filters.size) return false
 
 		return true
 	})
 
-	console.log(
-		`Filtered ${events.length} events to ${fe.length} based on full: ${full}, filters:`,
-		filters,
-	)
+	// console.log(
+	// 	`Filtered ${events.length} events to ${fe.length} based on full: ${full}, filters:`,
+	// 	filters,
+	// )
 
 	return fe
 }

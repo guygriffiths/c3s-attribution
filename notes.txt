@@ -59,4 +59,6 @@ Unsorted TODO List:
 * proper color scale for excessive pixels
 * Probably gonna have to set up ncWMS or a TMS
 * Lock time reel when event selected - keys, mouse, track (all of which need dealing with separately anyway)
+* Colour-blindness friendly
+* Proper aria stuff for blindness
 

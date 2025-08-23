@@ -10,10 +10,10 @@ const store = useStore()
 
 const toggle = async () => {
 	store.setLoading() // start loading immediately
-  // Wait for the DOM update and rendering to complete
-  await new Promise((resolve) => setTimeout(resolve, 0))
+	// Wait for the DOM update and rendering to complete
+	await new Promise((resolve) => setTimeout(resolve, 0))
 	mode.value = mode.value === 'explore' ? 'heatmap' : 'explore'
-  store.setLoadingDone() // end loading after DOM updates
+	store.setLoadingDone() // end loading after DOM updates
 }
 </script>
 

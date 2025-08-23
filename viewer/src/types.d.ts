@@ -6,29 +6,29 @@ declare global {
 	type Language = 'en'
 
 	interface ExtremeEvent {
-		times: Date[]
-		slices: any[]
-		featureLevel?: number
-		regions: any[]
-		maxArea: number
-		bbox: [number, number, number, number]
-		centroid: [number, number]
-		size: number
-		feature: boolean
-		ocean_only?: boolean
 		id: string
+		times: Date[]
+		duration: number // in days
+		regions: [number, number][][]
 		total_region: [number, number][]
-		intensity?: number
-		color?: string
+		bbox: [number, number, number, number]
+		peak_value: number
+		mean_value: number
+		total_area: number
+		pixel_count: number
+		pixel_set: [number, number][]
+		ocean_only: boolean
+		color: string
 	}
 
 	interface ExtremeEventFull extends ExtremeEvent {
-		values: any[]
-		centroids: [[number, number]]
-		total_area: number
+		slices: [number, number][][]
+		values: number[][]
+		centroids: [number, number][]
 		areas: number[]
 		peak_values: number[]
 		mean_values: number[]
+		pixel_peak_values: number[][]
 	}
 }
 

@@ -42,6 +42,7 @@ const props = defineProps({
 	changingFilter: { type: Boolean, default: false },
 	exploring: { type: Boolean, default: false },
 	vertical: { type: Boolean, default: false },
+	showBars: { type: Boolean, default: true },
 })
 
 const model: Ref<Date> = defineModel({
@@ -90,8 +91,12 @@ const containerRef = ref<HTMLDivElement | null>(null)
 const zoom = computed(() => props.selectedEvent !== null)
 const rowsToShow = computed(() => {
 	if (zoom.value) return 1
-	if (props.exploring) return 20
-	if (props.vertical) return 40
+	if (props.exploring) {
+		return Math.min(50, endYear.value - startYear.value + 1)
+	}
+	if (props.vertical) {
+		return Math.min(50, endYear.value - startYear.value + 1)
+	}
 	return 2
 })
 
@@ -110,8 +115,8 @@ const years = computed(() =>
 const eventsByYear = ref<Map<number, WeatherEvent[]>>(new Map())
 const maxSimultaneousEvents = computed(() => {
 	// Find max of props.dayCounts here
-	if (props.dayCounts.size === 0) return 1
-	return Math.max(
+	if (props.dayCounts.size < 1) return 3
+	return Math.max(3, 
 		...Array.from(props.dayCounts.values()).map((counts) =>
 			Math.max(...counts),
 		),
@@ -157,14 +162,17 @@ const yOffset = computed(() => {
 	// with 1 row: 1981: 1, 1982: 2, 1983: 3
 	// with "0" rows: 1981: 1.5, 1982: 2.5, 1983: 3.5
 
-	if(props.vertical) {
-		const offset = model.value.getUTCFullYear() - startYear.value + 1.5 - rowsToShow.value / 2
-		return Math.min(5, offset)
-	}	
-
-	return (
+	const offset =
 		model.value.getUTCFullYear() - startYear.value + 1.5 - rowsToShow.value / 2
-	)
+	if (props.exploring) {
+		return Math.min(1, offset)
+	}
+	if (props.vertical) {
+		// return Math.min(1, offset)
+		return 1 - 0.25
+	}
+
+	return offset
 })
 
 const startDrag = (event: MouseEvent) => {
@@ -385,6 +393,8 @@ const positionY = (y: number) => {
 
 onMounted(() => {
 	const handleKey = (e: KeyboardEvent) => {
+		// TODO Should all of this go in a global key handler? Perhaps not, since people use arrow keys on maps?
+		if(props.vertical) return
 		if (e.key === 'PageUp') prevDay()
 		else if (e.key === 'PageDown') nextDay()
 		else if (e.key === 'ArrowLeft') prevDay()
@@ -481,7 +491,7 @@ watch(
 						v-for="(month, i) in monthsForYear(
 							year,
 							props.vertical || props.exploring,
-							$l
+							$l,
 						)"
 						:key="`${year}${i}`"
 						class="background"
@@ -500,7 +510,7 @@ watch(
 						vector-effect="non-scaling-stroke"
 						:stroke-width="props.vertical ? 1 : 3"
 						:opacity="
-							!props.exploring && !props.vertical && year === selectedYear
+							props.showBars && !props.exploring && !props.vertical && year === selectedYear
 								? 0.25
 								: 1.0
 						"
@@ -516,7 +526,7 @@ watch(
 								: ''
 						"
 					/>
-					<transition-group tag="g" name="daily-event-fx">
+					<transition-group tag="g" name="daily-event-fx" v-if="props.showBars">
 						<rect
 							v-for="event in eventsByYear
 								.get(year)
@@ -588,7 +598,7 @@ watch(
 			</transition-group>
 		</svg>
 
-		<div class="year-highlights" v-if="!props.vertical">
+		<div class="year-highlights" v-if="!props.vertical && !props.exploring">
 			<div
 				class="highlight-row fade-top"
 				:class="{ exploring: props.exploring }"
@@ -644,6 +654,22 @@ $margin: 0 0;
 	position: relative;
 }
 
+.event-line {
+	stroke: $c3sblue;
+	// stroke-width: 0.025;
+	fill: $c3sblue;
+	fill-opacity: 0.25;
+	pointer-events: none;
+	transition: opacity $animTime ease-in-out;
+}
+
+.heatmap {
+	.event-line {
+		stroke: $c3sred;
+		fill: $c3sred;
+	}
+}
+
 .event-background {
 	position: absolute;
 	top: 0;
@@ -687,15 +713,6 @@ $margin: 0 0;
 			// TODO looks iffy
 			opacity: 1;
 		}
-	}
-
-	.event-line {
-		stroke: $c3sred;
-		// stroke-width: 0.025;
-		fill: $c3sred;
-		fill-opacity: 0.25;
-		pointer-events: none;
-		transition: opacity $animTime ease-in-out;
 	}
 
 	.day-box {

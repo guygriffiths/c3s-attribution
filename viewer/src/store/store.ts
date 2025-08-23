@@ -1,6 +1,6 @@
+import { createEventFilterWorker } from '@/lib/eventFilterWorkerFactory'
 import { filterEvents } from '@/lib/utils'
-import { point, polygon } from '@turf/helpers'
-import { booleanContains } from '@turf/turf'
+import { booleanContains, point, polygon } from '@turf/turf'
 import * as d3 from 'd3'
 import { differenceInDays, getDayOfYear } from 'date-fns'
 import Flatbush from 'flatbush'
@@ -8,6 +8,8 @@ import { MultiPolygon, Polygon } from 'geojson'
 import { LatLng, Point } from 'leaflet'
 import { defineStore } from 'pinia'
 import { watch } from 'vue'
+
+const worker = createEventFilterWorker()
 
 type LayerDetails = any
 type ViewMode = 'explore' | 'heatmap'
@@ -17,12 +19,16 @@ interface State {
 	loadingCount: number
 	viewMode: ViewMode
 	mapCentre: Point
+	// This holds a reference to a window through a panel through which the map is viewed
+	// So we want to fit to these bounds, centre our zoom events here, etc.
+	mapPeephole: HTMLElement | null
 
 	selectedTime: Date
 	layerDetails: LayerDetails | null
 	startTime: Date
 	endTime: Date
 	events: ExtremeEvent[]
+	showBars: boolean // Whether to show the bars in the time reel
 
 	selectedEvent: ExtremeEventFull | null
 
@@ -43,9 +49,12 @@ interface State {
 	}
 	// We don't want to trigger a full filter run on every point selection, so this is a separate filter
 	selectedPointFilter: [number, number] | null
+	lastPoint: [number, number] | null // This is used to store the last point selected on the map for filtering
+	drawingRegion: boolean // Whether we are currently drawing a region on the map
+
 	filteredEvents: ExtremeEvent[]
 	draggingFilter: boolean
-	fastFilterEvents: ExtremeEvent[] // This is the set of events that are filtered by the fast filter for draggina and other UI interactions
+	regionFilteredEvents: ExtremeEvent[] // This is the set of events that are filtered by the fast filter for draggina and other UI interactions
 
 	wrafLevel: 'none' | 'wraf-01' | 'wraf-05' | 'wraf-2' | 'wraf-5' | 'wraf-10'
 	// This is the set of regions to select events by, if any
@@ -65,16 +74,18 @@ export const useStore = defineStore('main', {
 		return {
 			lang: 'en',
 			loadingCount: 0,
-			viewMode: 'heatmap',
+			viewMode: 'heatmap', // 'explore' or 'heatmap'
 			mapCentre: new LatLng(0, 0) as unknown as Point, // Default center point for the map
+			mapPeephole: null, // This will be set to the map container element when the map is initialized
 
-			selectedTime: new Date(Date.UTC(2020, 4, 28, 0, 0, 0)),
+			selectedTime: new Date(Date.UTC(1981, 4, 28, 0, 0, 0)),
 			layerDetails: null,
 			// times: [],
-			startTime: new Date(),
+			startTime: new Date(1979, 0, 1),
 			endTime: new Date(),
 			events: [],
 			selectedEvent: null,
+			showBars: false, // Whether to show the bars in the time reel
 
 			lat2Index: d3
 				.scaleLinear()
@@ -104,21 +115,31 @@ export const useStore = defineStore('main', {
 			selectedPointFilter: null, // This is used to store a point selected on the map for filtering
 			filteredEvents: [],
 			draggingFilter: false,
-			fastFilterEvents: [], // This is the set of events that are filtered by the fast filter for dragging and other UI interactions
+			lastPoint: null,
+			drawingRegion: false, // Whether we are currently drawing a region on the map
+			regionFilteredEvents: [], // This is the set of events that are filtered by region on top of the main filters. This needs to be fast enough to live-render while dragging the point. It also must be 100% pixel accurate, as it is the main filter for region exploration.
 			wrafLevel: 'none',
 			regionsToSelectBy: null, // Will store the loaded WRAF regions. The actual selected region is in filters.wrafRegion
 			spatialIndex: null, // Spatial index for events, if needed
 		}
 	},
 	getters: {
+		isFocused: (state) => {
+			return (
+				state.selectedEvent !== null ||
+				state.filters.wrafRegion !== null ||
+				(state.selectedPointFilter !== null && !state.draggingFilter)
+			)
+		},
 		eventSelected: (state) => {
 			return state.selectedEvent !== null && state.selectedEvent !== undefined
 		},
 		exploringRegion: (state) => {
 			return (
 				!state.selectedEvent &&
-				state.filters.wrafRegion !== null &&
-				state.filters.wrafRegion !== undefined
+				((state.filters.wrafRegion !== null &&
+					state.filters.wrafRegion !== undefined) ||
+					state.selectedPointFilter !== null)
 			)
 		},
 		isLoading: (state) => state.loadingCount > 0,
@@ -149,7 +170,12 @@ export const useStore = defineStore('main', {
 		dayCounts: (state) => {
 			// Create a map of day counts for each month
 			const counts = new Map<number, Array<number>>()
-			state.filteredEvents.forEach((event) => {
+
+			const iEvents = state.selectedPointFilter
+				? state.regionFilteredEvents
+				: state.filteredEvents
+
+			iEvents.forEach((event) => {
 				event.times.forEach((time) => {
 					const year = time.getUTCFullYear()
 					const day = getDayOfYear(time)
@@ -190,6 +216,9 @@ export const useStore = defineStore('main', {
 				// This should always be the case...
 				event.id = id
 				event.times = event.times.map((time: string) => new Date(time))
+				event.duration =
+					1 +
+					differenceInDays(event.times[event.times.length - 1], event.times[0])
 				event.color = catScheme[event.id % catScheme.length]
 				this.selectedEvent = event as ExtremeEventFull
 				if (
@@ -208,6 +237,13 @@ export const useStore = defineStore('main', {
 				this.filters.wrafRegion = region
 			}
 		},
+		stopExploringRegion() {
+			if (this.selectedPointFilter !== null) {
+				this.selectedPointFilter = null
+			} else if (this.filters.wrafRegion !== null) {
+				this.filters.wrafRegion = null
+			}
+		},
 		toggleTimePanel() {
 			this.timePanelExpanded = !this.timePanelExpanded
 		},
@@ -223,26 +259,44 @@ export const useStore = defineStore('main', {
 		setLoadingDone() {
 			this.loadingCount--
 		},
-		getPointFilteredEvents(pointToFilter: [number, number]) {
-			if (!this.spatialIndex) {
+		getPointFilteredEvents(lat: number, lon: number) {
+			if (!this.spatialIndex || !this.selectedPointFilter) {
 				console.warn('Spatial index not initialized, cannot filter by point')
 				return []
 			}
+			// Full filter in worker if this
+			// worker.filter(this.selectedPointFilter!).then((result) => {
+			// 	this.regionFilteredEvents = (result as number[]).map(
+			// 		(idx) => this.events[idx],
+			// 	)
+			// })
+			// console.time('fast filter')
 
-			const [lat, lon] = pointToFilter
+			const candidateIds = this.spatialIndex.search(lat, lon, lat, lon)
+			const candidateSet = new Set(candidateIds.map((id) => this.events[id].id))
+
+			const fEvents = new Array<ExtremeEvent>(candidateIds.length)
+			for (let i = 0; i < candidateIds.length; i++) {
+				fEvents[i] = this.events[candidateIds[i]]
+			}
+
 			const p = point([lon, lat]) // Turf expects [x, y] = [lon, lat]
-
-			// Query the index: Flatbush returns candidate IDs whose bbox intersects the point
-			const candidateIds = this.spatialIndex.search(lat, lon, lat, lon).map((id) => this.events[id].id)
-			const candidateSet = new Set(candidateIds)
-
-			return this.filteredEvents.filter((event) => {
-				if (!candidateSet.has(event.id)) return false
+			this.regionFilteredEvents = fEvents.filter((event) => {
+				// return true
 				const totalPoly = polygon([
 					event.total_region.map(([lat, lon]) => [lon, lat]),
 				])
 				return booleanContains(totalPoly, p)
 			})
+		},
+		fixPointFilteredEvents() {
+			// This is called when the user stops dragging the point filter
+			// We want to do a full filter of the events now
+			console.log(
+				'Fixing point filtered events. This is disabled because it slows things down too much',
+			)
+			// this.filteredEvents = this.regionFilteredEvents
+			// this.regionFilteredEvents = []
 		},
 		init() {
 			this.setLoading()
@@ -266,6 +320,7 @@ export const useStore = defineStore('main', {
 					return objects
 				})
 				.then((data) => {
+					this.startTime = new Date(9999, 0, 1)
 					this.endTime = new Date(0)
 					let col = 0
 					data.forEach((event: any) => {
@@ -287,6 +342,12 @@ export const useStore = defineStore('main', {
 							const dayOfYear = getDayOfYear(time)
 						})
 						event.color = catScheme[col++ % catScheme.length]
+						event.duration =
+							1 +
+							differenceInDays(
+								event.times[event.times.length - 1],
+								event.times[0],
+							)
 
 						// normalize total_region longitudes to avoid IDL issues
 						const lons = event.total_region.map(
@@ -296,7 +357,7 @@ export const useStore = defineStore('main', {
 						const minLon = Math.min(...lons)
 
 						if (maxLon - minLon > 180) {
-							console.log('normalising', JSON.stringify(event.total_region))
+							// console.log('normalising', JSON.stringify(event.total_region))
 							// crosses the dateline: shift any lon < 0 by +360
 							event.total_region = event.total_region.map(
 								([lat, lon]: [number, number]) => {
@@ -304,14 +365,14 @@ export const useStore = defineStore('main', {
 									return [lat, newLon]
 								},
 							)
-							console.log('normalised', event.total_region)
+							// console.log('normalised', event.total_region)
 						}
 					})
 
 					// this.events = data.filter((_, i) => i % 4 === 0) as Event[]
 					this.events = data as ExtremeEvent[]
 					console.log('Events loaded:', this.events)
-					this.spatialIndex = new Flatbush(this.events.length, 2)
+					this.spatialIndex = new Flatbush(this.events.length)
 					this.events.forEach((event, i) => {
 						const bbox = event.bbox
 						if (bbox) {
@@ -330,10 +391,9 @@ export const useStore = defineStore('main', {
 					})
 					this.spatialIndex!.finish()
 					console.log('Spatial index created for events:', this.spatialIndex)
-					// this.events.forEach((event) => {
-					// 	event.times = event.times.map((time: string) => new Date(time))
 
-					// })
+					worker.init(this.events)
+
 					this.setLoadingDone()
 				})
 				.catch((error) => {

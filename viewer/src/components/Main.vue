@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { onMounted, Ref, ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { onMounted, computed } from 'vue'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
-import type { FullExtremeEvent } from '@/store/store'
 import Map from './Map.vue'
 import Panel from './util/Panel.vue'
 import TimeReel from './TimeReel.vue'
-import { active } from 'd3'
 import EventGraphs from './EventGraphs.vue'
 import EventInfo from './EventInfo.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -16,9 +13,10 @@ import {
 	faAnglesUp,
 	faWandMagicSparkles,
 	faClose,
-	faChevronDown,
+	faBarsStaggered,
 } from '@fortawesome/free-solid-svg-icons'
-import RegionPanel from './RegionPanel.vue'
+import FocusFrame from './util/FocusFrame.vue'
+import EventRanker from './util/EventRanker.vue'
 
 const $l = useLabels()
 const store = useStore()
@@ -33,10 +31,28 @@ const toggleTimePanelExpanded = () => {
 		store.timePanelVisible = true
 	}
 }
+const toggleTimePanelHidden = () => {
+	store.timePanelVisible = !store.timePanelVisible
+	// if (!store.timePanelVisible) {
+	// 	store.timePanelExpanded = false
+	// }
+}
+
+const exitFocus = () => {
+	store.selectEvent(null)
+	store.filters.wrafRegion = null
+	store.selectedPointFilter = null
+	store.draggingFilter = false
+}
 </script>
 
 <template>
 	<div class="main">
+		<FocusFrame
+			class="focus-frame"
+			:active="store.isFocused"
+			@close="exitFocus"
+		/>
 		<Map id="map"></Map>
 		<Panel
 			id="time-panel"
@@ -45,7 +61,8 @@ const toggleTimePanelExpanded = () => {
 			:class="{
 				event: store.eventSelected,
 				expanded: store.timePanelExpanded,
-				region: !store.eventSelected && store.exploringRegion,
+				heatmap: store.viewMode === 'heatmap',
+				focused: store.isFocused,
 			}"
 		>
 			<TimeReel
@@ -56,15 +73,15 @@ const toggleTimePanelExpanded = () => {
 				:day-counts="store.dayCounts"
 				:selected-event="store.selectedEvent"
 				v-model="store.selectedTime"
-				:changing-filter="store.draggingFilter"
 				@event-selected="store.selectEvent"
 				:exploring="store.timePanelExpanded"
-				:vertical="store.exploringRegion"
+				:vertical="store.viewMode === 'heatmap'"
+				:show-bars="store.showBars"
 			></TimeReel>
 			<button
+				v-if="!store.eventSelected && store.viewMode !== 'heatmap'"
 				class="panel-hide"
-				@click="toggleTimePanelExpanded"
-				v-show="!store.eventSelected && !store.exploringRegion"
+				@click="toggleTimePanelHidden"
 			>
 				<font-awesome-icon
 					:icon="!store.timePanelExpanded ? faChevronUp : faAnglesUp"
@@ -72,14 +89,25 @@ const toggleTimePanelExpanded = () => {
 				/>
 			</button>
 			<button
-				v-if="store.timePanelVisible"
+				v-if="
+					store.timePanelVisible &&
+					!store.eventSelected &&
+					store.viewMode !== 'heatmap'
+				"
 				class="panel-expand"
 				@click="toggleTimePanelExpanded"
-				v-show="!store.eventSelected && !store.exploringRegion"
 			>
 				<font-awesome-icon
-					:icon="!store.timePanelExpanded ? faWandMagicSparkles : faChevronDown"
+					:icon="!store.timePanelExpanded ? faWandMagicSparkles : faClose"
 				/>
+			</button>
+			<button
+				v-if="store.viewMode === 'explore' && !store.timePanelExpanded"
+				class="show-bars"
+				:class="{ active: store.showBars }"
+				@click="store.showBars = !store.showBars"
+			>
+				<font-awesome-icon :icon="faBarsStaggered" />
 			</button>
 		</Panel>
 		<Panel id="event-frame-panel" class="top" :active="store.eventSelected">
@@ -125,12 +153,22 @@ const toggleTimePanelExpanded = () => {
 				@date-selected="store.selectedTime = $event"
 			></EventGraphs>
 		</Panel>
-		<RegionPanel
+		<Panel
 			id="region-panel"
-			class="left"
+			class="bottom"
+			:class="{ dragging: store.draggingFilter }"
 			:active="store.exploringRegion"
-			@close="store.filters.wrafRegion = null"
-		></RegionPanel>
+		>
+			<EventRanker :sort-func="(a, b) => b.duration - a.duration" :topN="5" />
+			<EventRanker
+				:sort-func="(a, b) => b.pixel_count - a.pixel_count"
+				:topN="5"
+			/>
+			<EventRanker
+				:sort-func="(a, b) => b.peak_value - a.peak_value"
+				:topN="5"
+			/>
+		</Panel>
 	</div>
 </template>
 
@@ -146,6 +184,11 @@ const toggleTimePanelExpanded = () => {
 	max-width: 100vw;
 	max-height: 100vh;
 	position: relative;
+
+	.focus-frame {
+		transition: all $settleTime ease-in-out;
+		z-index: 20;
+	}
 
 	#buttons-debug {
 		position: absolute;
@@ -163,8 +206,11 @@ const toggleTimePanelExpanded = () => {
 		top: -20px;
 		z-index: 20;
 	}
+
+	.show-bars,
 	.panel-expand,
 	.panel-hide {
+		padding: 0.5rem;
 		position: absolute;
 		right: 0;
 		top: -0.5rem;
@@ -184,10 +230,23 @@ const toggleTimePanelExpanded = () => {
 		left: -20px;
 		z-index: 20;
 	}
+	.show-bars {
+		right: unset;
+		left: 0;
+
+		top: -0.5rem;
+		z-index: 20;
+
+		&.active {
+			color: $c3sred;
+			filter: drop-shadow(0 0 2px rgb(255, 255, 255))
+				drop-shadow(0 0 5px rgb(255, 255, 255));
+		}
+	}
 
 	#time-panel {
 		width: calc(100% - 2 * $panelMargin);
-		left: $panelMargin;
+		right: $panelMargin;
 		bottom: $panelMargin;
 		height: 40%;
 		&.expanded {
@@ -199,7 +258,6 @@ const toggleTimePanelExpanded = () => {
 		transition: all $animTime linear;
 
 		&.event {
-			left: 50%;
 			width: calc(50% - $panelMargin);
 			height: $eventTimePanelHeight;
 			// padding-bottom: calc(15% - 0.75rem);
@@ -208,15 +266,26 @@ const toggleTimePanelExpanded = () => {
 			border-top-left-radius: 0;
 			border-bottom-left-radius: 0;
 		}
+		.time-reel {
+			border-radius: 0.5rem;
+		}
 
-		&.region {
-			left: $panelMargin;
+		&.heatmap {
 			bottom: $panelMargin;
-			height: calc(100% - 2 * $panelMargin);
+			height: calc(100% - 4 * $panelMargin - 1rem);
 			width: $vTimePanelWidth;
 			box-shadow: none;
-			border-top-right-radius: 0;
-			border-bottom-right-radius: 0;
+			border-bottom-left-radius: 0;
+
+			.time-reel {
+				border-bottom-left-radius: 0;
+			}
+
+			&.focused {
+				right: calc(2 * $panelMargin);
+				bottom: calc(2 * $panelMargin);
+				height: calc(100% - 6 * $panelMargin - 1rem);
+			}
 		}
 
 		#times {
@@ -302,13 +371,36 @@ const toggleTimePanelExpanded = () => {
 	}
 
 	#region-panel {
-		width: calc(100% - 2 * $panelMargin);
-		height: calc(100% - 2 * $panelMargin);
-		padding-left: $vTimePanelWidth;
-		top: $panelMargin;
-		left: $panelMargin;
+		width: calc(100% - 4 * $panelMargin);
+		height: calc(40% - 2 * $panelMargin);
+		bottom: calc(2 * $panelMargin);
+		left: calc(2 * $panelMargin);
 		// bottom: $panelMargin;;
 		// right: $panelMargin;;
+		display: flex;
+		flex-direction: row;
+		padding: calc(3 * $panelMargin);
+		padding-right: $vTimePanelWidth;
+
+		&.dragging {
+			opacity: 0.5;
+			pointer-events: none;
+		}
+
+		.event-ranker {
+			flex: 1 1 33%;
+			margin-right: 1rem;
+			border-radius: 0.5rem;
+			background-color: rgba($panelBg, 0.75);
+			box-shadow: rgba(0, 0, 0, 0.2) 0px 4px 6px -1px,
+				rgba(0, 0, 0, 0.1) 0px 2px 4px -1px;
+			// border: 1px solid rgba(0, 0, 0, 0.1);
+			// border: 1px solid rgba(255, 255, 255, 0.1);
+			// backdrop-filter: blur(5px);
+			height: 100%;
+			min-width: 0; // allow flexbox to shrink it
+			padding: 0.5rem;
+		}
 	}
 }
 </style>
