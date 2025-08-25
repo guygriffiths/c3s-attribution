@@ -383,7 +383,7 @@ const exitFocus = () => {
 		padding-right: $vTimePanelWidth;
 
 		&.dragging {
-			opacity: 0.5;
+			opacity: 0.75;
 			pointer-events: none;
 		}
 

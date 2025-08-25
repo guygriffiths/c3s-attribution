@@ -62,3 +62,17 @@ Unsorted TODO List:
 * Colour-blindness friendly
 * Proper aria stuff for blindness
 
+Event Ranker:
+* Lock scrolling together button
+* When event clicked, scroll into view at the same place (if possible)
+* When event hovered, highlight in all rankers, draw on the map as an outline with a pretty transition
+* Make 1, 2, 3 look like medals
+* On hover, show event information (on popup on map?). Maybe on click, or 2-3s debounced (?) hover. On ranker on hover, but full event info on map on click?
+* Highlight on the timeline when an event is selected
+
+
+
+OK, SO!
+
+What about we just have one concept for each thing - intensity, area, duration. And that's all we call them (if that - primarily icon-based). And when you go into the settings, you can define what you mean by "intensity". And perhaps you unlock a mode where you can view multiple things together. So you can still view 3 event rankings, but if you want mean, peak, and number of pixels; or min, mean_region_area, total_pixel_count; or whatever, then so be it. And that's just dropdown menus, they only appear in advanced mode.
+

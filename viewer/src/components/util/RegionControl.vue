@@ -41,6 +41,7 @@ const selectSize = async (idx: number | null) => {
 	}
 	store.wrafLevel = idx === null ? 'none' : sizes[idx][2]
 	store.selectedPointFilter = null
+	store.regionFilteredEvents = []
 	store.drawingRegion = false
 	store.filters.wrafRegion = null
 }

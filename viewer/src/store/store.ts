@@ -31,6 +31,7 @@ interface State {
 	showBars: boolean // Whether to show the bars in the time reel
 
 	selectedEvent: ExtremeEventFull | null
+	hoveringEventId: string | null
 
 	lat2Index?: (lat: number) => number
 	lon2Index?: (lon: number) => number
@@ -86,6 +87,7 @@ export const useStore = defineStore('main', {
 			events: [],
 			selectedEvent: null,
 			showBars: false, // Whether to show the bars in the time reel
+			hoveringEventId: null,
 
 			lat2Index: d3
 				.scaleLinear()

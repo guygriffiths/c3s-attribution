@@ -384,7 +384,7 @@ const addEventPanes = () => {
 	<div
 		class="map"
 		:class="{
-			'have-regional': store.filters.wrafRegion || store.selectedPointFilter,
+			'have-regional': store.selectedPointFilter,
 			focussed: store.isFocused,
 		}"
 	>

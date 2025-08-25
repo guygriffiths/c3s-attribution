@@ -2754,6 +2754,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/leaflet-draw@npm:^1":
+  version: 1.0.12
+  resolution: "@types/leaflet-draw@npm:1.0.12"
+  dependencies:
+    "@types/leaflet": "npm:*"
+  checksum: 10c0/54edaad4a90aba11304d4db5e2e16b124f7da4ecb92dda67e549601702a2d0ebcecb1e1d94de485db83ff3bd70dadbe3aaac561ff66550356249918f6749fed9
+  languageName: node
+  linkType: hard
+
+"@types/leaflet@npm:*":
+  version: 1.9.20
+  resolution: "@types/leaflet@npm:1.9.20"
+  dependencies:
+    "@types/geojson": "npm:*"
+  checksum: 10c0/14a32df400c6a371bc7e65ee4467118dc1b977cae002c45f7315ed032fade30bac3b97feac60a08809dd767bd68b17900ae6f947258cc0745412562ad12f2e82
+  languageName: node
+  linkType: hard
+
 "@types/leaflet@npm:^1.9.16":
   version: 1.9.17
   resolution: "@types/leaflet@npm:1.9.17"
@@ -4878,6 +4896,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"leaflet-draw@npm:^1.0.4":
+  version: 1.0.4
+  resolution: "leaflet-draw@npm:1.0.4"
+  checksum: 10c0/9e700b7e5e7d70c0f9d66efe2fec282f635eff63699e5f2f4eb733b140188058cc7cb2a5d3c6889c300958ec9e415fd5c0a02a08db0e1fc13a063d4710cff004
+  languageName: node
+  linkType: hard
+
 "leaflet@npm:^1.9.4":
   version: 1.9.4
   resolution: "leaflet@npm:1.9.4"
@@ -6371,6 +6396,7 @@ __metadata:
     "@types/d3": "npm:^7.4.3"
     "@types/js-cookie": "npm:^3.0.6"
     "@types/leaflet": "npm:^1.9.16"
+    "@types/leaflet-draw": "npm:^1"
     "@types/papaparse": "npm:^5.3.15"
     "@typescript-eslint/parser": "npm:^8.26.0"
     "@vitejs/plugin-vue": "npm:^5.2.1"
@@ -6383,6 +6409,7 @@ __metadata:
     flatbush: "npm:^4.4.1"
     js-cookie: "npm:^3.0.5"
     leaflet: "npm:^1.9.4"
+    leaflet-draw: "npm:^1.0.4"
     papaparse: "npm:^5.5.2"
     pinia: "npm:^3.0.1"
     prettier: "npm:^3.5.3"
