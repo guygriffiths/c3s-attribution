@@ -75,11 +75,11 @@ export const useStore = defineStore('main', {
 		return {
 			lang: 'en',
 			loadingCount: 0,
-			viewMode: 'heatmap', // 'explore' or 'heatmap'
+			viewMode: 'explore', // 'explore' or 'heatmap'
 			mapCentre: new LatLng(0, 0) as unknown as Point, // Default center point for the map
 			mapPeephole: null, // This will be set to the map container element when the map is initialized
 
-			selectedTime: new Date(Date.UTC(1981, 4, 28, 0, 0, 0)),
+			selectedTime: new Date(Date.UTC(2020, 4, 28, 0, 0, 0)),
 			layerDetails: null,
 			// times: [],
 			startTime: new Date(1979, 0, 1),
@@ -331,6 +331,7 @@ export const useStore = defineStore('main', {
 						const startDate = new Date(event.times[0])
 						if (startDate < this.startTime) {
 							this.startTime = new Date(startDate)
+							console.log('New start time:', this.startTime)
 						}
 						startDate.setHours(0, 0, 0, 0)
 						const endDate = new Date(event.times[event.times.length - 1])
