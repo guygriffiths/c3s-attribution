@@ -14,7 +14,7 @@ from shapely.geometry import MultiPoint
 from shapely.ops import unary_union
 import json
 import queue
-import threading
+import alphashape
 
 
 def walk_scan(D_coo: coo_matrix, eps: float, min_samples: int = 1):
@@ -108,21 +108,22 @@ class Eventlet:
         lon_mean = np.mean(target_slice[:, 1])
         return (lat_mean, lon_mean)
 
-    def hull(self, n):
+    def hull(self, n, alpha=1.0):
         if not self.slices:
             return None
         target_slice = self.slices[n] if n < len(self.slices) else self.slices[-1]
         if len(target_slice) == 0:
             return None
+
         longitude_span = target_slice[:, 1].max() - target_slice[:, 1].min()
         if longitude_span > 180:
-            # If the points span more than 180 degrees, we need to handle wrapping
-            # Current range is [-180, 180], so we shift anything < 0 to the right by 360
+            target_slice = target_slice.copy()
             target_slice[:, 1] = np.where(
                 target_slice[:, 1] < 0, target_slice[:, 1] + 360, target_slice[:, 1]
             )
-            # print(f"Shifted hull coords to handle wrapping: {target_slice[:, 1]}")
-        return MultiPoint(target_slice).convex_hull
+
+        # mp = MultiPoint(target_slice)
+        return alphashape.alphashape(target_slice, alpha)
 
     def overlaps(self, coords, eps=1e-6):
         test = np.array(coords, dtype=np.float32)  # shape (N, 2)
@@ -439,17 +440,22 @@ class EventletFactory:
         if ocean_only:
             print(f"Event {event_id} is ocean-only, with centroid {centroids[0]}")
         
-        # Flatten all coordinates and values
-        all_coords = np.vstack([np.array(t_slice) for t_slice in ev.slices])  # (N, 2)
-        all_values = np.hstack([np.array(vals).flatten() for vals in ev.values])  # (N,)
+        # ensure arrays are 1-D and aligned
+        all_coords = np.vstack([np.asarray(t_slice) for t_slice in ev.slices])  # (N, 2)
+        all_values = np.hstack([np.asarray(vals).ravel() for vals in ev.values])  # (N,)
 
-        # Deduplicate coords using structured view
-        coords_view = all_coords.view([('', all_coords.dtype)] * all_coords.shape[1])
+        if all_coords.shape[0] != all_values.shape[0]:
+            raise ValueError(f"mismatch: {all_coords.shape[0]} coords vs {all_values.shape[0]} values")
+
+        # structured view & grouping
+        coords_view = all_coords.view([('', all_coords.dtype)] * all_coords.shape[1]).ravel()
         unique_coords, inverse_idx = np.unique(coords_view, return_inverse=True)
 
-        # Compute max per unique coordinate
+        # compute per-pixel max
         pixel_peak_values = np.full(len(unique_coords), -np.inf, dtype=all_values.dtype)
+        # print(all_coords.shape, all_values.shape, inverse_idx.shape, pixel_peak_values.shape)
         np.maximum.at(pixel_peak_values, inverse_idx, all_values)
+
 
         # Convert back to normal ndarray
         unique_coords = unique_coords.view(all_coords.dtype).reshape(-1, all_coords.shape[1])
