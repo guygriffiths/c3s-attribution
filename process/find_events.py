@@ -114,6 +114,8 @@ class Eventlet:
         target_slice = self.slices[n] if n < len(self.slices) else self.slices[-1]
         if len(target_slice) == 0:
             return None
+        if len(target_slice) < 4:
+            return MultiPoint(target_slice).bounds
 
         longitude_span = target_slice[:, 1].max() - target_slice[:, 1].min()
         if longitude_span > 180:
@@ -631,9 +633,9 @@ def main():
 
 
     data_var, ref_data, land_sea_mask = load_data(
-        f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
-        f"/data/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
-        f"/data/era5_land_sea_mask.nc"
+        f"/data/era5_2024.nc",
+        f"/data/era5_ref98.nc",
+        None
     )
     time_dim = data_var["valid_time"]
     out_path = f"/data/output-{stat}-{perc}-{thresh}-nr{nr}"
