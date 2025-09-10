@@ -114,8 +114,19 @@ class Eventlet:
         target_slice = self.slices[n] if n < len(self.slices) else self.slices[-1]
         if len(target_slice) == 0:
             return None
-        if len(target_slice) < 4:
-            return MultiPoint(target_slice).bounds
+
+        # If <3 points, pad them into 4-cell corners
+        if len(target_slice) < 3:
+            expanded = []
+            d = 0.125  # half-cell for 0.25° grid
+            for lat, lon in target_slice:
+                expanded.extend([
+                    (lat - d, lon - d),
+                    (lat - d, lon + d),
+                    (lat + d, lon + d),
+                    (lat + d, lon - d),
+                ])
+            target_slice = np.array(expanded)
 
         longitude_span = target_slice[:, 1].max() - target_slice[:, 1].min()
         if longitude_span > 180:
@@ -124,8 +135,8 @@ class Eventlet:
                 target_slice[:, 1] < 0, target_slice[:, 1] + 360, target_slice[:, 1]
             )
 
-        # mp = MultiPoint(target_slice)
         return alphashape.alphashape(target_slice, alpha)
+
 
     def overlaps(self, coords, eps=1e-6):
         test = np.array(coords, dtype=np.float32)  # shape (N, 2)
