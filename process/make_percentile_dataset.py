@@ -2,7 +2,7 @@
 
 import xarray as xr
 stats = ['max', 'mean']
-stat = 'max'
+stat = 'min'
 percs = [0.98, 0.99, 0.995, 0.95]
 years = range(1991,2021)
 files = [f"/data/{stat}/era5_daily_{stat}_temperature_{year}.nc" for year in years]

@@ -646,16 +646,16 @@ def main():
 
     # for dbscan in [False, True]:
     #     for perc in [98, 99]:
-    stat = 'max'
+    stat = 'min'
     perc = '99.0'
-    thresh = 28
-    nr = 6
+    thresh = 25
+    nr = 7
 
 
     data_var, ref_data, land_sea_mask = load_data(
-        f"/data/era5_2024.nc",
-        f"/data/era5_ref98.nc",
-        None
+        f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
+        f"/data/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
+        f"/data/era5_land_sea_mask.nc"
     )
     time_dim = data_var["valid_time"]
     out_path = f"/data/output-{stat}-{perc}-{thresh}-nr{nr}"
