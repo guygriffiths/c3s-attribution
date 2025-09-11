@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from matplotlib.patches import Polygon
 import numpy as np
 from sklearn.cluster import DBSCAN
 from scipy.spatial import cKDTree
@@ -84,6 +85,29 @@ def get_region(shape):
 
 import numpy as np
 
+def safe_alphashape(points, alpha=1.0):
+    if not points:
+        return None
+
+    try:
+        shape = alphashape.alphashape(points, alpha)
+        if shape and not shape.is_empty:
+            return shape
+    except Exception:
+        pass
+
+    # Fallbacks
+    if len(points) == 1:
+        x, y = points[0]
+        return Polygon([
+            (x-0.125, y-0.125), (x+0.125, y-0.125),
+            (x+0.125, y+0.125), (x-0.125, y+0.125)
+        ])
+    elif len(points) == 2:
+        return MultiPoint(points).buffer(0.125)  # wee fat line
+    else:
+        return MultiPoint(points).convex_hull  # co-linear or failed alpha
+
 
 class Eventlet:
     def __init__(self, time, coords, values):
@@ -115,19 +139,6 @@ class Eventlet:
         if len(target_slice) == 0:
             return None
 
-        # If <3 points, pad them into 4-cell corners
-        if len(target_slice) < 3:
-            expanded = []
-            d = 0.125  # half-cell for 0.25° grid
-            for lat, lon in target_slice:
-                expanded.extend([
-                    (lat - d, lon - d),
-                    (lat - d, lon + d),
-                    (lat + d, lon + d),
-                    (lat + d, lon - d),
-                ])
-            target_slice = np.array(expanded)
-
         longitude_span = target_slice[:, 1].max() - target_slice[:, 1].min()
         if longitude_span > 180:
             target_slice = target_slice.copy()
@@ -135,7 +146,7 @@ class Eventlet:
                 target_slice[:, 1] < 0, target_slice[:, 1] + 360, target_slice[:, 1]
             )
 
-        return alphashape.alphashape(target_slice, alpha)
+        return safe_alphashape(target_slice, alpha)
 
 
     def overlaps(self, coords, eps=1e-6):
@@ -591,15 +602,15 @@ def get_id(time, centroid):
     Generate a stable ID for an event based on time and centroid.
     This is a simple hash function that combines the time and centroid coordinates.
     """
-    # snap to nearest 0.1°
-    lat = round(centroid[0], 1)
-    lon = round(centroid[1], 1)
+    # snap to nearest 0.001°
+    lat = round(centroid[0], 3)
+    lon = round(centroid[1], 3)
 
     # shift negatives to positives
-    lat_code = int(round((lat + 90) * 10))   # 0 → 1800 range
-    lon_code = int(round((lon + 180) * 10))  # 0 → 3600 range
+    lat_code = int(round((lat + 90) * 1000))   # 0 → 180000 range
+    lon_code = int(round((lon + 180) * 1000))  # 0 → 360000 range
 
-    return f"{time.strftime('%Y%m%d')}{lat_code:04d}{lon_code:04d}"
+    return f"{time.strftime('%Y%m%d')}{lat_code:06d}{lon_code:06d}"
 
 
 def downstream_worker(q, clusterer):
