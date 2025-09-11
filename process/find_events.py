@@ -86,7 +86,7 @@ def get_region(shape):
 import numpy as np
 
 def safe_alphashape(points, alpha=1.0):
-    if not points:
+    if points is None or len(points) == 0:
         return None
 
     try:
