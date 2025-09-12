@@ -489,9 +489,7 @@ class EventletFactory:
             "id": event_id,
             "times": [formatTime(t) for t in all_times],
             "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
-            "total_region": get_region(
-                unary_union([ev.hull(i) for i in range(len(ev.slices)) if ev.hull(i)])
-            ),
+            "total_region": safe_alphashape(unique_coords, alpha=1.0),
             "slices": to_serialisable(ev.slices),
             "values": to_serialisable(ev.values),
             "centroids": to_serialisable(centroids),
