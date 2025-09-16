@@ -85,10 +85,12 @@ def get_region(shape):
 
 import numpy as np
 
-def safe_alphashape(points, alpha=1.0):
-    if points is None or len(points) == 0:
+
+def safe_alphashape(points, alpha=1.0, fallback_buffer=0.125):
+    if not points:
         return None
 
+    # Try alphashape first
     try:
         shape = alphashape.alphashape(points, alpha)
         if shape and not shape.is_empty:
@@ -97,16 +99,34 @@ def safe_alphashape(points, alpha=1.0):
         pass
 
     # Fallbacks
-    if len(points) == 1:
+    n = len(points)
+
+    if n == 1:
+        # Small square around single point
         x, y = points[0]
-        return Polygon([
-            (x-0.125, y-0.125), (x+0.125, y-0.125),
-            (x+0.125, y+0.125), (x-0.125, y+0.125)
-        ])
-    elif len(points) == 2:
-        return MultiPoint(points).buffer(0.125)  # wee fat line
+        return Polygon(
+            [
+                (x - fallback_buffer, y - fallback_buffer),
+                (x + fallback_buffer, y - fallback_buffer),
+                (x + fallback_buffer, y + fallback_buffer),
+                (x - fallback_buffer, y + fallback_buffer),
+            ]
+        )
+    elif n == 2:
+        # Thin capsule between two points
+        return MultiPoint(points).buffer(fallback_buffer)
     else:
-        return MultiPoint(points).convex_hull  # co-linear or failed alpha
+        mp = MultiPoint(points)
+        # If points are roughly co-linear, buffer a thin convex hull
+        convex = mp.convex_hull
+        if convex.is_empty:
+            return None
+
+        # Compute a small buffer relative to point spread
+        x_vals, y_vals = zip(*points)
+        spread = max(max(x_vals) - min(x_vals), max(y_vals) - min(y_vals))
+        buffer_size = min(fallback_buffer, spread * 0.05)  # small fraction of spread
+        return convex.buffer(buffer_size)
 
 
 class Eventlet:
@@ -147,7 +167,6 @@ class Eventlet:
             )
 
         return safe_alphashape(target_slice, alpha)
-
 
     def overlaps(self, coords, eps=1e-6):
         test = np.array(coords, dtype=np.float32)  # shape (N, 2)
@@ -431,7 +450,9 @@ class EventletFactory:
                 for i in range(len(ev.slices))
             ]
         )
-        mean_value = to_serialisable(np.mean(np.concatenate(ev.values))) if mean_values else None
+        mean_value = (
+            to_serialisable(np.mean(np.concatenate(ev.values))) if mean_values else None
+        )
 
         ocean_only = False
         if self.land_sea_mask is not None:
@@ -446,13 +467,19 @@ class EventletFactory:
                     coords = np.array(ev.slices[i])
                     # Latitude indices
                     lat_indices = np.searchsorted(lats, coords[:, 0])
-                    lat_indices = np.clip(lat_indices, 0, self.land_sea_mask.latitude.size - 1)
+                    lat_indices = np.clip(
+                        lat_indices, 0, self.land_sea_mask.latitude.size - 1
+                    )
                     if not lat_asc:
                         lat_indices = self.land_sea_mask.latitude.size - 1 - lat_indices
 
                     # Longitude indices
-                    lon_indices = np.searchsorted(self.land_sea_mask.longitude, coords[:, 1])
-                    lon_indices = np.clip(lon_indices, 0, self.land_sea_mask.longitude.size - 1)
+                    lon_indices = np.searchsorted(
+                        self.land_sea_mask.longitude, coords[:, 1]
+                    )
+                    lon_indices = np.clip(
+                        lon_indices, 0, self.land_sea_mask.longitude.size - 1
+                    )
 
                     mask_values = self.land_sea_mask.values[0, lat_indices, lon_indices]
                     if not np.all(mask_values == 0):
@@ -460,19 +487,22 @@ class EventletFactory:
                         break
             ocean_only = all_ocean
 
-
         if ocean_only:
             print(f"Event {event_id} is ocean-only, with centroid {centroids[0]}")
-        
+
         # ensure arrays are 1-D and aligned
         all_coords = np.vstack([np.asarray(t_slice) for t_slice in ev.slices])  # (N, 2)
         all_values = np.hstack([np.asarray(vals).ravel() for vals in ev.values])  # (N,)
 
         if all_coords.shape[0] != all_values.shape[0]:
-            raise ValueError(f"mismatch: {all_coords.shape[0]} coords vs {all_values.shape[0]} values")
+            raise ValueError(
+                f"mismatch: {all_coords.shape[0]} coords vs {all_values.shape[0]} values"
+            )
 
         # structured view & grouping
-        coords_view = all_coords.view([('', all_coords.dtype)] * all_coords.shape[1]).ravel()
+        coords_view = all_coords.view(
+            [("", all_coords.dtype)] * all_coords.shape[1]
+        ).ravel()
         unique_coords, inverse_idx = np.unique(coords_view, return_inverse=True)
 
         # compute per-pixel max
@@ -480,16 +510,17 @@ class EventletFactory:
         # print(all_coords.shape, all_values.shape, inverse_idx.shape, pixel_peak_values.shape)
         np.maximum.at(pixel_peak_values, inverse_idx, all_values)
 
-
         # Convert back to normal ndarray
-        unique_coords = unique_coords.view(all_coords.dtype).reshape(-1, all_coords.shape[1])
+        unique_coords = unique_coords.view(all_coords.dtype).reshape(
+            -1, all_coords.shape[1]
+        )
         pixel_set = unique_coords.tolist()
 
         full_event = {
             "id": event_id,
             "times": [formatTime(t) for t in all_times],
             "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
-            "total_region": safe_alphashape(unique_coords, alpha=1.0),
+            "total_region": get_region(safe_alphashape(unique_coords, alpha=1.0)),
             "slices": to_serialisable(ev.slices),
             "values": to_serialisable(ev.values),
             "centroids": to_serialisable(centroids),
@@ -595,6 +626,7 @@ def stable_cluster_hash(time, centroid):
     hash_bytes = hashlib.sha256(s.encode("utf-8")).digest()
     return int.from_bytes(hash_bytes[:4], byteorder="big")  # 32 bits
 
+
 def get_id(time, centroid):
     """
     Generate a stable ID for an event based on time and centroid.
@@ -605,7 +637,7 @@ def get_id(time, centroid):
     lon = round(centroid[1], 3)
 
     # shift negatives to positives
-    lat_code = int(round((lat + 90) * 1000))   # 0 → 180000 range
+    lat_code = int(round((lat + 90) * 1000))  # 0 → 180000 range
     lon_code = int(round((lon + 180) * 1000))  # 0 → 360000 range
 
     return f"{time.strftime('%Y%m%d')}{lat_code:06d}{lon_code:06d}"
@@ -646,11 +678,10 @@ def main():
 
     # for dbscan in [False, True]:
     #     for perc in [98, 99]:
-    stat = 'min'
-    perc = '99.0'
-    thresh = 25
+    stat = "max"
+    perc = "99.0"
+    thresh = 29
     nr = 7
-
 
     data_var, ref_data, land_sea_mask = load_data(
         f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
