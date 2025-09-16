@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref, watch } from 'vue'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
-import Map from './Map.vue'
+import { useStore as useTimeStore } from '@/store/timeStore'
+import { useStore as useEventStore } from '@/store/eventStore'
+import MapComponent from './Map.vue'
 import Panel from './util/Panel.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
@@ -14,36 +16,110 @@ import {
 	faWandMagicSparkles,
 	faClose,
 	faBarsStaggered,
+	faClock,
+	faExpand,
+	faTemperatureHigh,
 } from '@fortawesome/free-solid-svg-icons'
 import FocusFrame from './util/FocusFrame.vue'
 import EventRanker from './util/EventRanker.vue'
+import {
+	clearFilter,
+	getFilteredEvents,
+	getGlobalFilteredEvents,
+	onGlobalEventsReady,
+	onRegionEventsReady,
+} from '@/lib/eventFiltering'
+import { getDayOfYear } from 'date-fns'
 
 const $l = useLabels()
 const store = useStore()
+const timeStore = useTimeStore()
+const eventStore = useEventStore()
 
 onMounted(async () => {})
 const toggleLabel = computed(() =>
-	store.timePanelVisible ? $l.value.hideTimePanel : $l.value.showTimePanel,
+	timeStore.timePanelVisible ? $l.value.hideTimePanel : $l.value.showTimePanel,
 )
 const toggleTimePanelExpanded = () => {
-	store.timePanelExpanded = !store.timePanelExpanded
-	if (store.timePanelExpanded) {
-		store.timePanelVisible = true
+	timeStore.timePanelExpanded = !timeStore.timePanelExpanded
+	if (timeStore.timePanelExpanded) {
+		timeStore.timePanelVisible = true
 	}
 }
 const toggleTimePanelHidden = () => {
-	store.timePanelVisible = !store.timePanelVisible
-	// if (!store.timePanelVisible) {
-	// 	store.timePanelExpanded = false
+	timeStore.timePanelVisible = !timeStore.timePanelVisible
+	// if (!timeStore.timePanelVisible) {
+	// 	timeStore.timePanelExpanded = false
 	// }
 }
 
 const exitFocus = () => {
-	store.selectEvent(null)
-	store.filters.wrafRegion = null
-	store.selectedPointFilter = null
+	eventStore.selectEvent(null)
+	clearFilter()
 	store.draggingFilter = false
 }
+
+const getDayCounts = () => {
+	const counts = new Map<number, Array<number>>()
+	let events
+	if (store.filteringByPoint || store.filteringByRegion) {
+		events = getFilteredEvents()
+	} else {
+		events = getGlobalFilteredEvents()
+	}
+
+	events.forEach((event: ExtremeEvent) => {
+		event?.times.forEach((time) => {
+			const year = time.getUTCFullYear()
+			const day = getDayOfYear(time)
+			if (!counts.has(year)) {
+				counts.set(year, Array(366).fill(0))
+			}
+			counts.get(year)![day - 1]++
+		})
+	})
+	const startYear = eventStore.startYear
+	const endYear = eventStore.endYear
+	for (let year = startYear; year <= endYear; year++) {
+		if (!counts.has(year)) {
+			counts.set(year, Array(366).fill(0))
+		}
+	}
+	return counts
+}
+
+const dayCounts = ref(getDayCounts())
+watch(
+	() => [store.filteringByRegion, store.filteringByPoint, store.exploreGlobal],
+	() => {
+		dayCounts.value = getDayCounts()
+	},
+)
+onRegionEventsReady(() => {
+	dayCounts.value = getDayCounts()
+})
+const globalFilteredEvents = ref([] as ExtremeEvent[])
+onGlobalEventsReady(() => {
+	// @ts-ignore
+	console.log('Filter ready, getting global heatmap events')
+	dayCounts.value = getDayCounts()
+	globalFilteredEvents.value = getGlobalFilteredEvents()
+})
+
+const eventsOfInterest = ref([] as ExtremeEvent[])
+onRegionEventsReady(() => {
+	eventsOfInterest.value = getFilteredEvents()
+})
+watch(
+	() => [store.filteringByRegion, store.filteringByPoint, store.exploreGlobal],
+	() => {
+		if (store.exploreGlobal) {
+			eventsOfInterest.value = globalFilteredEvents.value
+		} else {
+			eventsOfInterest.value = getFilteredEvents()
+		}
+	},
+)
 </script>
 
 <template>
@@ -53,82 +129,69 @@ const exitFocus = () => {
 			:active="store.isFocused"
 			@close="exitFocus"
 		/>
-		<Map id="map"></Map>
+		<MapComponent id="map"></MapComponent>
 		<Panel
 			id="time-panel"
-			:active="store.timePanelVisible || store.eventSelected"
+			:active="timeStore.timePanelVisible || eventStore.eventSelected"
 			class="bottom peek"
 			:class="{
-				event: store.eventSelected,
-				expanded: store.timePanelExpanded,
+				event: eventStore.eventSelected,
+				expanded: timeStore.timePanelExpanded,
 				heatmap: store.viewMode === 'heatmap',
 				focused: store.isFocused,
 			}"
 		>
 			<TimeReel
 				id="times"
-				:start="store.startTime"
-				:end="store.endTime"
-				:events="store.filteredEvents"
-				:day-counts="store.dayCounts"
-				:selected-event="store.selectedEvent"
-				v-model="store.selectedTime"
-				@event-selected="store.selectEvent"
-				:exploring="store.timePanelExpanded"
+				:start="timeStore.startTime"
+				:end="timeStore.endTime"
+				:events="globalFilteredEvents"
+				:day-counts="dayCounts"
+				:selected-event="eventStore.selectedEvent"
+				v-model="timeStore.selectedTime"
+				@event-selected="eventStore.selectEvent"
+				:exploring="timeStore.timePanelExpanded"
 				:vertical="store.viewMode === 'heatmap'"
-				:show-bars="store.showBars"
+				:show-bars="timeStore.showBars"
+				:color-for-event="eventStore.colorForEvent"
 			></TimeReel>
 			<button
-				v-if="!store.eventSelected && store.viewMode !== 'heatmap'"
+				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
 				class="panel-hide"
 				@click="toggleTimePanelHidden"
 			>
 				<font-awesome-icon
-					:icon="!store.timePanelExpanded ? faChevronUp : faAnglesUp"
-					:class="{ 'fa-rotate-180': store.timePanelVisible }"
+					:icon="!timeStore.timePanelExpanded ? faChevronUp : faAnglesUp"
+					:class="{ 'fa-rotate-180': timeStore.timePanelVisible }"
 				/>
 			</button>
 			<button
 				v-if="
-					store.timePanelVisible &&
-					!store.eventSelected &&
+					timeStore.timePanelVisible &&
+					!eventStore.eventSelected &&
 					store.viewMode !== 'heatmap'
 				"
 				class="panel-expand"
 				@click="toggleTimePanelExpanded"
 			>
 				<font-awesome-icon
-					:icon="!store.timePanelExpanded ? faWandMagicSparkles : faClose"
+					:icon="!timeStore.timePanelExpanded ? faWandMagicSparkles : faClose"
 				/>
 			</button>
 			<button
-				v-if="store.viewMode === 'explore' && !store.timePanelExpanded"
+				v-if="store.viewMode === 'timemachine' && !timeStore.timePanelExpanded"
 				class="show-bars"
-				:class="{ active: store.showBars }"
-				@click="store.showBars = !store.showBars"
+				:class="{ active: timeStore.showBars }"
+				@click="timeStore.showBars = !timeStore.showBars"
 			>
 				<font-awesome-icon :icon="faBarsStaggered" />
 			</button>
 		</Panel>
-		<Panel id="event-frame-panel" class="top" :active="store.eventSelected">
-			<button class="close-button" @click="store.selectEvent(null)">
-				<font-awesome-icon :icon="faClose" />
-			</button>
-			<button
-				class="explore-button"
-				@click="console.log('explore local events')"
-			>
-				<font-awesome-icon :icon="faWandMagicSparkles" />
-			</button>
-			<div id="event-frame">
-				<div class="decor"></div>
-			</div>
-			<EventInfo
-				id="event-info"
-				:selected-event="store.selectedEvent"
-			></EventInfo>
-		</Panel>
-		<Panel id="event-panel" class="top" :active="store.eventSelected">
+		<Panel
+			id="event-panel"
+			class="left"
+			:active="eventStore.eventSelected && store.viewMode === 'timemachine'"
+		>
 			<!-- <button
 				class="explore-button"
 				@click="console.log('explore local events')"
@@ -148,26 +211,50 @@ const exitFocus = () => {
 				<font-awesome-icon :icon="faWandMagicSparkles" />
 			</button> -->
 			<EventGraphs
-				:selected-event="store.selectedEvent"
-				:time="store.selectedTime"
-				@date-selected="store.selectedTime = $event"
+				:selected-event="eventStore.selectedEvent"
+				:time="timeStore.selectedTime"
+				@date-selected="timeStore.selectedTime = $event"
 			></EventGraphs>
 		</Panel>
 		<Panel
 			id="region-panel"
 			class="bottom"
 			:class="{ dragging: store.draggingFilter }"
-			:active="store.exploringRegion"
+			:active="store.exploringRegion || store.exploreGlobal"
 		>
-			<EventRanker :sort-func="(a, b) => b.duration - a.duration" :topN="5" />
-			<EventRanker
-				:sort-func="(a, b) => b.pixel_count - a.pixel_count"
-				:topN="5"
-			/>
-			<EventRanker
-				:sort-func="(a, b) => b.peak_value - a.peak_value"
-				:topN="5"
-			/>
+			<div class="ranker" v-show="store.exploringRegion || store.exploreGlobal">
+				<h1>
+					<FontAwesomeIcon :icon="faClock" />
+					Duration
+				</h1>
+				<EventRanker
+					:events="eventsOfInterest"
+					:sort-func="(a, b) => b.duration - a.duration"
+					:topN="100"
+				/>
+			</div>
+			<div class="ranker" v-show="store.exploringRegion || store.exploreGlobal">
+				<h1>
+					<FontAwesomeIcon :icon="faExpand" />
+					Size
+				</h1>
+				<EventRanker
+					:events="eventsOfInterest"
+					:sort-func="(a, b) => b.total_area - a.total_area"
+					:topN="100"
+				/>
+			</div>
+			<div class="ranker" v-show="store.exploringRegion || store.exploreGlobal">
+				<h1>
+					<FontAwesomeIcon :icon="faTemperatureHigh" />
+					Intensity
+				</h1>
+				<EventRanker
+					:events="eventsOfInterest"
+					:sort-func="(a, b) => b.peak_value - a.peak_value"
+					:topN="100"
+				/>
+			</div>
 		</Panel>
 	</div>
 </template>
@@ -186,8 +273,9 @@ const exitFocus = () => {
 	position: relative;
 
 	.focus-frame {
+		overflow: hidden;
 		transition: all $settleTime ease-in-out;
-		z-index: 20;
+		z-index: 200;
 	}
 
 	#buttons-debug {
@@ -245,12 +333,13 @@ const exitFocus = () => {
 	}
 
 	#time-panel {
+		box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;
 		width: calc(100% - 2 * $panelMargin);
 		right: $panelMargin;
 		bottom: $panelMargin;
 		height: 40%;
 		&.expanded {
-			height: calc(100% - 2 * $panelMargin);
+			height: calc(100% - 1 * $panelMargin);
 		}
 
 		z-index: 20;
@@ -258,7 +347,7 @@ const exitFocus = () => {
 		transition: all $animTime linear;
 
 		&.event {
-			width: calc(50% - $panelMargin);
+			// width: calc(50% - $panelMargin);
 			height: $eventTimePanelHeight;
 			// padding-bottom: calc(15% - 0.75rem);
 			border-top: none;
@@ -272,19 +361,19 @@ const exitFocus = () => {
 
 		&.heatmap {
 			bottom: $panelMargin;
-			height: calc(100% - 4 * $panelMargin - 1rem);
+			height: calc(100% - 4.5 * $panelMargin - 1rem);
 			width: $vTimePanelWidth;
-			box-shadow: none;
-			border-bottom-left-radius: 0;
+			// box-shadow: none;
+			// border-bottom-left-radius: 0;
 
-			.time-reel {
-				border-bottom-left-radius: 0;
-			}
+			// .time-reel {
+			// 	border-bottom-left-radius: 0;
+			// }
 
 			&.focused {
-				right: calc(2 * $panelMargin);
-				bottom: calc(2 * $panelMargin);
-				height: calc(100% - 6 * $panelMargin - 1rem);
+				right: calc(1 * $panelMargin);
+				bottom: calc(1 * $panelMargin);
+				height: calc(100% - 4.5 * $panelMargin - 1rem);
 			}
 		}
 
@@ -358,10 +447,9 @@ const exitFocus = () => {
 	}
 
 	#event-panel {
-		top: 1.5rem;
-		right: 1.5rem;
-		bottom: calc($eventTimePanelHeight + 1.5rem);
-		left: 50%;
+		bottom: calc($eventTimePanelHeight + $panelMargin);
+		right: $panelMargin;
+		left: $panelMargin;
 		border-radius: 0;
 		border-top-right-radius: 6px;
 		border-bottom: none;
@@ -371,35 +459,56 @@ const exitFocus = () => {
 	}
 
 	#region-panel {
-		width: calc(100% - 4 * $panelMargin);
+		width: calc(100% - 2 * $panelMargin - $vTimePanelWidth);
 		height: calc(40% - 2 * $panelMargin);
-		bottom: calc(2 * $panelMargin);
-		left: calc(2 * $panelMargin);
+		bottom: calc(1 * $panelMargin);
+		left: calc(1 * $panelMargin);
 		// bottom: $panelMargin;;
 		// right: $panelMargin;;
 		display: flex;
 		flex-direction: row;
-		padding: calc(3 * $panelMargin);
-		padding-right: $vTimePanelWidth;
+		padding: calc(1 * $panelMargin);
+		padding-top: calc(1.5 * $panelMargin);
+		border-top-right-radius: 0;
+		// border-bottom-right-radius: 0;
+		border-right: 1px solid lighten($c3sred, 60%);
 
 		&.dragging {
 			opacity: 0.75;
 			pointer-events: none;
 		}
 
-		.event-ranker {
+		gap: 1rem;
+		.ranker {
 			flex: 1 1 33%;
-			margin-right: 1rem;
-			border-radius: 0.5rem;
-			background-color: rgba($panelBg, 0.75);
-			box-shadow: rgba(0, 0, 0, 0.2) 0px 4px 6px -1px,
-				rgba(0, 0, 0, 0.1) 0px 2px 4px -1px;
+			// margin-right: 1rem;
+			// box-shadow: rgba(0, 0, 0, 0.2) 0px 4px 6px -1px,
+			// 	rgba(0, 0, 0, 0.1) 0px 2px 4px -1px;
 			// border: 1px solid rgba(0, 0, 0, 0.1);
 			// border: 1px solid rgba(255, 255, 255, 0.1);
 			// backdrop-filter: blur(5px);
 			height: 100%;
 			min-width: 0; // allow flexbox to shrink it
-			padding: 0.5rem;
+			padding: 0;
+			border: 1px solid $c3sred;
+			position: relative;
+
+			.event-ranker {
+				height: 100%;
+				width: 100%;
+			}
+
+			h1 {
+				position: absolute;
+				top: -1.75rem;
+				left: 0;
+				margin: 0;
+				padding: 0.5rem 0;
+				background-color: transparent;
+				font-size: 0.9rem;
+				text-align: center;
+				z-index: 10;
+			}
 		}
 	}
 }

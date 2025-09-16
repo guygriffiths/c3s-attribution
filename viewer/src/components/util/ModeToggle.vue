@@ -2,9 +2,9 @@
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faGauge, faCalendarDays } from '@fortawesome/free-solid-svg-icons'
 import { nextTick, watch } from 'vue'
-import { useStore } from '@/store/store'
+import { useStore, ViewMode } from '@/store/store'
 
-const mode = defineModel<'explore' | 'heatmap'>({ required: true })
+const mode = defineModel<ViewMode>({ required: true })
 
 const store = useStore()
 
@@ -12,7 +12,7 @@ const toggle = async () => {
 	store.setLoading() // start loading immediately
 	// Wait for the DOM update and rendering to complete
 	await new Promise((resolve) => setTimeout(resolve, 0))
-	mode.value = mode.value === 'explore' ? 'heatmap' : 'explore'
+	mode.value = mode.value === 'timemachine' ? 'heatmap' : 'timemachine'
 	store.setLoadingDone() // end loading after DOM updates
 }
 </script>
@@ -41,7 +41,7 @@ const toggle = async () => {
 	cursor: pointer;
 	transition: background-color 0.3s ease;
 
-	&.explore {
+	&.timemachine {
 		background-color: $c3sblue;
 	}
 

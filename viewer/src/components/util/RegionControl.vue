@@ -1,101 +1,82 @@
 <script lang="ts" setup>
-import { computed, nextTick, ref } from 'vue'
 import { useStore } from '@/store/store'
+import { useStore as useEventStore } from '@/store/eventStore'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
 	faDrawPolygon,
-	faTimes,
 	faMapMarkerAlt,
-	faClose,
 	faBan,
-	faPen,
 	faPenAlt,
+	faGlobe,
 } from '@fortawesome/free-solid-svg-icons'
-import * as d3 from 'd3'
 import { useLabels } from '@/lib/labels'
 import scssModule from '@/assets/styles/scssVars.module.scss'
-import { LatLng } from 'leaflet'
+import { onFilterBuilt } from '@/lib/eventFiltering'
+import { nextTick, ref } from 'vue'
 
 const store = useStore()
+const eventStore = useEventStore()
 const $l = useLabels()
 
-const sizes: [
-	number,
-	string,
-	'wraf-01' | 'wraf-05' | 'wraf-2' | 'wraf-5' | 'wraf-10',
-][] = [
-	[0.1, 'XS', 'wraf-01'],
-	[0.5, 'S', 'wraf-05'],
-	[2, 'M', 'wraf-2'],
-	[5, 'L', 'wraf-5'],
-	[10, 'XL', 'wraf-10'],
-]
-const selectedSize = computed(() => {
-	if (store.wrafLevel === 'none') return null
-	return sizes.findIndex((s) => s[2] === store.wrafLevel)
-})
-
-const selectSize = async (idx: number | null) => {
-	if (idx !== null) {
-		store.setLoading() // start loading immediately
-	}
-	store.wrafLevel = idx === null ? 'none' : sizes[idx][2]
-	store.selectedPointFilter = null
-	store.regionFilteredEvents = []
-	store.drawingRegion = false
-	store.filters.wrafRegion = null
-}
 const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
 const setSelectingPoint = () => {
-	// If we are already in this mode, turn it off
-	if (store.selectedPointFilter !== null) {
-		store.selectedPointFilter = null
-		store.regionFilteredEvents = []
-		store.runFilters()
+	if (store.filteringByPoint) {
+		// Cancel selecting point
+		store.filteringByPoint = false
+		store.exploreGlobal = false
+		store.regionFilterReady = false
+		store.filteringByRegion = false
 		return
 	}
 	store.setLoading() // start loading immediately
-	store.wrafLevel = 'none'
-	store.drawingRegion = false
-	store.filters.wrafRegion = null
+	store.filteringByPoint = true
+	store.exploreGlobal = false
+	store.regionFilterReady = false
+	store.filteringByRegion = false
+}
 
-	if(store.lastPoint) {
-		store.selectedPointFilter = [store.lastPoint[0], store.lastPoint[1]]
+const setDrawingRegion = () => {
+	if (store.filteringByRegion) {
+		// Cancel drawing
+		store.filteringByRegion = false
+		store.regionFilterReady = false
+		store.exploreGlobal = false
+		store.filteringByPoint = false
+		return
 	} else {
-		store.selectedPointFilter = ECMWF_BONN
-		if (navigator.geolocation) {
-			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					const { latitude, longitude } = position.coords
-					store.selectedPointFilter = [latitude, longitude]
-				},
-				() => {
-					console.warn('Unable to retrieve your location. Using ECMWF location.')
-					store.selectedPointFilter = ECMWF_BONN
-				},
-			)
-		}
+		store.filteringByRegion = true
+		store.regionFilterReady = false
+		store.filteringByPoint = false
+		store.exploreGlobal = false
 	}
-
-	store.getPointFilteredEvents(store.selectedPointFilter[0], store.selectedPointFilter[1])
-	store.fixPointFilteredEvents()
 }
 
-const drawRegion = () => {
-	store.wrafLevel = 'none'
-	store.selectedPointFilter = null
-	store.filters.wrafRegion = null
-	store.regionFilteredEvents = []
-	store.drawingRegion = !store.drawingRegion
-	if(store.drawingRegion) {
-		// TODO - this should be set in the store anyway. We should watch it, then set the full filter going on a worker thread. That way we can pre-calc a bunch of simplified regions for events (but *larger* - must fully encapsulate total_region) throw them through the fast filter, and use the exact filter in the background. And by *full*, we can do a proper check of every pixel's inclusion (which we have
-		// store.regionFilteredEvents = []
+const setExploreGlobal = () => {
+	if (store.exploreGlobal) {
+		// Cancel exploring global
+		store.exploreGlobal = false
+		store.filteringByPoint = false
+		store.regionFilterReady = false
+		store.filteringByRegion = false
+		return
 	}
-
-
+	store.exploreGlobal = true
+	store.filteringByPoint = false
+	store.regionFilterReady = false
+	store.filteringByRegion = false
 }
 
-const sizeScheme = d3.interpolateWarm
+const noExplore = () => {
+	store.regionFilterReady = false
+	store.filteringByRegion = false
+	store.filteringByPoint = false
+	store.exploreGlobal = false
+}
+
+const ready = ref(false)
+onFilterBuilt(() => {
+	ready.value = true
+})
 </script>
 
 <template>
@@ -104,54 +85,52 @@ const sizeScheme = d3.interpolateWarm
 			<FontAwesomeIcon :icon="faDrawPolygon" />
 			<!-- <span>{{ $l.selectByRegion}}</span> -->
 		</div>
-		<!-- <p> {{ store.selectedPointFilter }}</p> -->
+		<!-- <p> {{ eventStore.eventPointFilter }}</p> -->
 
 		<div>
 			<button
 				class="none-button"
 				:class="{
 					selected:
-						selectedSize === null &&
-						store.selectedPointFilter === null &&
-						store.filters.wrafRegion === null,
+						store.filteringByPoint === false &&
+						store.filteringByRegion === false &&
+						store.exploreGlobal === false,
 				}"
-				title="None"
-				@click="selectSize(null)"
+				:style="{ backgroundColor: scssModule.c3sred }"
+				title="No event charts, just view the global heatmap"
+				@click="noExplore"
 			>
 				<FontAwesomeIcon :icon="faBan" />
 			</button>
 
-			<template v-for="(size, i) in sizes" :key="size">
-				<button
-					:style="{
-						backgroundColor: sizeScheme(i / 5),
-						color: selectedSize === i ? sizeScheme(i / 5) : 'white',
-					}"
-					:title="`${size[0]} Mm²`"
-					:class="{ selected: selectedSize === i }"
-					@click="selectSize(i)"
-				>
-					{{ size[1] }}
-				</button>
-			</template>
-
 			<button
 				:style="{ backgroundColor: scssModule.c3sred }"
 				:class="{
-					selected:
-						store.drawingRegion,
+					selected: store.exploreGlobal,
 				}"
-				title="Point"
-				@click="drawRegion"
+				title="Explore global events"
+				@click="setExploreGlobal"
+			>
+				<FontAwesomeIcon :icon="faGlobe" />
+			</button>
+			<button
+				:style="{ backgroundColor: scssModule.c3sred }"
+				:class="{
+					selected: store.filteringByRegion,
+				}"
+				title="Explore a region of your choice"
+				:disabled="!ready"
+				@click="setDrawingRegion"
 			>
 				<FontAwesomeIcon :icon="faPenAlt" />
 			</button>
 			<button
 				:style="{ backgroundColor: scssModule.c3sred }"
 				:class="{
-					selected: selectedSize === null && store.selectedPointFilter !== null,
+					selected: store.filteringByPoint,
 				}"
-				title="Point"
+				:disabled="!ready"
+				title="Explore events at a point"
 				@click="setSelectingPoint"
 			>
 				<FontAwesomeIcon :icon="faMapMarkerAlt" />
@@ -193,12 +172,17 @@ const sizeScheme = d3.interpolateWarm
 		font-weight: bolder;
 		color: rgb(255, 255, 255);
 
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+
 		&.none-button {
-			background-color: rgb(64, 64, 64);
+			// background-color: rgb(64, 64, 64);
 			&.selected {
-				color: rgb(64, 64, 64);
+				// color: rgb(64, 64, 64);
 				svg {
-					color: rgb(64, 64, 64) !important;
+					// color: rgb(64, 64, 64) !important;
 					filter: drop-shadow(0 0 1px rgb(255, 255, 255))
 						drop-shadow(0 0 2px rgb(255, 255, 255))
 						drop-shadow(0 0 5px rgb(255, 255, 255))

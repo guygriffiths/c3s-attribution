@@ -32,7 +32,7 @@ const emit = defineEmits(['close'])
 	// pointer-events: none;
 	width: 100%;
 	height: 100%;
-	z-index: 20;
+	z-index: 200;
 	pointer-events: none; /* make parent not catch clicks */
 
 	> div {
@@ -61,7 +61,7 @@ const emit = defineEmits(['close'])
 	}
 
 	.top {
-		transform: translateY(calc(-2 * $panelMargin));
+		transform: translateY(calc(-3 * $panelMargin));
 		top: 0;
 		display: flex;
 		justify-content: flex-end;

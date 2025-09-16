@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { debounce } from '@/lib/utils'
 import { useStore } from '@/store/store'
+import { useStore as useEventStore } from '@/store/eventStore'
 import {
 	LControl,
 	LControlScale,
@@ -11,7 +12,6 @@ import {
 	LPolygon,
 	LTileLayer,
 } from '@vue-leaflet/vue-leaflet'
-import { differenceInDays } from 'date-fns'
 import { LatLngBounds, Map as LeafletMap, LeafletMouseEvent } from 'leaflet'
 import 'leaflet-draw'
 import 'leaflet-draw/dist/leaflet.draw.css'
@@ -19,35 +19,41 @@ import 'leaflet/dist/leaflet.css'
 import { computed, nextTick, ref, watch } from 'vue'
 
 import scssVars from '@/assets/styles/scssVars.module.scss'
-import {
-	fitMapToBounds,
-	getZeitgeistOpacity,
-	markerIcon,
-	wrafLevelChanged,
-} from '@/lib/map-utils'
+import { markerIcon } from '@/lib/map-utils'
 import { drawEventTile, TILE_SIZE } from '@/lib/renderer'
 import { faClose, faFilter } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { bbox, featureCollection, polygon } from '@turf/turf'
 import { Feature, MultiPolygon, Polygon } from 'geojson'
 import FilterPanel from './FilterPanel.vue'
 import RegionControl from './util/RegionControl.vue'
-const { vTimePanelWidth, panelMargin, frameBorderWidth } = scssVars
+import { useStore as useTimeStore } from '@/store/timeStore'
 
 const store = useStore()
+const timeStore = useTimeStore()
+const eventStore = useEventStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
 const map = computed(() => mapRef.value?.leafletObject as LeafletMap)
 const eventPixelsRef = ref<InstanceType<typeof LGridLayer> | null>(null)
 
-const currentEvents = computed(() => {
-	if (store.filters.wrafRegion) {
-		return store.filteredEvents
-	}
-	return store.currentEvents
-})
+// const currentEvents = computed(() => {
+// 	if (eventStore.eventRegionFilter) {
+// 		return store.filteredEvents
+// 	}
+// 	return eventStore.currentEvents
+// })
 
 import L from 'leaflet'
 import ModeToggle from './util/ModeToggle.vue'
+import {
+	getCurrentEvents,
+	setFilterToRegion,
+	setFilterToPoint,
+	clearFilter,
+	getGlobalFilteredEvents,
+	getEventCount,
+	getFilteredEvents,
+	onGlobalEventsReady,
+} from '@/lib/eventFiltering'
 // create a single canvas renderer for all polygons
 const canvasRenderer = L.canvas({ padding: 0.5, pane: 'eventPane' })
 const fastRenderer = L.canvas({ padding: 0.5, pane: 'fastEventPane' })
@@ -70,7 +76,7 @@ const bgLayer = {
 }
 
 const wmtsUrl = ref(
-	`https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${store.isoDatetime}`,
+	`https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${timeStore.isoDatetime}`,
 )
 const updateWmtsUrl = debounce((newVal: string) => {
 	console.log(
@@ -80,122 +86,35 @@ const updateWmtsUrl = debounce((newVal: string) => {
 	)
 	// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
 }, 500)
-watch(() => store.isoDatetime, updateWmtsUrl)
+watch(() => timeStore.isoDatetime, updateWmtsUrl)
 
 watch(
-	() => store.selectedEvent,
+	() => eventStore.selectedEvent,
 	(newVal) => {
 		const id = newVal?.id
-		if (!store.eventSelected) {
+		if (!eventStore.eventSelected) {
 			// @ts-ignore
 			lastBbox.value = mapRef.value?.leafletObject.getBounds()
-		} else if (store.selectedEvent?.id == id) {
+		} else if (eventStore.selectedEvent?.id == id) {
 			if (lastBbox.value && mapRef.value) {
 				// @ts-ignore
-				mapRef.value.leafletObject.fitBounds(lastBbox.value)
+				// mapRef.value.leafletObject.fitBounds(lastBbox.value)
 			}
 		}
-		if (id && mapRef.value) {
+		if (id && mapRef.value && store.viewMode !== 'heatmap') {
 			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
-			fitMapToBounds(map, store.selectedEvent!)
-		}
-	},
-)
-
-const multiEventsSelected = () => {
-	lastBbox.value = map.value.getBounds()
-
-	const bounds = bbox(
-		store.filters.wrafRegion ||
-			featureCollection(
-				store.currentEvents.map((e) => polygon([e.total_region])),
-			),
-	)
-
-	function toPx(value: string): number {
-		if (value.endsWith('%')) {
-			return (window.innerWidth * parseFloat(value)) / 100
-		}
-		if (value.endsWith('rem')) {
-			return (
-				parseFloat(value) *
-				parseFloat(getComputedStyle(document.documentElement).fontSize)
-			)
-		}
-		if (value.endsWith('px')) {
-			return parseFloat(value)
-		}
-		return parseFloat(value) // fallback
-	}
-
-	const peepholeWidth =
-		window.innerWidth -
-		toPx(vTimePanelWidth) -
-		2 * toPx(panelMargin) -
-		2 * toPx(frameBorderWidth)
-
-	const peepholeHeight = window.innerHeight / 2 - toPx(frameBorderWidth)
-
-	const padLeft =
-		toPx(panelMargin) + toPx(vTimePanelWidth) + toPx(frameBorderWidth)
-	const padTop = toPx(panelMargin) + toPx(frameBorderWidth)
-	const padRight = window.innerWidth - (padLeft + peepholeWidth)
-	const padBottom = window.innerHeight - (padTop + peepholeHeight)
-
-	map.value.fitBounds(
-		[
-			[bounds[1], bounds[0]],
-			[bounds[3], bounds[2]],
-		],
-		{
-			paddingTopLeft: [padLeft, padTop],
-			paddingBottomRight: [padRight, padBottom],
-		},
-	)
-}
-
-watch(
-	() => store.filters.wrafRegion,
-	(newVal) => {
-		if (newVal && mapRef.value) {
-			multiEventsSelected()
-		} else if (
-			!store.drawingRegion &&
-			store.selectedPointFilter === null &&
-			newVal === null &&
-			mapRef.value
-		) {
-			console.log('Resetting map bounds to last bbox', lastBbox.value)
-			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
-			if (lastBbox.value) {
-				map.fitBounds(lastBbox.value)
-			}
+			// fitMapToBounds(map, eventStore.selectedEvent!)
 		}
 	},
 )
 
 watch(
-	() => store.wrafLevel,
-	(newVal) => {
-		wrafLevelChanged(store, newVal || 'none')
-	},
+	() => store.filteringByPoint,
+	(newVal) => {},
 )
 
-const selectRegion = async (event: any) => {
-	if (event.layer && event.layer.feature) {
-		store.setLoading()
-		await new Promise((resolve) => setTimeout(resolve, 0)) // Simulate some loading time
-		const region = event.layer.feature as Feature<Polygon | MultiPolygon>
-		store.selectRegion(region)
-		store.setLoadingDone()
-		console.log('Selected region:', region)
-	} else {
-		console.warn('No layer or feature found in click event:', event)
-	}
-}
-
 watch(
-	() => store.drawingRegion,
+	() => store.filteringByRegion,
 	(newVal) => {
 		if (newVal) {
 			drawRegion()
@@ -216,48 +135,82 @@ const drawControl = computed(
 		}),
 )
 
-const drawRegion = () => {
-	// const drawnItems = new L.FeatureGroup()
-	// map.value.addLayer(drawnItems)
-	if (!store.drawingRegion) {
-		console.warn('Already drawing a region, ignoring draw request')
-		return cancelDrawRegion()
-	}
+const eventPointFilter = ref<[number, number] | null>(null)
+const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
+const regionFilteredEvents = ref([] as ExtremeEvent[])
+const globalHeatmapEvents = ref([] as ExtremeEvent[])
+onGlobalEventsReady(() => {
+	// @ts-ignore
+	console.log('Filter ready, getting global heatmap events')
+	globalHeatmapEvents.value = getGlobalFilteredEvents()
+})
 
+const drawRegion = () => {
 	drawControl.value.enable()
 
 	// @ts-ignore
 	map.value.once(L.Draw.Event.DRAWSTOP, (event: any) => {
 		// This happens whether or not a shape has been created
 		// Either they finished or pressed escape
-		store.drawingRegion = false
 		// map.value.setView(store.mapCentre as any as LatLng, zoom.value)
 	})
 	// @ts-ignore
 	map.value.once(L.Draw.Event.CREATED, (event: any) => {
 		// This is if this shape was created
 		store.setLoading()
-
 		const layer = event.layer
-		store.filters.wrafRegion = layer.toGeoJSON() as Feature<
+		eventRegionFilter.value = layer.toGeoJSON() as Feature<
 			Polygon | MultiPolygon
 		>
-		store.drawingRegion = false
+		regionFilteredEvents.value = setFilterToRegion(eventRegionFilter.value)
+		store.regionFilterReady = true
 		store.setLoadingDone()
 	})
 }
-
 const cancelDrawRegion = () => {
 	drawControl.value.disable()
-	// setTimeout(() => {
-	// 	map.value.invalidateSize()
-	// 	map.value.setView(store.mapCentre as any as LatLng, 1, {
-	// 		animate: true,
-	// 		duration: 0.5,
-	// 		// @ts-ignore
-	// 		pan: { animate: true, duration: 0.5 }, // This ensures the panning part is animated
-	// 	})
-	// }, 250)
+	eventRegionFilter.value = null
+	clearFilter()
+}
+
+const pointSelectorAdded = (event: any) => {
+	console.log('Marker added at', event.target.getLatLng())
+	store.setLoadingDone()
+	const { lat, lng } = (event.target as L.Marker).getLatLng()
+	console.log('Setting filter to point', lat, lng)
+
+	console.log('Set point filter', lat, lng)
+	regionFilteredEvents.value = setFilterToPoint(lat, lng)
+	console.log('Got events', regionFilteredEvents.value)
+	store.lastPoint = [lat, lng]
+}
+const pointSelectorMoveStarted = (event: any) => {
+	store.draggingFilter = true
+}
+
+let rafId: number | null = null
+const updatePointSelector = (event: LeafletMouseEvent) => {
+	if (rafId) cancelAnimationFrame(rafId)
+	rafId = requestAnimationFrame(() => {
+		const { lat, lng } = (event.target as L.Marker).getLatLng()
+		setFilterToPoint(lat, lng)
+		regionFilteredEvents.value = getFilteredEvents()
+	})
+}
+
+const pointSelectorSettled = (event: any) => {
+	if (mapRef.value) {
+		const { lat, lng } = (event.target as L.Marker).getLatLng()
+		setFilterToPoint(lat, lng)
+		regionFilteredEvents.value = getFilteredEvents()
+		store.lastPoint = [lat, lng]
+		store.draggingFilter = false
+		// TODO pop up an auto-zoom button with a countdown. Two options - auto zoom in 3 seconds, or click to zoom now. Pick up the marker to cancel the zoom.
+		// TODO Alternative 2 - auto-zoom, but always zoom back to the map zoom state (global by default, back to previous zoom if they had zoomed in before) when dragging the marker?
+		// Both?
+	} else {
+		console.warn('No point selector to settle')
+	}
 }
 
 const getEventRegion = (event: any) => {
@@ -266,7 +219,7 @@ const getEventRegion = (event: any) => {
 	}
 	const idx = event.times.findIndex(
 		(t: Date) =>
-			new Date(t).getTime() === new Date(store.selectedTime).getTime(),
+			new Date(t).getTime() === new Date(timeStore.selectedTime).getTime(),
 	)
 	if (idx < 0) {
 		return event.regions[0] || [] // Fallback to first region if no matching time found
@@ -276,13 +229,8 @@ const getEventRegion = (event: any) => {
 
 const lastBbox = ref<LatLngBounds | null>(null)
 
-// TODO centralise this, so either we watch it and zoom in/out, or we do it all here and not in the store
-const selectEvent = (id: string) => {
-	store.selectEvent(id)
-}
-
 watch(
-	() => [store.selectedTime, store.selectedEvent],
+	() => [timeStore.selectedTime, eventStore.selectedEvent],
 	() => {
 		if (eventPixelsRef.value && eventPixelsRef.value.leafletObject) {
 			eventPixelsRef.value.leafletObject.redraw()
@@ -296,68 +244,13 @@ watch(
 		if (newVal === 'heatmap') {
 			wmtsUrl.value = ''
 		} else {
-			store.regionFilteredEvents = []
-			wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${store.isoDatetime}`
+			wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${timeStore.isoDatetime}`
 		}
 	},
 )
 
-let pendingDone = false
-
-function onLayerAddBatch() {
-	if (!pendingDone) {
-		pendingDone = true
-		nextTick(() => {
-			store.setLoadingDone()
-			pendingDone = false
-		})
-	}
-}
-
 const renderTile = (props: any) =>
-	drawEventTile(props, store, eventPixelsRef.value)
-
-const pointSelectorAdded = (event: any) => {
-	store.setLoadingDone()
-	console.log('Marker added at', event.latlng)
-	if (store.selectedPointFilter && mapRef.value) {
-		// store.runFilters()
-		const { lat, lng } = (event.target as L.Marker).getLatLng()
-		store.getPointFilteredEvents(lat, lng)
-		store.lastPoint = [lat, lng]
-	} else {
-		console.warn('No point selector to add')
-	}
-}
-
-const pointSelectorMoveStarted = (event: any) => {
-	// console.log('Marker move started', event)
-	// store.runFilters()
-	store.draggingFilter = true
-}
-
-let rafId: number | null = null
-const updatePointSelector = (event: LeafletMouseEvent) => {
-	if (rafId) cancelAnimationFrame(rafId)
-	rafId = requestAnimationFrame(() => {
-		const { lat, lng } = (event.target as L.Marker).getLatLng()
-		store.getPointFilteredEvents(lat, lng)
-	})
-}
-
-const pointSelectorSettled = (event: any) => {
-	// console.log('Marker move ended', event.latlng)
-	if (store.selectedPointFilter && mapRef.value) {
-		const { lat, lng } = (event.target as L.Marker).getLatLng()
-		store.selectedPointFilter = [lat, lng]
-		store.fixPointFilteredEvents()
-		store.lastPoint = [lat, lng]
-		store.draggingFilter = false
-		// TODO pop up an auto-zoom button with a countdown. Two options - auto zoom in 3 seconds, or click to zoom now. Pick up the marker to cancel the zoom.
-	} else {
-		console.warn('No point selector to settle')
-	}
-}
+	drawEventTile(props, eventStore, eventPixelsRef.value)
 
 const addEventPanes = () => {
 	const map = mapRef.value?.leafletObject as LeafletMap
@@ -384,7 +277,11 @@ const addEventPanes = () => {
 	<div
 		class="map"
 		:class="{
-			'have-regional': store.selectedPointFilter,
+			'have-regional':
+				store.viewMode === 'heatmap' &&
+				(store.filteringByPoint ||
+					(store.regionFilterReady && store.filteringByRegion)),
+			dragging: store.draggingFilter,
 			focussed: store.isFocused,
 		}"
 	>
@@ -412,68 +309,74 @@ const addEventPanes = () => {
 				:url="wmtsUrl"
 				:zIndex="2"
 				:opacity="0.75"
-				v-if="store.viewMode === 'explore'"
+				v-if="store.viewMode === 'timemachine'"
 			></LTileLayer>
 
 			<!-- Events -->
 			<!-- All of the "current" events -->
 			<!-- This could just be all events if we're in heatmap mode -->
 			<LPolygon
-				v-for="event in currentEvents"
-				:key="event.id"
+				v-if="store.viewMode === 'heatmap'"
+				v-for="event of globalHeatmapEvents"
+				:key="`hm-${event.id}`"
 				:lat-lngs="getEventRegion(event)"
-				:weight="store.viewMode === 'heatmap' ? 0 : 3"
+				:weight="0"
 				:fill="true"
-				:fill-opacity="
-					store.viewMode === 'heatmap'
-						? Math.min(
-								0.8,
-								Math.max(0.05, 1 / Math.pow(store.events.length, 0.3)),
-							)
-						: 0.05
-				"
-				:color="store.viewMode === 'heatmap' ? 'rgb(151, 24, 65)' : event.color"
+				:fill-opacity="0.05"
+				:color="'rgb(151, 24, 65)'"
 				:options="{ renderer: canvasRenderer }"
-				@click="selectEvent(event.id)"
+				@click="eventStore.selectEvent(event.id)"
 			>
 			</LPolygon>
-			<!-- Fast filter events -->
 			<LPolygon
-				v-for="event in store.regionFilteredEvents"
+				v-else
+				v-for="event in getCurrentEvents(timeStore.selectedTime)"
+				:key="`ev-${event.id}`"
+				:lat-lngs="getEventRegion(event)"
+				:weight="3"
+				:fill="true"
+				:fill-opacity="0.05"
+				:color="eventStore.colorForEvent(event)"
+				:options="{ renderer: canvasRenderer }"
+				@click="eventStore.selectEvent(event.id)"
+			>
+			</LPolygon>
+			<!-- Fast filter events. We want to update these while dragging, so they need to be fast -->
+			<LPolygon
+				v-for="event in regionFilteredEvents"
 				:key="event.id"
 				:lat-lngs="event.total_region || []"
 				:weight="0"
 				:fill="true"
-				:fill-opacity="
-					Math.min(0.8, Math.max(0.05, 1 / Math.pow(store.events.length, 0.3)))
-				"
+				:fill-opacity="Math.min(0.8, Math.max(0.05, 1 / getEventCount()))"
 				:color="scssVars.c3sred"
 				:options="{ renderer: fastRenderer }"
 			>
 			</LPolygon>
 			<!-- When an event is selected, draw a ghost trail of its regions over time -->
-			<LPolygon
-				v-for="(region, idx) in store.selectedEvent?.regions"
+			<!-- <LPolygon
+				v-if="store.viewMode !== 'heatmap' && eventStore.eventSelected"
+				v-for="(region, idx) in eventStore.selectedEvent!.regions"
 				:key="idx"
 				:lat-lngs="region"
 				:weight="1"
 				:fill="false"
 				:opacity="
-					store.selectedEvent
+					eventStore.selectedEvent
 						? getZeitgeistOpacity(
 								Math.abs(
 									differenceInDays(
-										store.selectedTime,
-										store.selectedEvent.times[idx],
+										timeStore.selectedTime,
+										eventStore.selectedEvent.times[idx],
 									),
 								),
 							)
 						: 0
 				"
-				:color="store.selectedEvent?.color || scssVars.c3sred"
-				@click="selectEvent(store.selectedEvent?.id!)"
+				:color="eventStore.selectedEvent?.color || scssVars.c3sred"
+				@click="selectEvent(eventStore.selectedEvent?.id!)"
 			>
-			</LPolygon>
+			</LPolygon> -->
 			<!-- Event pixel values -->
 			<!-- Uses a custom grid layer to render event pixels otherwise it's too slow -->
 			<LGridLayer
@@ -488,26 +391,11 @@ const addEventPanes = () => {
 			</LGridLayer>
 
 			<!-- Selectable elements etc -->
-			<!-- Possible regions to select by -->
-			<LGeoJson
-				v-if="store.regionsToSelectBy"
-				:geojson="store.regionsToSelectBy"
-				:options-style="
-					() => ({
-						// @ts-ignore
-						className: 'region-select',
-					})
-				"
-				class="region-select"
-				@click="selectRegion"
-				@add="store.setLoadingDone()"
-				@layeradd="onLayerAddBatch"
-			>
-			</LGeoJson>
 			<!-- The actual selected region -->
 			<LGeoJson
-				v-if="store.filters.wrafRegion"
-				:geojson="store.filters.wrafRegion"
+				v-if="eventRegionFilter"
+				:key="`region-draw`"
+				:geojson="eventRegionFilter"
 				:options-style="
 					() => ({
 						// @ts-ignore
@@ -515,14 +403,14 @@ const addEventPanes = () => {
 					})
 				"
 				class="region-select"
-				@click="store.filters.wrafRegion = null"
-			>
-			</LGeoJson>
+				@click="console.log('Clicked region')"
+			></LGeoJson>
+
 			<!-- Point to select by -->
 			<LMarker
-				v-if="store.selectedPointFilter"
+				v-if="store.filteringByPoint"
 				ref="markerRef"
-				:lat-lng="store.selectedPointFilter"
+				:lat-lng="eventPointFilter || store.lastPoint || [20, 0]"
 				:draggable="true"
 				:icon="markerIcon"
 				@movestart="pointSelectorMoveStarted"
@@ -555,23 +443,27 @@ const addEventPanes = () => {
 							type: 'range',
 							pass: 'high-pass',
 							min: 3,
-							max: 14,
+							max: eventStore.durationRange ? eventStore.durationRange[1] : 7,
 						},
 						{
 							key: 'intensity',
-							label: 'Intensity %ile',
+							label: 'Intensity',
 							type: 'range',
 							pass: 'high-pass',
-							min: 0,
-							max: 99,
+							min: eventStore.intensityRange
+								? eventStore.intensityRange[0]
+								: 300,
+							max: eventStore.intensityRange
+								? eventStore.intensityRange[1]
+								: 350,
 						},
 						{
 							key: 'size',
-							label: 'Size %ile',
+							label: 'Size',
 							type: 'range',
 							pass: 'high-pass',
-							min: 0,
-							max: 99,
+							min: eventStore.sizeRange ? eventStore.sizeRange[0] : 1000,
+							max: eventStore.sizeRange ? eventStore.sizeRange[1] : 10000,
 						},
 						{
 							key: 'includeOceanEvents',
@@ -589,9 +481,11 @@ const addEventPanes = () => {
 				class="map-scale"
 			></LControlScale>
 			<LControl position="bottomleft" class="panel debug"
-				><div class="panel debug">{{ store.draggingFilter }}</div></LControl
+				><div class="panel debug">
+					{{ regionFilteredEvents.length }}
+				</div></LControl
 			>
-			<!-- <LControlZoom :class="{ shifted: store.eventSelected }"></LControlZoom> -->
+			<!-- <LControlZoom :class="{ shifted: eventStore.eventSelected }"></LControlZoom> -->
 		</LMap>
 	</div>
 </template>
@@ -641,6 +535,14 @@ const addEventPanes = () => {
 		}
 		:deep(.leaflet-event-pane) {
 			opacity: 0;
+		}
+	}
+	&.dragging {
+		:deep(.leaflet-fast-event-pane) {
+			opacity: 0.67;
+		}
+		:deep(.leaflet-event-pane) {
+			opacity: 0.33;
 		}
 	}
 	:deep(.leaflet-event-pane) {

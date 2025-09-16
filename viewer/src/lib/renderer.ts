@@ -14,7 +14,10 @@ type GeometryFunc = (
 	lon: number,
 ) => { x: number; y: number; w: number; h: number } | null
 
-export const getTileGeometry = (coords: any, leafletObj: L.GridLayer): GeometryFunc => {
+export const getTileGeometry = (
+	coords: any,
+	leafletObj: L.GridLayer,
+): GeometryFunc => {
 	// const key = `${z}-${x}-${y}`
 	// if (tileGeometryCache.has(key)) return tileGeometryCache.get(key)
 
@@ -99,12 +102,6 @@ export const getTileGeometry = (coords: any, leafletObj: L.GridLayer): GeometryF
 	return geomFunc
 }
 
-// TODO: Use a proper color scale for excessive pixels
-export const getColor = (val: number) => {
-	const cScale = d3.scaleLinear().domain([300, 320]).range([0, 1]).clamp(true)
-	return d3.interpolateTurbo(cScale(val))
-}
-
 interface EventTileKey {
 	coords: { x: number; y: number; z: number }
 	t: number
@@ -125,12 +122,15 @@ export const eventTileKey = (
 
 const tileImageCache = new Map<string, HTMLCanvasElement>()
 
-export const getCanvasFromCache = (key: EventTileKey, store: any, eventHeatmapRef: any | null) => {
-	if (tileImageCache.has(key.key)) {
-		// console.log('Cache hit for tile:', key.key)
-		return tileImageCache.get(key.key)!
-	}
-
+export const getCanvasFromCache = (
+	key: EventTileKey,
+	store: any,
+	eventHeatmapRef: any | null,
+) => {
+	// if (tileImageCache.has(key.key)) {
+	// 	// console.log('Cache hit for tile:', key.key)
+	// 	return tileImageCache.get(key.key)!
+	// }
 	const canvas = document.createElement('canvas')
 	canvas.width = TILE_SIZE
 	canvas.height = TILE_SIZE
@@ -145,10 +145,23 @@ export const getCanvasFromCache = (key: EventTileKey, store: any, eventHeatmapRe
 		return canvas
 	}
 
-	const selectedIndex =
-		differenceInDays(store.selectedTime, store.selectedEvent?.times[0]!) || 0
-	const latLonValues = store.selectedEvent?.slices[selectedIndex] || []
-	const dataValues = store.selectedEvent?.values[selectedIndex] || []
+	let latLonValues: number[][] = []
+	let dataValues: number[] = []
+	if (store.viewMode === 'timemachine') {
+		const selectedIndex =
+			differenceInDays(store.selectedTime, store.selectedEvent?.times[0]!) || 0
+		latLonValues = store.selectedEvent?.slices[selectedIndex] || []
+		dataValues = store.selectedEvent?.values[selectedIndex] || []
+	} else {
+		latLonValues = store.selectedEvent?.pixel_set || []
+		dataValues = store.selectedEvent?.pixel_peak_values || []
+	}
+
+	const scale = d3
+		.scaleLinear()
+		.domain(store.intensityRange)
+		.range([0, 1])
+		.clamp(true)
 
 	const geometry = getTileGeometry(key.coords, layer.leafletObject)
 
@@ -160,7 +173,7 @@ export const getCanvasFromCache = (key: EventTileKey, store: any, eventHeatmapRe
 		const geom = geometry(latLon[0], latLon[1])
 		if (!geom) continue
 
-		const color = getColor(dataValue)
+		const color = d3.interpolateMagma(scale(dataValue))
 		ctx.fillStyle = color
 		ctx.fillRect(geom.x, geom.y, geom.w, geom.h)
 	}
@@ -170,36 +183,37 @@ export const getCanvasFromCache = (key: EventTileKey, store: any, eventHeatmapRe
 	return canvas
 }
 
-export const drawEventTile = (props: any, store: any, eventHeatmapRef: any | null) => () => {
-	const key = eventTileKey(
-		props.coords,
-		store.selectedEvent
-			? differenceInDays(store.selectedTime, store.selectedEvent.times[0])
-			: 0,
-		store.selectedEvent?.id || 0,
-	)
+export const drawEventTile =
+	(props: any, store: any, eventHeatmapRef: any | null) => () => {
+		const key = eventTileKey(
+			props.coords,
+			store.selectedEvent
+				? differenceInDays(store.selectedTime, store.selectedEvent.times[0])
+				: 0,
+			store.selectedEvent?.id || 0,
+		)
 
-	const canvas = document.createElement('canvas')
-	canvas.width = TILE_SIZE
-	canvas.height = TILE_SIZE
-	const ctx = canvas.getContext('2d')
+		const canvas = document.createElement('canvas')
+		canvas.width = TILE_SIZE
+		canvas.height = TILE_SIZE
+		const ctx = canvas.getContext('2d')
 
-	const tileCanvas = getCanvasFromCache(key, store, eventHeatmapRef)
+		const tileCanvas = getCanvasFromCache(key, store, eventHeatmapRef)
 
-	if (ctx !== null) {
-		ctx.drawImage(tileCanvas, 0, 0)
-	} else {
-		console.error('Failed to get canvas context for event tile')
+		if (ctx !== null) {
+			ctx.drawImage(tileCanvas, 0, 0)
+		} else {
+			console.error('Failed to get canvas context for event tile')
+		}
+
+		return h('canvas', {
+			width: TILE_SIZE,
+			height: TILE_SIZE,
+			ref: (el) => {
+				if (el && el !== canvas) {
+					// @ts-ignore
+					el.replaceWith(canvas)
+				}
+			},
+		})
 	}
-
-	return h('canvas', {
-		width: TILE_SIZE,
-		height: TILE_SIZE,
-		ref: (el) => {
-			if (el && el !== canvas) {
-				// @ts-ignore
-				el.replaceWith(canvas)
-			}
-		},
-	})
-}

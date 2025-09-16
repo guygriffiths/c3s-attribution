@@ -23,22 +23,6 @@ export const fitMapToBounds = (map: L.Map, event: ExtremeEvent) => {
 	)
 }
 
-export const wrafLevelChanged = (store: any, newVal: string) => {
-	if (newVal === 'none') {
-		store.regionsToSelectBy = undefined
-	} else {
-		fetch(`/regions/region-${newVal}.geojson`)
-			.then((response) => response.json())
-			.then((data: GeoJSON.FeatureCollection) => {
-				store.regionsToSelectBy = data
-				console.log('Regions to select by:', store.regionsToSelectBy)
-			})
-			.catch((error) => {
-				console.error('Error fetching regions:', error)
-			})
-	}
-}
-
 export const getZeitgeistOpacity = (stepsFromNow: number) => {
 	if (stepsFromNow === 0) {
 		return 1

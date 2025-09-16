@@ -16,6 +16,9 @@ import {
 	watch,
 	onMounted,
 	onBeforeUnmount,
+	onUnmounted,
+	nextTick,
+	PropType,
 } from 'vue'
 import { useLabels } from '@/lib/labels'
 import * as d3 from 'd3'
@@ -44,6 +47,10 @@ const props = defineProps({
 	exploring: { type: Boolean, default: false },
 	vertical: { type: Boolean, default: false },
 	showBars: { type: Boolean, default: true },
+	colorForEvent: {
+		type: Function as PropType<(event: ExtremeEvent) => string | null>,
+		default: (event: ExtremeEvent) => event.color || null,
+	},
 })
 
 const model: Ref<Date> = defineModel({
@@ -141,23 +148,6 @@ const eventHeight = computed(
 	() => (props.selectedEvent !== null ? 1 : 0.8) / maxSimultaneousEvents.value,
 )
 
-watch(
-	() => props.events,
-	() => {
-		populateEvents()
-
-		if (container.value) {
-			const yearsOffset = selectedYear.value - startYear.value
-			const scrollOffset = 0.5 * (yearsOffset * 2 - 1)
-			container.value.scrollTo({
-				top: scrollOffset * rowHeight.value,
-				behavior: 'smooth',
-			})
-		}
-	},
-	{ immediate: true, deep: false },
-)
-
 const isDragging = ref(false)
 const dragMode = ref<'horizontal' | 'vertical' | null>(null)
 let startX = 0
@@ -196,18 +186,6 @@ const endDrag = () => {
 	dragMode.value = null
 	window.removeEventListener('mousemove', handleDrag)
 	window.removeEventListener('mouseup', endDrag)
-
-	// selectedDay.value = Math.round(selectedDay.value)
-	// selectedDay.value = Math.max(1, Math.min(selectedDay.value, totalDays))
-	//
-	// const tempDate = setDayOfYear(
-	// 	new Date(Date.UTC(selectedYear.value, 0, 1)),
-	// 	selectedDay.value,
-	// )
-	// setDate(
-	// 	new Date(Date.UTC(tempDate.getFullYear(), tempDate.getMonth(), tempDate.getDate())),
-	// )
-	// console.log(`Just set model to ${model.value.toISOString()}`)
 }
 
 const handleDrag = (event: MouseEvent) => {
@@ -276,12 +254,12 @@ const handleDrag = (event: MouseEvent) => {
 	} else if (dragMode.value === 'vertical') {
 		// yOffset.value -= dy
 		// yOffset.value = Math.max(0, yOffset.value)
-		if (dy > 0) {
-			prevYear()
-		} else {
-			nextYear()
-		}
-		startY = event.clientY
+		// if (dy > 0) {
+		// 	prevYear()
+		// } else {
+		// 	nextYear()
+		// }
+		// startY = event.clientY
 	}
 }
 
@@ -317,7 +295,7 @@ function assignTimelinePositions(events: WeatherEvent[], targetYear: number) {
 		const first = e.times[0]
 		const last = e.times[e.times.length - 1]
 
-		if (last.getTime() < yearStart || first.getTime() > yearEnd) continue
+		if (last.getTime() <= yearStart || first.getTime() > yearEnd) continue
 
 		const startX = first.getTime() < yearStart ? 1 : getDayOfYear(first)
 		const endX =
@@ -325,6 +303,14 @@ function assignTimelinePositions(events: WeatherEvent[], targetYear: number) {
 				? (yearEnd - yearStart) / 86400000
 				: getDayOfYear(last)
 
+		// if (e.id === '1997122808350229') {
+		// 	console.log('Weird event running from:', first, 'to', last)
+		// 	console.log('Event is part of year', targetYear)
+		// 	console.log(last, 'is after or equal to', new Date(yearStart))
+		// 	console.log('AND')
+		// 	console.log(first, 'is before or equal to', new Date(yearEnd))
+		// 	console.log()
+		// }
 		sliced.push({ ...e, startX, endX })
 	}
 
@@ -380,6 +366,11 @@ const positionY = (y: number) => {
 	}
 }
 
+const updateRowHeight = () => {
+	const parentHeight = timeReelRef.value?.clientHeight || 0
+	rowHeight.value = parentHeight > 0 ? parentHeight / rowsToShow.value : 128
+}
+
 onMounted(() => {
 	const handleKey = (e: KeyboardEvent) => {
 		// TODO Should all of this go in a global key handler? Perhaps not, since people use arrow keys on maps?
@@ -388,8 +379,8 @@ onMounted(() => {
 		else if (e.key === 'PageDown') nextDay()
 		else if (e.key === 'ArrowLeft') prevDay()
 		else if (e.key === 'ArrowRight') nextDay()
-		// else if (e.key === 'ArrowUp') prevYear()
-		// else if (e.key === 'ArrowDown') nextYear()
+		else if (e.key === 'ArrowUp') prevYear()
+		else if (e.key === 'ArrowDown') nextYear()
 		else if (e.key === 'Home') setDate(new Date(props.start.getTime()))
 		else if (e.key === 'End') setDate(new Date(props.end.getTime()))
 		else if (e.key === 'Escape') {
@@ -399,12 +390,24 @@ onMounted(() => {
 	window.addEventListener('keydown', handleKey)
 	populateEvents()
 
+	if (model.value > props.end) {
+		model.value = new Date(props.end.getTime())
+	} else if (model.value < props.start) {
+		model.value = new Date(props.start.getTime())
+	}
+
+	updateRowHeight() // initial
+	const ro = new ResizeObserver(updateRowHeight)
+	if (timeReelRef.value) ro.observe(timeReelRef.value)
+
 	onBeforeUnmount(() => {
 		window.removeEventListener('keydown', handleKey)
 	})
+	onUnmounted(() => ro.disconnect())
 })
 
 const topRowFlex = computed(() => {
+	return `calc(0.5 * (100% - (100% / ${rowsToShow.value})))`
 	return selectedYear.value > startYear.value
 		? selectedYear.value <= endYear.value - 1
 			? `calc(0.5 * (100% - (100% / ${rowsToShow.value})))`
@@ -412,6 +415,7 @@ const topRowFlex = computed(() => {
 		: `0`
 })
 const bottomRowFlex = computed(() => {
+	return `calc(0.5 * (100% - (100% / ${rowsToShow.value})))`
 	return selectedYear.value >= startYear.value + 1
 		? selectedYear.value <= endYear.value - 1
 			? `calc(0.5 * (100% - (100% / ${rowsToShow.value})))`
@@ -422,7 +426,7 @@ const bottomRowFlex = computed(() => {
 const highlightRowFlex = computed(() => `0 0 calc(100% / ${rowsToShow.value})`)
 
 const getAreaForYear = (year: number) => {
-	if (!props.dayCounts.has(year)) return ''
+	if (!props.dayCounts.has(year)) return 'm0,0 L366,0'
 	const data: Array<{ x: number; y: number }> = props.dayCounts
 		.get(year)!
 		.map((d, i) => ({
@@ -466,35 +470,67 @@ watch(
 					}
 				})
 		}
+		if (model.value > props.end) {
+			model.value = new Date(props.end.getTime())
+		} else if (model.value < props.start) {
+			model.value = new Date(props.start.getTime())
+		}
 	},
 	{ immediate: true, deep: true },
 )
 
-const rowHeight = computed(() => {
-	const parentHeight = timeReelRef.value?.clientHeight || 0
-	return parentHeight > 0 ? parentHeight / rowsToShow.value : 128
-})
+// const rowHeight = computed(() => {
+// 	const parentHeight = timeReelRef.value?.clientHeight || 0
+// 	return parentHeight > 0 ? parentHeight / rowsToShow.value : 128
+// })
+const rowHeight = ref(128)
 
 let settleTimeout: number | null = null
 
 const scrollListener = () => {
 	const scrollTop = container.value!.scrollTop
-	const halfRowHeightValue = 0.5 * rowHeight.value
-	// Add half a row to center, then divide by rowHeight to find offset
-	let newYear
-	if (
-		scrollTop <
-		2 * halfRowHeightValue * (endYear.value - startYear.value - 1)
-	) {
-		const offset = (scrollTop / halfRowHeightValue + 0.5) / 2
-		newYear = startYear.value + Math.round(offset)
-	} else {
-		newYear = endYear.value
-	}
+	const rowsDown = scrollTop / rowHeight.value
+	const newYear = Math.round(startYear.value + rowsDown)
+	console.log('You are on row', newYear, 'at scrollTop', scrollTop)
+
+	// 0 - 0.5 = startYear + 0
+	// 0.5 - 1.5 = startYear + 1
+	// 1.5 - 2.5 = startYear + 2
+
+	// const halfRowHeightValue = 0.5 * rowHeight.value
+	// // Add half a row to center, then divide by rowHeight to find offset
+	// let newYear
+	// if (
+	// 	scrollTop <
+	// 	2 * halfRowHeightValue * (endYear.value - startYear.value - 1)
+	// ) {
+	// 	const offset = (scrollTop / halfRowHeightValue + 0.5) / 2
+	// 	newYear = startYear.value + Math.round(offset)
+	// } else {
+	// 	newYear = endYear.value
+	// }
 	const newDate = new Date(newYear, 0, 1)
 	const newDateNewYear = setDayOfYear(newDate, getDayOfYear(model.value))
 	setDate(newDateNewYear)
 }
+
+watch(
+	() => props.events,
+	() => {
+		populateEvents()
+		updateRowHeight()
+
+		if (container.value) {
+			const yearsOffset = selectedYear.value - startYear.value
+			const scrollOffset = 0.5 * (yearsOffset * 2 - 1)
+			// container.value.scrollTo({
+			// 	top: scrollOffset * rowHeight.value,
+			// 	behavior: 'smooth',
+			// })
+		}
+	},
+	{ immediate: true, deep: false },
+)
 </script>
 
 <template>
@@ -502,19 +538,29 @@ const scrollListener = () => {
 		<div class="scroller" @scroll="scrollListener">
 			<div class="scrollee">
 				<div
+					v-if="!props.vertical && !props.exploring"
+					class="year pad-top"
+					:style="`flex: 0 0 ${0.5 * rowHeight}px; min-height: ${0.5 * rowHeight}px;`"
+				></div>
+				<div
 					v-for="year in years"
 					:key="year"
-					:style="`flex: 0 0 ${rowHeight}px;`"
+					:style="`flex: 0 0 ${rowHeight}px; min-height: ${rowHeight}px;`"
 					class="year"
 					:class="{ highlight: year === selectedYear, odd: year % 2 === 1 }"
 				>
-					<h1 class="label">{{ year }}</h1>
+					<h1 class="label" v-show="!props.vertical">{{ year }}</h1>
 				</div>
+				<div
+					v-if="!props.vertical && !props.exploring"
+					class="year pad-bottom"
+					:style="`flex: 0 0 ${0.5 * rowHeight}px; min-height: ${0.5 * rowHeight}px;`"
+				></div>
 				<svg
 					class="event-background"
 					ref="containerRef"
 					xmlns="http://www.w3.org/2000/svg"
-					:viewBox="`0 0 366 ${endYear - startYear + 1}`"
+					:viewBox="`0 ${props.vertical ? 0 : -0.5} 366 ${endYear - startYear + (props.vertical ? 1 : 2)}`"
 					preserveAspectRatio="none"
 					@mousedown="startDrag"
 				>
@@ -525,20 +571,20 @@ const scrollListener = () => {
 							:transform="`translate(0, ${year - startYear + 0.5})`"
 						>
 							<!-- <rect
-						v-for="(month, i) in monthsForYear(
-							year,
-							props.vertical || props.exploring,
-							$l,
-						)"
-						:key="`${year}${i}`"
-						class="background"
-						:x="!props.vertical ? month.startX : -0.5"
-						:width="!props.vertical ? month.length : 366"
-						:y="!props.vertical ? -0.5 : -0.5 + month.startX / 366"
-						:height="!props.vertical ? 1 : month.length / 366"
-						:fill="month.color"
-						:opacity="zoom ? 0 : 1"
-					/> -->
+								v-for="(month, i) in monthsForYear(
+									year,
+									props.vertical || props.exploring,
+									$l,
+								)"
+								:key="`${year}${i}`"
+								class="background"
+								:x="!props.vertical ? month.startX : -0.5"
+								:width="!props.vertical ? month.length : 366"
+								:y="!props.vertical ? -0.5 : -0.5 + month.startX / 366"
+								:height="!props.vertical ? 1 : month.length / 366"
+								:fill="month.color"
+								:opacity="zoom ? 0 : 1"
+							/> -->
 							<path
 								:key="`${year}-line`"
 								class="event-line"
@@ -557,24 +603,24 @@ const scrollListener = () => {
 								:transform="
 									props.vertical
 										? `
-							translate(${TOTAL_DAYS / 2},0)
-							scale(${TOTAL_DAYS}, 1)  
-							rotate(90)
-							scale(${1 / TOTAL_DAYS}, 1)
-							translate(${-TOTAL_DAYS / 2}, 0)
-							`
+											translate(${TOTAL_DAYS / 2},0)
+											scale(${TOTAL_DAYS}, 1)  
+											rotate(90)
+											scale(${1 / TOTAL_DAYS}, 1)
+											translate(${-TOTAL_DAYS / 2}, 0)
+											`
 										: ''
 								"
 							/>
 							<transition-group
 								tag="g"
 								name="daily-event-fx"
-								v-if="props.showBars"
+								v-if="!props.vertical && (props.showBars || props.selectedEvent !== null)"
 							>
 								<rect
 									v-for="event in eventsByYear
 										.get(year)
-										?.filter(() => !props.vertical && year == selectedYear) ||
+										?.filter(() => year == selectedYear) ||
 									[]"
 									class="event-bar"
 									:data-id="event.id"
@@ -603,7 +649,9 @@ const scrollListener = () => {
 												: 0.9 * eventHeight
 											: (event.endX! - event.startX! + 1) / TOTAL_DAYS
 									"
-									:fill="event.color"
+									:fill="
+										colorForEvent(event as any as ExtremeEvent) || '#ff0000'
+									"
 									:class="{
 										selected: eventIsSelected(event),
 										unselected:
@@ -659,9 +707,6 @@ const scrollListener = () => {
 				:style="`flex: ${highlightRowFlex};`"
 				:class="{ exploring: props.exploring }"
 			>
-				<h2 class="year-label">
-					{{ selectedYear }}
-				</h2>
 				<div
 					class="needle"
 					ref="needleRef"
@@ -727,7 +772,7 @@ $margin: 0 0;
 
 			.year {
 				scroll-snap-align: center;
-				background-color: lightgrey;
+				background-color: $panelBg;
 				display: flex;
 				flex-direction: row;
 				align-items: flex-end;
@@ -736,10 +781,9 @@ $margin: 0 0;
 				position: relative;
 
 				&.odd {
-					// background-color: lighten(lightgrey, 5%);
 					// background-color: color.adjust(lightgrey, $lightness: 5%);
-					background-color: color.adjust(#d3d3d3, $lightness: 5%);
-
+					background-color: darken($panelBg, 5%);
+					// background-color: color.adjust(#d3d3d3, $lightness: 5%);
 				}
 
 				h1 {

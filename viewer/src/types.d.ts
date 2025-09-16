@@ -17,6 +17,7 @@ declare global {
 		total_area: number
 		pixel_count: number
 		pixel_set: [number, number][]
+		packedPixelSet?: Set<number>
 		ocean_only: boolean
 		color: string
 	}
