@@ -4,7 +4,6 @@ export { }
 
 self.onmessage = (e: MessageEvent) => {
 	const events = e.data as {
-		id: string
 		pixel_set?: [number, number][]
 	}[]
 

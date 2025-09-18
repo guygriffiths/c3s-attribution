@@ -62,7 +62,10 @@ const exitFocus = () => {
 const getDayCounts = () => {
 	const counts = new Map<number, Array<number>>()
 	let events
-	if (store.filteringByPoint || store.filteringByRegion) {
+	if (
+		store.viewMode === 'heatmap' &&
+		(store.filteringByPoint || store.filteringByRegion)
+	) {
 		events = getFilteredEvents()
 	} else {
 		events = getGlobalFilteredEvents()
@@ -152,7 +155,7 @@ watch(
 				@event-selected="eventStore.selectEvent"
 				:exploring="timeStore.timePanelExpanded"
 				:vertical="store.viewMode === 'heatmap'"
-				:show-bars="timeStore.showBars"
+				:show-bars="timeStore.showBars || eventStore.eventSelected"
 				:color-for-event="eventStore.colorForEvent"
 			></TimeReel>
 			<button
@@ -180,6 +183,7 @@ watch(
 			</button>
 			<button
 				v-if="store.viewMode === 'timemachine' && !timeStore.timePanelExpanded"
+				:draggable="false"
 				class="show-bars"
 				:class="{ active: timeStore.showBars }"
 				@click="timeStore.showBars = !timeStore.showBars"
@@ -211,6 +215,7 @@ watch(
 				<font-awesome-icon :icon="faWandMagicSparkles" />
 			</button> -->
 			<EventGraphs
+				v-if="eventStore.eventSelected"
 				:selected-event="eventStore.selectedEvent"
 				:time="timeStore.selectedTime"
 				@date-selected="timeStore.selectedTime = $event"

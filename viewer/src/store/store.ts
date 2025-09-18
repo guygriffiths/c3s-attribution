@@ -47,7 +47,7 @@ export const useStore = defineStore('main', {
 		return {
 			lang: 'en',
 			loadingCount: 0,
-			viewMode: 'heatmap', // 'explore' or 'heatmap'
+			viewMode: 'timemachine', // 'timemachine' or 'heatmap'
 			mapCentre: new LatLng(0, 0) as unknown as Point, // Default center point for the map
 			mapPeephole: null, // This will be set to the map container element when the map is initialized
 
@@ -85,9 +85,7 @@ export const useStore = defineStore('main', {
 	getters: {
 		isFocused: (state) => {
 			const eventStore = useEventStore()
-			return (
-				eventStore.selectedEvent !== null 
-			)
+			return eventStore.selectedEvent !== null
 		},
 		exploringRegion: (state) => {
 			return state.regionFilterReady || state.filteringByPoint
@@ -108,6 +106,15 @@ export const useStore = defineStore('main', {
 
 		init() {
 			this.setLoading()
+			const eventStore = useEventStore()
+			watch(() => [this.filters], eventStore.runFilters, {
+				deep: true,
+				immediate: false,
+			})
+			watch(() => this.viewMode, () => {
+				if (this.viewMode === 'timemachine') {
+				}
+			})
 
 			let path = `/events.jsonl`
 
@@ -124,7 +131,6 @@ export const useStore = defineStore('main', {
 					return objects
 				})
 				.then((data) => {
-					
 					let firstEventTime = new Date(9999, 0, 1)
 					let lastEventTime = new Date(0)
 					data.forEach((event: any) => {
@@ -147,20 +153,13 @@ export const useStore = defineStore('main', {
 								event.times[event.times.length - 1],
 								event.times[0],
 							)
-
 					})
 					const timeStore = useTimeStore()
 					timeStore.startTime = firstEventTime
 					timeStore.endTime = lastEventTime
 
-					const eventStore = useEventStore()
 					eventStore.setEvents(data as ExtremeEvent[])
 					this.setLoadingDone()
-					watch(
-						() => [this.filters],
-						eventStore.runFilters,
-						{ deep: true, immediate: false },
-					)
 				})
 				.catch((error) => {
 					console.error('There was a problem with the fetch operation:', error)

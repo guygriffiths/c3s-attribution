@@ -12,6 +12,12 @@ const labelsEn = {
 	filter: 'Filter events',
 	closeRegionPanel: 'Exit region exploration',
 	selectByRegion: 'Select by region',
+	nextDay: 'Next day',
+	prevDay: 'Previous day',
+	nextYear: 'Next year',
+	prevYear: 'Previous year',
+	play: 'Play',
+	pause: 'Pause',
 	months: {
 		jan: 'Jan',
 		feb: 'Feb',

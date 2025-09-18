@@ -31,6 +31,15 @@ declare global {
 		mean_values: number[]
 		pixel_peak_values: number[][]
 	}
+
+	interface WeatherEvent {
+		id: string
+		times: Date[]
+		color?: string
+		y?: number
+		startX?: number
+		endX?: number
+	}
 }
 
 export { }

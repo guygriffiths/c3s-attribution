@@ -18,7 +18,7 @@ $headerHeight: 4rem;
 $gap: 0.5rem;
 $footerHeight: 2.25rem;
 
-$eventTimePanelHeight: 50%;
+$eventTimePanelHeight: 25%;
 
 $frameBorderRadius: 0.5rem;
 
@@ -28,6 +28,7 @@ $panelMargin: 1rem;
 
 :export {
 	c3sred: $c3sred;
+	c3sblue: $c3sblue;
 	animTime: $animTime;
 	frameBorderWidth: $frameBorderWidth;
 	vTimePanelWidth: $vTimePanelWidth;

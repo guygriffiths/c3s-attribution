@@ -1,4 +1,5 @@
 // lib/eventsStore.ts
+import DateWorker from '@/lib/worker/dateIndexWorker?worker'
 import PixelWorker from '@/lib/worker/pixelIndexWorker?worker'
 import { MainStore } from '@/store/store'
 import { bbox, booleanPointInPolygon, point, polygon } from '@turf/turf'
@@ -7,11 +8,14 @@ import { packPixelToInt } from './utils'
 
 let _events: ExtremeEvent[] = []
 let _filteredEvents: ExtremeEvent[] = []
+let _filteredIds: Set<string> = new Set()
 let lastPointFilter: [number, number] | null = null
 let lastRegionFilter: GeoJSON.Feature<Polygon | MultiPolygon> | null = null
 
 let pixelIndex: Record<number, number[]> = {} // Maps packed pixel IDs to event IDs for fast lookup
+let dateIndex: Record<string, number[]> = {}
 let pixelIndexReady = false
+let dateIndexReady = false
 let globalEventsReady = false
 let lastResult: ExtremeEvent[] = []
 let resultReady = false
@@ -45,21 +49,27 @@ export function onFilterBuilt(cb: () => void) {
 export function buildEventFilters(events: ExtremeEvent[]) {
 	pixelIndexReady = false
 	_events = events
-    _filteredEvents = events
+	_filteredEvents = events
+	_filteredIds = new Set(events.map((e) => e.id))
 	globalEventsReady = true
 	for (const cb of globalEventsReadyTriggers) {
 		cb()
 	}
-	const worker = new PixelWorker()
-	console.log('Firing off pixel index worker')
-	worker.onmessage = (e: MessageEvent<Record<number, number[]>>) => {
+	const pixelWorker = new PixelWorker()
+	pixelWorker.onmessage = (e: MessageEvent<Record<number, number[]>>) => {
 		pixelIndex = e.data
 		pixelIndexReady = true
 		for (const cb of indexBuiltTriggers) {
 			cb()
 		}
 	}
-	worker.postMessage(events)
+	pixelWorker.postMessage(events)
+
+	const dateWorker = new DateWorker()
+	dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
+		dateIndex = e.data
+	}
+	dateWorker.postMessage(events)
 }
 
 export function getEventCount(): number {
@@ -67,9 +77,9 @@ export function getEventCount(): number {
 }
 
 export function setFilterToPoint(lat: number, lon: number): ExtremeEvent[] {
-    resultReady = false
-    lastPointFilter = [lat, lon]
-    lastRegionFilter = null
+	resultReady = false
+	lastPointFilter = [lat, lon]
+	lastRegionFilter = null
 	lastResult = (pixelIndex[packPixelToInt(lat, lon)] || []).map(
 		(idx) => _filteredEvents[idx],
 	)
@@ -86,8 +96,8 @@ export function setFilterToRegion(
 	region: GeoJSON.Feature<Polygon | MultiPolygon>,
 ): ExtremeEvent[] {
 	resultReady = false
-    lastRegionFilter = region
-    lastPointFilter = null
+	lastRegionFilter = region
+	lastPointFilter = null
 	// Gather pixels overlappin region → union their event IDs
 	const ids = new Set<number>()
 	const geom = region.geometry
@@ -120,12 +130,13 @@ export function setFilterToRegion(
 }
 
 export function setPostFilters(filters: MainStore['filters']) {
-    _filteredEvents = postFilterEvents(_events, filters)
-    if(lastPointFilter !== null) {
-        setFilterToPoint(lastPointFilter[0], lastPointFilter[1])
-    } else if(lastRegionFilter !== null) {
-        setFilterToRegion(lastRegionFilter)
-    }
+	_filteredEvents = postFilterEvents(_events, filters)
+	_filteredIds = new Set(_filteredEvents.map((e) => e.id))
+	if (lastPointFilter !== null) {
+		setFilterToPoint(lastPointFilter[0], lastPointFilter[1])
+	} else if (lastRegionFilter !== null) {
+		setFilterToRegion(lastRegionFilter)
+	}
 	globalEventsReadyTriggers.forEach((cb) => cb())
 }
 
@@ -173,17 +184,18 @@ export function getFilteredEvents(): ExtremeEvent[] {
 }
 
 export function getCurrentEvents(time: Date): ExtremeEvent[] {
-	if (time === null || time === undefined) {
-		return lastResult
-	} else {
-		return lastResult.filter((event: ExtremeEvent) => {
-			const startDate = new Date(event.times[0])
-			const endDate = new Date(event.times[event.times.length - 1])
-			startDate.setHours(0, 0, 0, 0)
-			endDate.setHours(23, 59, 59, 999)
-			return time >= startDate && time <= endDate
-		})
+	if (!time) return _filteredEvents
+
+	const key = time.toISOString().split('T')[0]
+	const idxs = dateIndex[key]
+	if (!idxs) return []
+
+	const result: ExtremeEvent[] = []
+	for (const idx of idxs) {
+		const ev = _events[idx]
+		if (_filteredIds.has(ev.id)) result.push(ev)
 	}
+	return result
 }
 
 export function getCurrentDayCounts(): Map<number, Array<number>> {

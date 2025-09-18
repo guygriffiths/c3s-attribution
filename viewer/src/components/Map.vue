@@ -56,6 +56,10 @@ import {
 } from '@/lib/eventFiltering'
 // create a single canvas renderer for all polygons
 const canvasRenderer = L.canvas({ padding: 0.5, pane: 'eventPane' })
+canvasRenderer.on('update', () => {
+	const ctx = (canvasRenderer as any)._ctx as CanvasRenderingContext2D
+	if (ctx) ctx.globalCompositeOperation = 'lighter'
+})
 const fastRenderer = L.canvas({ padding: 0.5, pane: 'fastEventPane' })
 
 const mapOptions = {
@@ -213,14 +217,12 @@ const pointSelectorSettled = (event: any) => {
 	}
 }
 
-const getEventRegion = (event: any) => {
-	if (store.viewMode === 'heatmap') {
-		return event.total_region || [] // We want to see the entire event footprint, because we are viewing across all times
-	}
-	const idx = event.times.findIndex(
-		(t: Date) =>
-			new Date(t).getTime() === new Date(timeStore.selectedTime).getTime(),
-	)
+const getEventRegion = (event: ExtremeEvent) => {
+	const selected = timeStore.selectedTime.getTime()
+	const idx = event.times
+		.map((t: Date) => t.getTime())
+		.findIndex((t) => t === selected)
+
 	if (idx < 0) {
 		return event.regions[0] || [] // Fallback to first region if no matching time found
 	}
@@ -319,10 +321,10 @@ const addEventPanes = () => {
 				v-if="store.viewMode === 'heatmap'"
 				v-for="event of globalHeatmapEvents"
 				:key="`hm-${event.id}`"
-				:lat-lngs="getEventRegion(event)"
+				:lat-lngs="event.total_region || []"
 				:weight="0"
 				:fill="true"
-				:fill-opacity="0.05"
+				:fill-opacity="0.025"
 				:color="'rgb(151, 24, 65)'"
 				:options="{ renderer: canvasRenderer }"
 				@click="eventStore.selectEvent(event.id)"
@@ -331,18 +333,19 @@ const addEventPanes = () => {
 			<LPolygon
 				v-else
 				v-for="event in getCurrentEvents(timeStore.selectedTime)"
-				:key="`ev-${event.id}`"
+				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event)"
-				:weight="3"
+				:weight="2"
 				:fill="true"
-				:fill-opacity="0.05"
-				:color="eventStore.colorForEvent(event)"
-				:options="{ renderer: canvasRenderer }"
+				:fill-opacity="0.5"
+				:color="scssVars.c3sblue"
+				:fill-color="eventStore.colorForEvent(event)"
 				@click="eventStore.selectEvent(event.id)"
 			>
 			</LPolygon>
 			<!-- Fast filter events. We want to update these while dragging, so they need to be fast -->
 			<LPolygon
+				v-if="store.viewMode === 'heatmap'"
 				v-for="event in regionFilteredEvents"
 				:key="event.id"
 				:lat-lngs="event.total_region || []"
@@ -393,7 +396,7 @@ const addEventPanes = () => {
 			<!-- Selectable elements etc -->
 			<!-- The actual selected region -->
 			<LGeoJson
-				v-if="eventRegionFilter"
+				v-if="eventRegionFilter && store.viewMode === 'heatmap'"
 				:key="`region-draw`"
 				:geojson="eventRegionFilter"
 				:options-style="
@@ -408,7 +411,7 @@ const addEventPanes = () => {
 
 			<!-- Point to select by -->
 			<LMarker
-				v-if="store.filteringByPoint"
+				v-if="store.filteringByPoint && store.viewMode === 'heatmap'"
 				ref="markerRef"
 				:lat-lng="eventPointFilter || store.lastPoint || [20, 0]"
 				:draggable="true"
