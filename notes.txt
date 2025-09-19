@@ -76,3 +76,9 @@ OK, SO!
 
 What about we just have one concept for each thing - intensity, area, duration. And that's all we call them (if that - primarily icon-based). And when you go into the settings, you can define what you mean by "intensity". And perhaps you unlock a mode where you can view multiple things together. So you can still view 3 event rankings, but if you want mean, peak, and number of pixels; or min, mean_region_area, total_pixel_count; or whatever, then so be it. And that's just dropdown menus, they only appear in advanced mode.
 
+
+
+How about this?
+When an event is selected, we show summary info in two ways: 
+* that event - what was its peak intensity, mean intensity, duration, total size. What were the graphs of it like? select days on the time bar to choose individual days to plot on the map
+* the context of other events - PDFs of duration, size, intensity, with a "you are here" highlighter. These will be global, unless we are in heatmap mode, in which case the will be whatever they already were

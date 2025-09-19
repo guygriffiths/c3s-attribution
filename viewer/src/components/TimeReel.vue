@@ -18,13 +18,9 @@ import {
 } from '@fortawesome/free-solid-svg-icons'
 import * as d3 from 'd3'
 import {
-	addDays,
 	addHours,
-	addYears,
 	getDayOfYear,
-	setDayOfYear,
 	subHours,
-	subYears,
 } from 'date-fns'
 import {
 	computed,
@@ -219,7 +215,8 @@ const startDrag = (event: MouseEvent) => {
 	startX = event.clientX
 	startY = event.clientY
 	startMs = performance.now()
-	startDate = new Date(model.value)
+	startDate = model.value
+	console.log('start drag at', startX, startY, startDate)
 	window.addEventListener('mousemove', handleDrag)
 	window.addEventListener('mouseup', endDrag)
 }
@@ -240,10 +237,7 @@ const endDrag = (event: MouseEvent) => {
 		const dayFromStart = Math.floor(
 			1 + Math.max(0, Math.min(1, percentage)) * totalDays,
 		)
-		const newDate = setDayOfYear(
-			new Date(Date.UTC(selectedYear.value, 0, 1)),
-			dayFromStart,
-		)
+		const newDate = new Date(Date.UTC(selectedYear.value, 0, dayFromStart))
 		setDate(
 			new Date(
 				Date.UTC(newDate.getFullYear(), newDate.getMonth(), newDate.getDate()),
@@ -277,13 +271,14 @@ const handleDrag = (event: MouseEvent) => {
 			const daysMoved = Math.round(dx / pixelsPerDay)
 
 			if (!props.selectedEvent) {
-				const newDate = addDays(startDate, daysMoved)
+				// addHours will respect DST, addDays won't
+				const newDate = addHours(startDate, 24 * daysMoved)
 				if (newDate.getFullYear() === selectedYear.value) {
 					setDate(newDate)
 				} else if (newDate.getFullYear() < selectedYear.value) {
-					setDate(new Date(selectedYear.value, 0, 1))
+					setDate(new Date(Date.UTC(selectedYear.value, 0, 1)))
 				} else if (newDate.getFullYear() > selectedYear.value) {
-					setDate(new Date(selectedYear.value, 11, 31))
+					setDate(new Date(Date.UTC(selectedYear.value, 11, 31)))
 				}
 			} else {
 				console.log('dragging does not work with selected event yet')
@@ -493,25 +488,9 @@ const scrollListener = () => {
 	const scrollTop = container.value!.scrollTop
 	const rowsDown = scrollTop / rowHeight.value
 	const newYear = Math.round(startYear.value + rowsDown)
-	const newDate = new Date(newYear, 0, 1)
-	const newDateNewYear = setDayOfYear(newDate, getDayOfYear(model.value))
-	setDate(newDateNewYear)
+	const newDate = new Date(Date.UTC(newYear, 0, getDayOfYear(model.value)))
+	setDate(newDate)
 }
-watch(
-	() => model.value,
-	() => {
-		// console.log('model changed, scrolling to', selectedYear.value)
-		// if (container.value) {
-		// 	const yearsOffset = selectedYear.value - startYear.value
-		// 	const scrollOffset = (yearsOffset + 0.5) * rowHeight.value
-		// 	console.log('which is offset', scrollOffset)
-		// 	container.value.scrollTo({
-		// 		top: scrollOffset,
-		// 		behavior: 'smooth',
-		// 	})
-		// }
-	},
-)
 
 watch(
 	() => props.events,
@@ -673,7 +652,7 @@ watch(
 									:key="event.id"
 									:x="
 										!props.vertical
-											? event.startX! + 0.5
+											? event.startX! - 0.5
 											: TOTAL_DAYS * (0.5 + positionY(event.y!) - eventHeight)
 									"
 									:width="
@@ -1063,6 +1042,7 @@ $margin: 0 0;
 				position: absolute;
 				top: 0;
 				left: 0;
+				margin-left: -2px;
 				background-color: transparent;
 				transform-origin: left center;
 				width: 1px;
@@ -1077,7 +1057,6 @@ $margin: 0 0;
 
 				.line {
 					position: absolute;
-					// left: 8px;
 					width: 1px;
 					height: 100%;
 					background-color: $c3sred;

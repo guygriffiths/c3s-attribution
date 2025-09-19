@@ -105,14 +105,14 @@ export const getTileGeometry = (
 interface EventTileKey {
 	coords: { x: number; y: number; z: number }
 	t: number
-	id: number
+	id: string
 	key: string
 }
 
 export const eventTileKey = (
 	coords: { x: number; y: number; z: number },
 	t: number,
-	id: number,
+	id: string,
 ): EventTileKey => ({
 	coords,
 	t,
@@ -124,13 +124,16 @@ const tileImageCache = new Map<string, HTMLCanvasElement>()
 
 export const getCanvasFromCache = (
 	key: EventTileKey,
-	store: any,
+	selectedEvent: ExtremeEventFull | null,
+	selectedTime: Date,
+	viewMode: ViewMode,
+	intensityRange: [number, number],
 	eventHeatmapRef: any | null,
 ) => {
-	// if (tileImageCache.has(key.key)) {
-	// 	// console.log('Cache hit for tile:', key.key)
-	// 	return tileImageCache.get(key.key)!
-	// }
+	if (tileImageCache.has(key.key)) {
+		// console.log('Cache hit for tile:', key.key)
+		return tileImageCache.get(key.key)!
+	}
 	const canvas = document.createElement('canvas')
 	canvas.width = TILE_SIZE
 	canvas.height = TILE_SIZE
@@ -147,19 +150,19 @@ export const getCanvasFromCache = (
 
 	let latLonValues: number[][] = []
 	let dataValues: number[] = []
-	if (store.viewMode === 'timemachine') {
+	if (viewMode === 'timemachine') {
 		const selectedIndex =
-			differenceInDays(store.selectedTime, store.selectedEvent?.times[0]!) || 0
-		latLonValues = store.selectedEvent?.slices[selectedIndex] || []
-		dataValues = store.selectedEvent?.values[selectedIndex] || []
+			differenceInDays(selectedTime, selectedEvent?.times[0]!) || 0
+		latLonValues = selectedEvent?.slices[selectedIndex] || []
+		dataValues = selectedEvent?.values[selectedIndex] || []
 	} else {
-		latLonValues = store.selectedEvent?.pixel_set || []
-		dataValues = store.selectedEvent?.pixel_peak_values || []
+		latLonValues = selectedEvent?.pixel_set || []
+		dataValues = selectedEvent?.pixel_peak_values || []
 	}
 
 	const scale = d3
 		.scaleLinear()
-		.domain(store.intensityRange)
+		.domain(intensityRange)
 		.range([0, 1])
 		.clamp(true)
 
@@ -184,13 +187,21 @@ export const getCanvasFromCache = (
 }
 
 export const drawEventTile =
-	(props: any, store: any, eventHeatmapRef: any | null) => () => {
+	(
+		props: any,
+		selectedEvent: ExtremeEventFull | null,
+		selectedTime: Date,
+		viewMode: ViewMode,
+		intensityRange: [number, number],
+		eventHeatmapRef: any | null,
+	) =>
+	() => {
 		const key = eventTileKey(
 			props.coords,
-			store.selectedEvent
-				? differenceInDays(store.selectedTime, store.selectedEvent.times[0])
+			selectedEvent
+				? differenceInDays(selectedTime, selectedEvent.times[0])
 				: 0,
-			store.selectedEvent?.id || 0,
+			selectedEvent?.id || '0',
 		)
 
 		const canvas = document.createElement('canvas')
@@ -198,7 +209,14 @@ export const drawEventTile =
 		canvas.height = TILE_SIZE
 		const ctx = canvas.getContext('2d')
 
-		const tileCanvas = getCanvasFromCache(key, store, eventHeatmapRef)
+		const tileCanvas = getCanvasFromCache(
+			key,
+			selectedEvent,
+			selectedTime,
+			viewMode,
+			intensityRange,
+			eventHeatmapRef,
+		)
 
 		if (ctx !== null) {
 			ctx.drawImage(tileCanvas, 0, 0)

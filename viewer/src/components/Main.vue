@@ -193,7 +193,7 @@ watch(
 		</Panel>
 		<Panel
 			id="event-panel"
-			class="left"
+			class="top"
 			:active="eventStore.eventSelected && store.viewMode === 'timemachine'"
 		>
 			<!-- <button

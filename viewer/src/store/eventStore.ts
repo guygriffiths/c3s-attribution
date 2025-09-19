@@ -46,7 +46,7 @@ export const useStore = defineStore('events', {
 	},
 	getters: {
 		eventSelected: (state: State) => {
-			return state.selectedEvent !== null && state.selectedEvent !== undefined
+			return state.selectedEventId !== null// && state.selectedEvent !== undefined
 		},
 		colorForEvent: (state: State) => {
 			const scale = d3
@@ -60,10 +60,10 @@ export const useStore = defineStore('events', {
 				return d3.interpolateTurbo(scale(event.peak_value || 0))
 			}
 		},
-		durationRange: (state: State) => {
+		durationRange: (state: State): [number, number] => {
 			return [state.minDuration, state.maxDuration]
 		},
-		intensityRange: (state: State) => {
+		intensityRange: (state: State): [number, number] => {
 			// TODO - Definition of intensity should be configurable
 			return [state.minIntensity, state.maxIntensity]
 		},
@@ -74,21 +74,27 @@ export const useStore = defineStore('events', {
 	},
 	actions: {
 		async selectEvent(id: string | null) {
-			this.selectedEventId = id
+			console.log('Clicked select', id)
 			const mainStore = useMainStore()
 			const timeStore = useTimeStore()
 			if (id === null) {
 				this.selectedEvent = null
+				this.selectedEventId = null
 				return
 			}
-			if (this.selectedEvent?.id === id) {
-				this.selectedEvent = null
-			} else {
-				mainStore.setLoading()
+			// if (this.selectedEvent?.id === id) {
+				if (this.selectedEventId === id) {
+					console.log('Deselecting event', id)
+					this.selectedEvent = null
+					this.selectedEventId = null
+				} else {
+					mainStore.setLoading()
+					this.selectedEventId = id
 				let path = `/events/event-${id}.json`
 				const resp = await fetch(path)
 				const event = await resp.json()
-				// This should always be the case...
+				console.log('Fetched event details', event)
+				// // This should always be the case...
 				event.id = id
 				event.times = event.times.map((time: string) => new Date(time))
 				event.duration =

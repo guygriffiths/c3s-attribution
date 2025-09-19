@@ -35,13 +35,6 @@ const mapRef = ref<InstanceType<typeof LMap> | null>(null)
 const map = computed(() => mapRef.value?.leafletObject as LeafletMap)
 const eventPixelsRef = ref<InstanceType<typeof LGridLayer> | null>(null)
 
-// const currentEvents = computed(() => {
-// 	if (eventStore.eventRegionFilter) {
-// 		return store.filteredEvents
-// 	}
-// 	return eventStore.currentEvents
-// })
-
 import L from 'leaflet'
 import ModeToggle from './util/ModeToggle.vue'
 import {
@@ -53,6 +46,8 @@ import {
 	getEventCount,
 	getFilteredEvents,
 	onGlobalEventsReady,
+	onRegionEventsReady,
+	onCurrentEventsReady,
 } from '@/lib/eventFiltering'
 // create a single canvas renderer for all polygons
 const canvasRenderer = L.canvas({ padding: 0.5, pane: 'eventPane' })
@@ -92,34 +87,12 @@ const updateWmtsUrl = debounce((newVal: string) => {
 }, 500)
 watch(() => timeStore.isoDatetime, updateWmtsUrl)
 
-watch(
-	() => eventStore.selectedEvent,
-	(newVal) => {
-		const id = newVal?.id
-		if (!eventStore.eventSelected) {
-			// @ts-ignore
-			lastBbox.value = mapRef.value?.leafletObject.getBounds()
-		} else if (eventStore.selectedEvent?.id == id) {
-			if (lastBbox.value && mapRef.value) {
-				// @ts-ignore
-				// mapRef.value.leafletObject.fitBounds(lastBbox.value)
-			}
-		}
-		if (id && mapRef.value && store.viewMode !== 'heatmap') {
-			const map: LeafletMap = mapRef.value.leafletObject as LeafletMap
-			// fitMapToBounds(map, eventStore.selectedEvent!)
-		}
-	},
-)
-
-watch(
-	() => store.filteringByPoint,
-	(newVal) => {},
-)
 
 watch(
 	() => store.filteringByRegion,
 	(newVal) => {
+		// This turns the region drawing control on or off
+		// No such thing is needed for the point selector, which is a marker defined in the templates
 		if (newVal) {
 			drawRegion()
 		} else {
@@ -128,6 +101,7 @@ watch(
 	},
 )
 
+// The draw control for defining regions
 const drawControl = computed(
 	() =>
 		// @ts-ignore
@@ -139,13 +113,19 @@ const drawControl = computed(
 		}),
 )
 
+const currentEvents = ref<ExtremeEvent[]>([])
+onCurrentEventsReady(() => {
+	// This gets called when the time index is ready
+	currentEvents.value = getCurrentEvents(timeStore.selectedTime)
+})
 const eventPointFilter = ref<[number, number] | null>(null)
 const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
 const regionFilteredEvents = ref([] as ExtremeEvent[])
 const globalHeatmapEvents = ref([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
+	// Triggered when the global events have changed.
+	// This is on first load, or when any of the high-level filters change
 	// @ts-ignore
-	console.log('Filter ready, getting global heatmap events')
 	globalHeatmapEvents.value = getGlobalFilteredEvents()
 })
 
@@ -178,14 +158,10 @@ const cancelDrawRegion = () => {
 }
 
 const pointSelectorAdded = (event: any) => {
-	console.log('Marker added at', event.target.getLatLng())
 	store.setLoadingDone()
 	const { lat, lng } = (event.target as L.Marker).getLatLng()
-	console.log('Setting filter to point', lat, lng)
-
 	console.log('Set point filter', lat, lng)
 	regionFilteredEvents.value = setFilterToPoint(lat, lng)
-	console.log('Got events', regionFilteredEvents.value)
 	store.lastPoint = [lat, lng]
 }
 const pointSelectorMoveStarted = (event: any) => {
@@ -217,6 +193,8 @@ const pointSelectorSettled = (event: any) => {
 	}
 }
 
+// Extract the region for a given event at the currently selected time
+// This is for the timemachine mode, updates the "current" events as we drag/animate the time slider
 const getEventRegion = (event: ExtremeEvent) => {
 	const selected = timeStore.selectedTime.getTime()
 	const idx = event.times
@@ -224,6 +202,9 @@ const getEventRegion = (event: ExtremeEvent) => {
 		.findIndex((t) => t === selected)
 
 	if (idx < 0) {
+		console.warn(
+			`No region found for event ${event.id} at time ${timeStore.selectedTime.toISOString()}`,
+		)
 		return event.regions[0] || [] // Fallback to first region if no matching time found
 	}
 	return event.regions[idx] || [] // Fallback to empty array if no region found
@@ -232,12 +213,51 @@ const getEventRegion = (event: ExtremeEvent) => {
 const lastBbox = ref<LatLngBounds | null>(null)
 
 watch(
-	() => [timeStore.selectedTime, eventStore.selectedEvent],
+	() => [timeStore.selectedTime, eventStore.selectedEventId],
 	() => {
 		if (eventPixelsRef.value && eventPixelsRef.value.leafletObject) {
 			eventPixelsRef.value.leafletObject.redraw()
 		}
+		
+		console.log(
+			'Time or event changed, getting current events for',
+			timeStore.selectedTime,  currentEvents.value.length, 'events'
+		)
 	},
+)
+
+watch(
+	() => timeStore.selectedTime,
+	(newVal) => {
+		currentEvents.value = getCurrentEvents(newVal)
+		if (store.viewMode === 'heatmap') {
+			globalHeatmapEvents.value = getGlobalFilteredEvents()
+		}
+		if (wmtsUrl.value) {
+			updateWmtsUrl(newVal.toISOString().split('T')[0])
+		}
+	},
+)
+
+watch(
+	() => eventStore.selectedEvent,
+	(event) => {
+		if (!event || !map.value) return
+		map.value.fitBounds(
+			[
+				[event.bbox[0], event.bbox[1]],
+				[event.bbox[2], event.bbox[3]],
+			],
+			{
+				paddingTopLeft: [64, 64],
+				paddingBottomRight: [32, map.value.getSize().y * 0.5 + 32],
+				maxZoom: 12,
+				// @ts-ignore
+				duration: scssVars.animTime,
+			},
+		)
+	},
+	{ immediate: true },
 )
 
 watch(
@@ -252,7 +272,14 @@ watch(
 )
 
 const renderTile = (props: any) =>
-	drawEventTile(props, eventStore, eventPixelsRef.value)
+	drawEventTile(
+		props,
+		eventStore.selectedEvent,
+		timeStore.selectedTime,
+		store.viewMode,
+		eventStore.intensityRange,
+		eventPixelsRef.value,
+	)
 
 const addEventPanes = () => {
 	const map = mapRef.value?.leafletObject as LeafletMap
@@ -332,7 +359,7 @@ const addEventPanes = () => {
 			</LPolygon>
 			<LPolygon
 				v-else
-				v-for="event in getCurrentEvents(timeStore.selectedTime)"
+				v-for="event in currentEvents"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event)"
 				:weight="2"

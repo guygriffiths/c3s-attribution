@@ -7,7 +7,6 @@ import { useStore as useEventStore } from './eventStore'
 import { useStore as useTimeStore } from './timeStore'
 
 type LayerDetails = any
-export type ViewMode = 'timemachine' | 'heatmap'
 
 interface State {
 	lang: Language
@@ -85,7 +84,7 @@ export const useStore = defineStore('main', {
 	getters: {
 		isFocused: (state) => {
 			const eventStore = useEventStore()
-			return eventStore.selectedEvent !== null
+			return eventStore.selectedEventId !== null
 		},
 		exploringRegion: (state) => {
 			return state.regionFilterReady || state.filteringByPoint

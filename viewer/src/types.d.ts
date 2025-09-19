@@ -5,6 +5,8 @@ declare global {
 
 	type Language = 'en'
 
+	type ViewMode = 'timemachine' | 'heatmap'
+
 	interface ExtremeEvent {
 		id: string
 		times: Date[]
@@ -29,7 +31,7 @@ declare global {
 		areas: number[]
 		peak_values: number[]
 		mean_values: number[]
-		pixel_peak_values: number[][]
+		pixel_peak_values: number[]
 	}
 
 	interface WeatherEvent {

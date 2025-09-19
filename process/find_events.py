@@ -86,47 +86,42 @@ def get_region(shape):
 import numpy as np
 
 
-def safe_alphashape(points, alpha=1.0, fallback_buffer=0.125):
+def safe_alphashape(points, alpha=1.0, max_attempts=5, growth=2.0, fallback_buffer=0.125):
     if not points:
         return None
 
-    # Try alphashape first
-    try:
-        shape = alphashape.alphashape(points, alpha)
-        if shape and not shape.is_empty:
-            return shape
-    except Exception:
-        pass
+    # Try alpha growth
+    for i in range(max_attempts):
+        try:
+            shape = alphashape.alphashape(points, alpha)
+            if shape and not shape.is_empty:
+                return shape
+        except Exception:
+            pass
+        alpha *= growth  # grow alpha each retry
 
-    # Fallbacks
+    # Fallbacks as before...
     n = len(points)
-
     if n == 1:
-        # Small square around single point
         x, y = points[0]
-        return Polygon(
-            [
-                (x - fallback_buffer, y - fallback_buffer),
-                (x + fallback_buffer, y - fallback_buffer),
-                (x + fallback_buffer, y + fallback_buffer),
-                (x - fallback_buffer, y + fallback_buffer),
-            ]
-        )
+        return Polygon([
+            (x - fallback_buffer, y - fallback_buffer),
+            (x + fallback_buffer, y - fallback_buffer),
+            (x + fallback_buffer, y + fallback_buffer),
+            (x - fallback_buffer, y + fallback_buffer),
+        ])
     elif n == 2:
-        # Thin capsule between two points
         return MultiPoint(points).buffer(fallback_buffer)
     else:
         mp = MultiPoint(points)
-        # If points are roughly co-linear, buffer a thin convex hull
         convex = mp.convex_hull
         if convex.is_empty:
             return None
-
-        # Compute a small buffer relative to point spread
         x_vals, y_vals = zip(*points)
         spread = max(max(x_vals) - min(x_vals), max(y_vals) - min(y_vals))
-        buffer_size = min(fallback_buffer, spread * 0.05)  # small fraction of spread
+        buffer_size = min(fallback_buffer, spread * 0.05)
         return convex.buffer(buffer_size)
+
 
 
 class Eventlet:
@@ -337,7 +332,6 @@ class EventletFactory:
                     ev.extend(time, blob, values)
                     used_blobs.add(i)
                     matched = True
-                    break
             if not matched:
                 values = [
                     data_slice.sel(latitude=lat, longitude=lon).values.item()

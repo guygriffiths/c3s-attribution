@@ -24,6 +24,7 @@ let counts: Map<number, Array<number>> = new Map()
 const regionEventsReadyTriggers: Array<() => void> = []
 const globalEventsReadyTriggers: Array<() => void> = []
 const indexBuiltTriggers: Array<() => void> = []
+const currentEventTriggers: Array<() => void> = []
 export function onRegionEventsReady(cb: () => void) {
 	regionEventsReadyTriggers.push(cb)
 	if (lastResult.length > 0) {
@@ -33,6 +34,12 @@ export function onRegionEventsReady(cb: () => void) {
 export function onGlobalEventsReady(cb: () => void) {
 	globalEventsReadyTriggers.push(cb)
 	if (globalEventsReady) {
+		cb()
+	}
+}
+export function onCurrentEventsReady(cb: () => void) {
+	currentEventTriggers.push(cb)
+	if (dateIndexReady) {
 		cb()
 	}
 }
@@ -68,6 +75,10 @@ export function buildEventFilters(events: ExtremeEvent[]) {
 	const dateWorker = new DateWorker()
 	dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
 		dateIndex = e.data
+		dateIndexReady = true
+		for (const cb of currentEventTriggers) {
+			cb()
+		}
 	}
 	dateWorker.postMessage(events)
 }
