@@ -86,8 +86,8 @@ def get_region(shape):
 import numpy as np
 
 
-def safe_alphashape(points, alpha=1.0, max_attempts=5, growth=2.0, fallback_buffer=0.125):
-    if not points:
+def safe_alphashape(points, alpha=1.0, fallback_buffer=0.125):
+    if points is None:
         return None
 
     # Try alpha growth
