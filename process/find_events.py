@@ -332,7 +332,6 @@ class EventletFactory:
 
         used_blobs = set()
         for i, blob in enumerate(blobs):
-            matched = False
             for ev in self.active:
                 if ev.overlaps(blob):
                     values = [
@@ -341,14 +340,18 @@ class EventletFactory:
                     ]
                     ev.extend(time, blob, values)
                     used_blobs.add(i)
-                    matched = True
-            if not matched:
-                values = [
-                    data_slice.sel(latitude=lat, longitude=lon).values.item()
-                    for lat, lon in blob
-                ]
-                new_ev = Eventlet(time, blob, values)
-                self.active.append(new_ev)
+                    break
+
+        # Create new eventlets for unmatched blobs
+        for blob in blobs:
+            if blob in used_blobs:
+                continue
+            values = [
+                data_slice.sel(latitude=lat, longitude=lon).values.item()
+                for lat, lon in blob
+            ]
+            new_ev = Eventlet(time, blob, values)
+            self.active.append(new_ev)
 
         # Expire any events that are too old
         for ev in list(self.active):  # copy to avoid mutation during loop
