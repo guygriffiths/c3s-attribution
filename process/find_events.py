@@ -343,8 +343,8 @@ class EventletFactory:
                     break
 
         # Create new eventlets for unmatched blobs
-        for blob in blobs:
-            if blob in used_blobs:
+        for i, blob in enumerate(blobs):
+            if i in used_blobs:
                 continue
             values = [
                 data_slice.sel(latitude=lat, longitude=lon).values.item()
