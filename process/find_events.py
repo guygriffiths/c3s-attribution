@@ -687,8 +687,8 @@ def main():
     #     for perc in [98, 99]:
     stat = "max"
     perc = "99.0"
-    thresh = 29
-    nr = 7
+    thresh = 25
+    nr = 5
 
     data_var, ref_data, land_sea_mask = load_data(
         f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
