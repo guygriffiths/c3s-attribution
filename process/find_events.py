@@ -71,6 +71,9 @@ def walk_scan(D_coo: coo_matrix, eps: float, min_samples: int = 1):
 def get_region(shape):
     if shape.geom_type == "Polygon":
         return [[x, y] for x, y in shape.exterior.coords]
+    elif shape.geom_type == "MultiPolygon":
+        shape = unary_union(shape)
+        return [[x, y] for x, y in shape.exterior.coords]
     else:
         minx, miny, maxx, maxy = shape.bounds
         pad = 0.125
@@ -86,9 +89,11 @@ def get_region(shape):
 import numpy as np
 
 
-def safe_alphashape(points, alpha=1.0, fallback_buffer=0.125):
-    if points is None:
-        return None
+def safe_alphashape(
+    points, alpha=1.0, max_attempts=5, growth=2.0, fallback_buffer=0.125
+):
+    if points is None or len(points) == 0:
+        return []
 
     # Try alpha growth
     for i in range(max_attempts):
@@ -97,6 +102,7 @@ def safe_alphashape(points, alpha=1.0, fallback_buffer=0.125):
             if shape and not shape.is_empty:
                 return shape
         except Exception:
+            print(f"Alphashape failed on attempt {i+1} with alpha={alpha}")
             pass
         alpha *= growth  # grow alpha each retry
 
@@ -104,15 +110,20 @@ def safe_alphashape(points, alpha=1.0, fallback_buffer=0.125):
     n = len(points)
     if n == 1:
         x, y = points[0]
-        return Polygon([
-            (x - fallback_buffer, y - fallback_buffer),
-            (x + fallback_buffer, y - fallback_buffer),
-            (x + fallback_buffer, y + fallback_buffer),
-            (x - fallback_buffer, y + fallback_buffer),
-        ])
+        print("Alphashape failed, falling back to buffered point")
+        return Polygon(
+            [
+                (x - fallback_buffer, y - fallback_buffer),
+                (x + fallback_buffer, y - fallback_buffer),
+                (x + fallback_buffer, y + fallback_buffer),
+                (x - fallback_buffer, y + fallback_buffer),
+            ]
+        )
     elif n == 2:
+        print("Alphashape failed, falling back to buffered line")
         return MultiPoint(points).buffer(fallback_buffer)
     else:
+        print("Alphashape failed, falling back to buffered convex hull")
         mp = MultiPoint(points)
         convex = mp.convex_hull
         if convex.is_empty:
@@ -121,7 +132,6 @@ def safe_alphashape(points, alpha=1.0, fallback_buffer=0.125):
         spread = max(max(x_vals) - min(x_vals), max(y_vals) - min(y_vals))
         buffer_size = min(fallback_buffer, spread * 0.05)
         return convex.buffer(buffer_size)
-
 
 
 class Eventlet:
@@ -680,7 +690,7 @@ def main():
     data_var, ref_data, land_sea_mask = load_data(
         f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
         f"/data/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
-        f"/data/era5_land_sea_mask.nc"
+        f"/data/era5_land_sea_mask.nc",
     )
     time_dim = data_var["valid_time"]
     out_path = f"/data/output-{stat}-{perc}-{thresh}-nr{nr}"
@@ -708,3 +718,50 @@ if __name__ == "__main__":
     import pandas as pd
 
     main()
+
+    slice = np.array(
+        [
+            [3.25, -98.5],
+            [3.25, -98.25],
+            [3.25, -98.0],
+            [3.25, -97.75],
+            [3.25, -96.5],
+            [3.25, -96.25],
+            [3.25, -96.0],
+            [3.0, -98.25],
+            [3.0, -98.0],
+            [3.0, -97.75],
+            [3.0, -97.5],
+            [3.0, -97.25],
+            [3.0, -96.75],
+            [3.0, -96.5],
+            [2.75, -97.75],
+            [2.75, -97.5],
+            [2.75, -97.25],
+            [2.75, -97.0],
+            [2.75, -96.75],
+            [2.75, -96.5],
+            [2.75, -96.25],
+            [2.75, -96.0],
+            [2.5, -95.75],
+            [2.25, -96.0],
+            [2.25, -95.75],
+            [2.25, -95.5],
+            [2.0, -95.75],
+            [2.0, -95.5],
+            [1.75, -95.5],
+            [1.0, -95.25],
+            [0.75, -95.25],
+            [0.75, -95.0],
+            [0.5, -95.25],
+            [0.5, -95.0],
+            [0.5, -94.75],
+            [0.25, -94.5],
+            [0.25, -94.0],
+        ],
+        dtype=np.float32,
+    )
+
+    hull = safe_alphashape(slice, alpha=1.0)
+
+    print(hull)
