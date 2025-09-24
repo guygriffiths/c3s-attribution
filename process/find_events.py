@@ -70,21 +70,27 @@ def walk_scan(D_coo: coo_matrix, eps: float, min_samples: int = 1):
 
 def get_region(shape):
     if shape.geom_type == "Polygon":
-        return [[x, y] for x, y in shape.exterior.coords]
+        return [[[x, y] for x, y in shape.exterior.coords]]
     elif shape.geom_type == "MultiPolygon":
-        shape = unary_union(shape)
-        return [[x, y] for x, y in shape.exterior.coords]
+        merged = unary_union(shape)
+        if merged.geom_type == "Polygon":
+            return [[[x, y] for x, y in merged.exterior.coords]]
+        else:  # still MultiPolygon
+            return [
+                [[x, y] for x, y in poly.exterior.coords]
+                for poly in merged.geoms
+            ]
     else:
         minx, miny, maxx, maxy = shape.bounds
         pad = 0.125
-        return [
+        square = [
             [minx - pad, miny - pad],
             [minx - pad, maxy + pad],
             [maxx + pad, maxy + pad],
             [maxx + pad, miny - pad],
             [minx - pad, miny - pad],
         ]
-
+        return [square]
 
 import numpy as np
 
@@ -252,8 +258,9 @@ class EventletFactory:
     def __init__(
         self,
         data,
-        threshold,
         ref_data,
+        threshold,
+        over_threshold=True,
         land_sea_mask=None,
         expiry_days=1,
         min_length=3,
@@ -263,6 +270,7 @@ class EventletFactory:
     ):
         self.data = data
         self.threshold = threshold
+        self.over_threshold = over_threshold
         self.ref_data = ref_data
         self.land_sea_mask = land_sea_mask
         self.expiry_days = expiry_days
@@ -282,9 +290,14 @@ class EventletFactory:
         )
 
         # Store the full thresholded mask
-        self.raw_mask = (
-            (data > self.threshold) & (data > ref_data)
-        ).values  # shape (T, Y, X), bool
+        if self.over_threshold:
+            self.raw_mask = (
+                (data > self.threshold) & (data > ref_data)
+            ).values  # shape (T, Y, X), bool
+        else:
+            self.raw_mask = (
+                (data <= self.threshold) & (data <= ref_data)
+            ).values
         # print(f"Raw mask shape: {self.raw_mask.shape}")
 
         self.times = self.data.valid_time.values  # in __init__
@@ -689,6 +702,7 @@ def main():
     perc = "99.0"
     thresh = 25
     nr = 5
+    heatwave = True
 
     data_var, ref_data, land_sea_mask = load_data(
         f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
@@ -696,14 +710,15 @@ def main():
         f"/data/era5_land_sea_mask.nc",
     )
     time_dim = data_var["valid_time"]
-    out_path = f"/data/output-{stat}-{perc}-{thresh}-nr{nr}"
+    out_path = f"/data/output-{stat}-{perc}-{thresh}-nr{nr}-{heatwave and 'hw' or 'cw'}"
     os.makedirs(out_path, exist_ok=True)
     os.makedirs(f"{out_path}/events", exist_ok=True)
 
     factory = EventletFactory(
         data_var,
-        threshold=273.15 + thresh,
         ref_data=ref_data,
+        threshold=273.15 + thresh,
+        over_threshold=heatwave,
         land_sea_mask=land_sea_mask,
         neighbor_radius=nr,
         output_path=out_path,
