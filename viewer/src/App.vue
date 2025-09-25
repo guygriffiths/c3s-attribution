@@ -13,6 +13,17 @@ const store = useStore()
 onMounted(() => {
 	document.title = l.value.title
 	store.init()
+
+	let resizeTimer: number
+
+	window.addEventListener('resize', () => {
+		document.body.classList.add('disable-transitions')
+
+		clearTimeout(resizeTimer)
+		resizeTimer = window.setTimeout(() => {
+			document.body.classList.remove('disable-transitions')
+		}, 200) // tweak delay as needed
+	})
 })
 </script>
 

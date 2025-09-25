@@ -53,9 +53,13 @@ import {
 const canvasRenderer = L.canvas({ padding: 0.5, pane: 'eventPane' })
 canvasRenderer.on('update', () => {
 	const ctx = (canvasRenderer as any)._ctx as CanvasRenderingContext2D
-	if (ctx) ctx.globalCompositeOperation = 'lighter'
+	if (ctx) ctx.globalCompositeOperation = 'multiply'
 })
 const fastRenderer = L.canvas({ padding: 0.5, pane: 'fastEventPane' })
+fastRenderer.on('update', () => {
+	const ctx = (fastRenderer as any)._ctx as CanvasRenderingContext2D
+	if (ctx) ctx.globalCompositeOperation = 'multiply'
+})
 
 const mapOptions = {
 	zoomControl: false,
@@ -86,7 +90,6 @@ const updateWmtsUrl = debounce((newVal: string) => {
 	// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
 }, 500)
 watch(() => timeStore.isoDatetime, updateWmtsUrl)
-
 
 watch(
 	() => store.filteringByRegion,
@@ -158,11 +161,13 @@ const cancelDrawRegion = () => {
 }
 
 const pointSelectorAdded = (event: any) => {
+	console.log('Setting point filter', store.filteringByPoint)
 	store.setLoadingDone()
 	const { lat, lng } = (event.target as L.Marker).getLatLng()
-	console.log('Set point filter', lat, lng)
+	console.log('Setting point filter to', lat, lng)
 	regionFilteredEvents.value = setFilterToPoint(lat, lng)
 	store.lastPoint = [lat, lng]
+	console.log('Set point filter to', lat, lng)
 }
 const pointSelectorMoveStarted = (event: any) => {
 	store.draggingFilter = true
@@ -218,11 +223,6 @@ watch(
 		if (eventPixelsRef.value && eventPixelsRef.value.leafletObject) {
 			eventPixelsRef.value.leafletObject.redraw()
 		}
-		
-		console.log(
-			'Time or event changed, getting current events for',
-			timeStore.selectedTime,  currentEvents.value.length, 'events'
-		)
 	},
 )
 
@@ -351,7 +351,7 @@ const addEventPanes = () => {
 				:lat-lngs="event.total_region || []"
 				:weight="0"
 				:fill="true"
-				:fill-opacity="0.025"
+				:fill-opacity="0.1"
 				:color="'rgb(151, 24, 65)'"
 				:options="{ renderer: canvasRenderer }"
 				@click="eventStore.selectEvent(event.id)"
@@ -364,7 +364,7 @@ const addEventPanes = () => {
 				:lat-lngs="getEventRegion(event)"
 				:weight="2"
 				:fill="true"
-				:fill-opacity="0.5"
+				:fill-opacity="0.1"
 				:color="scssVars.c3sblue"
 				:fill-color="eventStore.colorForEvent(event)"
 				@click="eventStore.selectEvent(event.id)"
@@ -473,7 +473,9 @@ const addEventPanes = () => {
 							type: 'range',
 							pass: 'high-pass',
 							min: 3,
-							max: eventStore.durationRange ? eventStore.durationRange[1] : 7,
+							max: eventStore.durationRange
+								? Math.min(14, eventStore.durationRange[1])
+								: 7,
 						},
 						{
 							key: 'intensity',

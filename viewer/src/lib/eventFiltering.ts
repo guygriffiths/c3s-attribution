@@ -18,6 +18,7 @@ let pixelIndexReady = false
 let dateIndexReady = false
 let globalEventsReady = false
 let lastResult: ExtremeEvent[] = []
+let lastIds: Set<string> = new Set()
 let resultReady = false
 let counts: Map<number, Array<number>> = new Map()
 
@@ -69,9 +70,10 @@ export function buildEventFilters(events: ExtremeEvent[]) {
 		for (const cb of indexBuiltTriggers) {
 			cb()
 		}
+		console.log('Event filters built')
 	}
 	pixelWorker.postMessage(events)
-
+	
 	const dateWorker = new DateWorker()
 	dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
 		dateIndex = e.data
@@ -79,6 +81,7 @@ export function buildEventFilters(events: ExtremeEvent[]) {
 		for (const cb of currentEventTriggers) {
 			cb()
 		}
+		console.log('Date filters built')
 	}
 	dateWorker.postMessage(events)
 }
@@ -94,6 +97,7 @@ export function setFilterToPoint(lat: number, lon: number): ExtremeEvent[] {
 	lastResult = (pixelIndex[packPixelToInt(lat, lon)] || []).map(
 		(idx) => _filteredEvents[idx],
 	)
+	lastIds = new Set(lastResult.map((e) => e.id))
 	resultReady = true
 	regionEventsReadyTriggers.forEach((cb) => cb())
 
@@ -192,6 +196,10 @@ export function clearFilter() {
 
 export function getFilteredEvents(): ExtremeEvent[] {
 	return lastResult
+}
+
+export function getFilteredIds(): Set<string> {
+	return lastIds
 }
 
 export function getCurrentEvents(time: Date): ExtremeEvent[] {

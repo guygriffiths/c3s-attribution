@@ -46,7 +46,7 @@ export const useStore = defineStore('events', {
 	},
 	getters: {
 		eventSelected: (state: State) => {
-			return state.selectedEventId !== null// && state.selectedEvent !== undefined
+			return state.selectedEventId !== null // && state.selectedEvent !== undefined
 		},
 		colorForEvent: (state: State) => {
 			const scale = d3
@@ -57,15 +57,25 @@ export const useStore = defineStore('events', {
 				.clamp(true)
 			// TODO Logic for configurable intensity definition.
 			return (event: ExtremeEvent) => {
-				return d3.interpolateTurbo(scale(event.peak_value || 0))
+				return d3.interpolateWarm(scale(event.peak_value || 0))
 			}
+		},
+		durationForEvent: (state: State) => {
+			return (event: ExtremeEvent) => event.duration
 		},
 		durationRange: (state: State): [number, number] => {
 			return [state.minDuration, state.maxDuration]
 		},
+		intensityForEvent: (state: State) => {
+			// TODO This should be configurable between min/max/mean, something else?
+			return (event: ExtremeEvent) => event.peak_value
+		},
 		intensityRange: (state: State): [number, number] => {
 			// TODO - Definition of intensity should be configurable
 			return [state.minIntensity, state.maxIntensity]
+		},
+		sizeForEvent: (state: State) => {
+			return (event: ExtremeEvent) => event.pixel_set?.length || 0
 		},
 		sizeRange: (state: State): [number, number] => {
 			// TODO - Definition of size should be configurable
@@ -83,13 +93,13 @@ export const useStore = defineStore('events', {
 				return
 			}
 			// if (this.selectedEvent?.id === id) {
-				if (this.selectedEventId === id) {
-					console.log('Deselecting event', id)
-					this.selectedEvent = null
-					this.selectedEventId = null
-				} else {
-					mainStore.setLoading()
-					this.selectedEventId = id
+			if (this.selectedEventId === id) {
+				console.log('Deselecting event', id)
+				this.selectedEvent = null
+				this.selectedEventId = null
+			} else {
+				mainStore.setLoading()
+				this.selectedEventId = id
 				let path = `/events/event-${id}.json`
 				const resp = await fetch(path)
 				const event = await resp.json()
@@ -134,19 +144,18 @@ export const useStore = defineStore('events', {
 				maxIntensity = -Infinity
 			let minSize = Infinity,
 				maxSize = -Infinity
-			console.time('Compute event stats')
 			for (const e of data) {
-				if (e.duration != null) {
-					minDuration = Math.min(minDuration, e.duration)
-					maxDuration = Math.max(maxDuration, e.duration)
+				if (this.durationForEvent(e) != null) {
+					minDuration = Math.min(minDuration, this.durationForEvent(e))
+					maxDuration = Math.max(maxDuration, this.durationForEvent(e))
 				}
-				if (e.peak_value != null) {
-					minIntensity = Math.min(minIntensity, e.peak_value)
-					maxIntensity = Math.max(maxIntensity, e.peak_value)
+				if (this.intensityForEvent(e) != null) {
+					minIntensity = Math.min(minIntensity, this.intensityForEvent(e))
+					maxIntensity = Math.max(maxIntensity, this.intensityForEvent(e))
 				}
-				if (e.pixel_set?.length != null) {
-					minSize = Math.min(minSize, e.pixel_set.length)
-					maxSize = Math.max(maxSize, e.pixel_set.length)
+				if (this.sizeForEvent(e) != null) {
+					minSize = Math.min(minSize, this.sizeForEvent(e))
+					maxSize = Math.max(maxSize, this.sizeForEvent(e))
 				}
 			}
 			this.minDuration = minDuration
@@ -155,13 +164,12 @@ export const useStore = defineStore('events', {
 			this.maxIntensity = maxIntensity
 			this.minSize = minSize
 			this.maxSize = maxSize
-			console.timeEnd('Compute event stats')
-			
+			console.log('Compute event stats', minSize, maxSize)
+
 			// this.events = data
 			// console.log('Stored events')
-			
+
 			buildEventFilters(data) // Kick off building the pixel index
-			console.log('Kicked off build')
 
 			this.startYear = data[0].times[0].getUTCFullYear()
 			this.endYear = data[0].times[data[0].times.length - 1].getUTCFullYear()

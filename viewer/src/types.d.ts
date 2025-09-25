@@ -7,6 +7,8 @@ declare global {
 
 	type ViewMode = 'timemachine' | 'heatmap'
 
+	type TimeReelMode = 'default' | 'timeline' | 'eventzoom' | 'overview'
+
 	interface ExtremeEvent {
 		id: string
 		times: Date[]

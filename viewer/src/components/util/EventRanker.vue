@@ -31,7 +31,7 @@ const widthScale = computed(() => {
 	return d3
 		.scaleLinear()
 		.domain(eventStore.durationRange)
-		.range([20, width.value - 40])
+		.range([12, width.value - 12])
 		.clamp(true)
 })
 const heightScale = computed(() => {
@@ -39,7 +39,7 @@ const heightScale = computed(() => {
 	return d3
 		.scaleLinear()
 		.domain(eventStore.sizeRange)
-		.range([2, 30])
+		.range([2, 20])
 		.clamp(true)
 })
 
@@ -47,7 +47,9 @@ const rankedEvents = ref<ExtremeEvent[]>([])
 watch(
 	() => props.events,
 	() => {
-		rankedEvents.value = [...(props.events || [])].sort(props.sortFunc).splice(0, props.topN)
+		rankedEvents.value = [...(props.events || [])]
+			.sort(props.sortFunc)
+			.splice(0, props.topN)
 	},
 	{ deep: false },
 )
@@ -102,37 +104,31 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 				<svg
 					width="100%"
 					ref="eventRankerSvgRef"
-					:height="32 * eventsInRanker"
+					:height="24 * eventsInRanker"
 					preserveAspectRatio="none"
 					style="pointer-events: none"
 				>
-					<transition-group
-						tag="g"
-						name="ranked-event-fx"
-						moveClass="ranked-event-fx-move"
+					<rect
+						v-for="(event, idx) in rankedEvents"
+						class="ranked-event"
+						:key="idx"
+						:x="0"
+						:y="idx * 24 + 12 - 0.5 * heightScale(event.pixel_set.length)"
+						:width="widthScale(event.duration)"
+						:height="heightScale(event.pixel_set.length)"
+						:fill="eventStore.colorForEvent(event) || scssVars.c3sred"
+					/>
+					<text
+						v-for="(event, idx) in rankedEvents"
+						:key="`text-${event.id}`"
+						class="ranked-event"
+						:x="widthScale(event.duration) + 4"
+						:y="idx * 24 + 18"
+						font-size="16"
+						fill="black"
 					>
-						<rect
-							v-for="(event, idx) in rankedEvents"
-							class="ranked-event"
-							:key="event.id"
-							:x="0"
-							:y="idx * 32 + 16 - 0.5 * heightScale(event.pixel_set.length)"
-							:width="widthScale(event.duration)"
-							:height="heightScale(event.pixel_set.length)"
-							:fill="eventStore.colorForEvent(event) || scssVars.c3sred"
-						/>
-						<text
-							v-for="(event, idx) in rankedEvents"
-							:key="`text-${event.id}`"
-							class="ranked-event"
-							:x="widthScale(event.duration) + 8"
-							:y="idx * 32 + 22"
-							font-size="16"
-							fill="black"
-						>
-							{{ idx + 1 }}
-						</text>
-					</transition-group>
+						{{ idx + 1 }}
+					</text>
 				</svg>
 			</div>
 		</div>
@@ -159,8 +155,8 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 		flex-direction: column;
 
 		.rank {
-			flex: 0 0 2rem;
-			min-height: 2rem;
+			flex: 0 0 $rankedEventHeight;
+			min-height: $rankedEventHeight;
 			background-color: $panelBg;
 			display: flex;
 			flex-direction: row;
@@ -190,38 +186,14 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 			}
 		}
 
-		$rate: $animTime;
+		$rate: $animTime * 0.5;
 		.ranked-event {
-			// transition: transform 2s linear;
 			position: relative;
 			transition:
-				transform $rate ease-out,
-				opacity $rate ease-out;
-		}
-
-		/* Leave phase */
-		.ranked-event-fx-leave-from {
-			opacity: 1;
-		}
-		.ranked-event-fx-leave-active {
-			transition: transform calc(0.5 * $rate) ease-in;
-		}
-		.ranked-event-fx-leave-to {
-			// opacity: 0;
-			opacity: 1;
-			transform: translateX(-100%);
-		}
-
-		.ranked-event-fx-enter-from {
-			opacity: 1;
-			transform: translateX(-100%);
-		}
-		.ranked-event-fx-enter-active {
-			transition: transform $rate ease-in-out calc(0.25 * $rate);
-		}
-		.ranked-event-fx-enter-to {
-			opacity: 1;
-			transform: translateX(0);
+				all $rate ease-out;
+			rx: 2;
+			stroke: black;
+			stroke-width: 0.5;
 		}
 	}
 }

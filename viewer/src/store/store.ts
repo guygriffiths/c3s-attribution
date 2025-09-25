@@ -1,5 +1,5 @@
 import * as d3 from 'd3'
-import { differenceInDays } from 'date-fns'
+import { addHours, differenceInDays } from 'date-fns'
 import { LatLng, Point } from 'leaflet'
 import { defineStore } from 'pinia'
 import { watch } from 'vue'
@@ -110,10 +110,13 @@ export const useStore = defineStore('main', {
 				deep: true,
 				immediate: false,
 			})
-			watch(() => this.viewMode, () => {
-				if (this.viewMode === 'timemachine') {
-				}
-			})
+			watch(
+				() => this.viewMode,
+				() => {
+					if (this.viewMode === 'timemachine') {
+					}
+				},
+			)
 
 			let path = `/events.jsonl`
 
@@ -140,11 +143,11 @@ export const useStore = defineStore('main', {
 							firstEventTime = new Date(startDate)
 						}
 						startDate.setHours(0, 0, 0, 0)
-						const endDate = new Date(event.times[event.times.length - 1])
+						const endDate = addHours(new Date(event.times[event.times.length - 1]), 24)
 						if (endDate > lastEventTime) {
 							lastEventTime = new Date(endDate)
 						}
-						endDate.setHours(23, 59, 59, 999)
+						
 
 						event.duration =
 							1 +
@@ -154,9 +157,12 @@ export const useStore = defineStore('main', {
 							)
 					})
 					const timeStore = useTimeStore()
-					timeStore.startTime = firstEventTime
-					timeStore.endTime = lastEventTime
-
+					timeStore.startTime = new Date(
+						Date.UTC(firstEventTime.getUTCFullYear(), 0, 1),
+					)
+					timeStore.endTime = new Date(
+						Date.UTC(lastEventTime.getUTCFullYear(), 11, 31),
+					)
 					eventStore.setEvents(data as ExtremeEvent[])
 					this.setLoadingDone()
 				})

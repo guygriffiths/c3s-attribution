@@ -18,7 +18,13 @@ h2 {
 body {
 	background-color: $bg;
 	margin: 0;
-	padding: 0;
+	padding: 0; 
+
+}
+
+.disable-transitions * {
+	transition: none !important;
+	animation: none !important;
 }
 
 select {
