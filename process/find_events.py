@@ -283,12 +283,6 @@ class EventletFactory:
         self.output_path = output_path
         self.use_dbscan = use_dbscan
 
-        self.raw_mask = (data > self.threshold) & (data > ref_data)
-
-        self.enduring_pixels = (
-            self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
-        )
-
         # Store the full thresholded mask
         if self.over_threshold:
             self.raw_mask = (
@@ -299,6 +293,10 @@ class EventletFactory:
                 (data <= self.threshold) & (data <= ref_data)
             ).values
         # print(f"Raw mask shape: {self.raw_mask.shape}")
+
+        self.enduring_pixels = (
+            self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
+        )
 
         self.times = self.data.valid_time.values  # in __init__
 
