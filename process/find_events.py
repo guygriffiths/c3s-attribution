@@ -287,16 +287,17 @@ class EventletFactory:
         if self.over_threshold:
             self.raw_mask = (
                 (data > self.threshold) & (data > ref_data)
-            ).values  # shape (T, Y, X), bool
+            )  # shape (T, Y, X), bool
         else:
             self.raw_mask = (
                 (data <= self.threshold) & (data <= ref_data)
-            ).values
+            )
         # print(f"Raw mask shape: {self.raw_mask.shape}")
 
         self.enduring_pixels = (
             self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
         )
+        self.raw_mask = self.raw_mask.values  # convert to NumPy array for speed
 
         self.times = self.data.valid_time.values  # in __init__
 
