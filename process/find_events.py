@@ -735,11 +735,11 @@ def main():
 
     # for dbscan in [False, True]:
     #     for perc in [98, 99]:
-    stat = "max"
-    perc = "99.0"
-    thresh = 25
-    nr = 5
-    heatwave = True
+    stat = "mean"
+    perc = "1.0"
+    thresh = 2
+    nr = 9
+    heatwave = False
 
     data_var, ref_data, land_sea_mask = load_data(
         f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
@@ -779,7 +779,7 @@ def main():
 if __name__ == "__main__":
     import pandas as pd
 
-    # main()
+    main()
 
     # slice = np.array(
     #     [
