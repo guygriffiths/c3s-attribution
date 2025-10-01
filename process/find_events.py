@@ -457,13 +457,13 @@ class EventletFactory:
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
         event_id = get_id(all_times[0], centroids[0])
-        peak_values = to_serialisable(
+        max_values = to_serialisable(
             [
                 np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
                 for i in range(len(ev.slices))
             ]
         )
-        peak_value = to_serialisable(np.max(peak_values)) if peak_values else None
+        max_value = to_serialisable(np.max(max_values)) if max_values else None
         mean_values = to_serialisable(
             [
                 np.mean(ev.values[i]) if len(ev.values[i]) > 0 else None
@@ -473,6 +473,13 @@ class EventletFactory:
         mean_value = (
             to_serialisable(np.mean(np.concatenate(ev.values))) if mean_values else None
         )
+        min_values = to_serialisable(
+            [
+                np.min(ev.values[i]) if len(ev.values[i]) > 0 else None
+                for i in range(len(ev.slices))
+            ]
+        )
+        min_value = to_serialisable(np.min(min_values)) if min_values else None
 
         ocean_only = False
         if self.land_sea_mask is not None:
@@ -526,49 +533,55 @@ class EventletFactory:
         unique_coords, inverse_idx = np.unique(coords_view, return_inverse=True)
 
         # compute per-pixel max
-        pixel_peak_values = np.full(len(unique_coords), -np.inf, dtype=all_values.dtype)
-        # print(all_coords.shape, all_values.shape, inverse_idx.shape, pixel_peak_values.shape)
-        np.maximum.at(pixel_peak_values, inverse_idx, all_values)
+        pixel_max_values = np.full(len(unique_coords), -np.inf, dtype=all_values.dtype)
+        # print(all_coords.shape, all_values.shape, inverse_idx.shape, pixel_max_values.shape)
+        np.maximum.at(pixel_max_values, inverse_idx, all_values)
 
         # Convert back to normal ndarray
         unique_coords = unique_coords.view(all_coords.dtype).reshape(
             -1, all_coords.shape[1]
         )
         pixel_set = unique_coords.tolist()
+        total_region_shape = safe_alphashape(unique_coords, alpha=1.0)
 
         full_event = {
             "id": event_id,
             "times": [formatTime(t) for t in all_times],
             "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
-            "total_region": get_region(safe_alphashape(unique_coords, alpha=1.0)),
+            "total_region": get_region(total_region_shape),
             "slices": to_serialisable(ev.slices),
             "values": to_serialisable(ev.values),
             "centroids": to_serialisable(centroids),
             "bbox": to_serialisable(bbox),
-            "total_area": float(
-                unary_union(
-                    [
-                        ev.hull(i)
-                        for i in range(len(ev.slices))
-                        if ev.hull(i) is not None
-                    ]
-                ).area
-            ),
+            "total_area": total_region_shape.area if total_region_shape else 0,
             "areas": to_serialisable(
                 [
                     ev.hull(i).area if ev.hull(i) is not None else 0
                     for i in range(len(ev.slices))
                 ]
             ),
-            "peak_values": peak_values,
-            "peak_value": peak_value,
+            "max_values": max_values,
+            "max_value": max_value,
             "mean_values": mean_values,
             "mean_value": mean_value,
+            "min_values": min_values,
+            "min_value": min_value,
             "ocean_only": ocean_only,
             "pixel_set": pixel_set,
             "pixel_count": len(pixel_set),
-            "pixel_peak_values": to_serialisable(pixel_peak_values),
+            "pixel_max_values": to_serialisable(pixel_max_values),
         }
+
+        def packPixelToInt(lat: float, lon: float) -> int:
+            iLat = int(np.round(lat * 4))
+            while lon < -180:
+                lon += 360
+            while lon > 180:
+                lon -= 360
+            iLon = int(np.round(lon * 4))
+            return (iLat << 16) | (iLon & 0xffff)
+
+
 
         catalogue_event = {
             "id": full_event["id"],
@@ -576,17 +589,12 @@ class EventletFactory:
             "regions": full_event["regions"],
             "total_region": full_event["total_region"],
             "bbox": full_event["bbox"],
-            "peak_value": (
-                np.max(full_event["peak_values"]) if full_event["peak_values"] else None
-            ),
-            "mean_value": (
-                np.mean(full_event["mean_values"])
-                if full_event["mean_values"]
-                else None
-            ),
+            "max_value": full_event["max_value"],
+            "mean_value": full_event["mean_value"],
+            "min_value": full_event["min_value"],
             "total_area": full_event["total_area"],
             "ocean_only": ocean_only,
-            "pixel_set": pixel_set,
+            "pixel_set": [packPixelToInt(*coord) for coord in pixel_set],
         }
 
         with open(f"{self.output_path}/events.jsonl", "a") as f:
