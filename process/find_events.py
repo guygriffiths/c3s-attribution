@@ -268,6 +268,7 @@ class EventletFactory:
         neighbor_radius=4.5,
         output_path="/data/output-debug/events",
         use_dbscan=False,
+        last_slice=None
     ):
         self.data = data
         self.threshold = threshold
@@ -301,6 +302,23 @@ class EventletFactory:
         self.raw_mask = self.raw_mask.values  # convert to NumPy array for speed
 
         self.times = self.data.valid_time.values  # in __init__
+
+        # If we have a last_slice, load it
+        if last_slice:
+            print(f"Resuming from last slice at {last_slice['time']}")
+            self.active = [
+                Eventlet(
+                    pd.to_datetime(ev["times"][0]),
+                    np.vstack(ev["slices"]),
+                    np.hstack(ev["values"]),
+                )
+                for ev in last_slice.get("active_events", [])
+            ]
+            if self.active:
+                self.oldest_active_time = min(ev.earliest_time() for ev in self.active)
+            else:
+                self.oldest_active_time = None
+            print(f"Resumed {len(self.active)} active events")
 
     def process_slice(self, time):
         # print(f"Processing slice at {time}")
@@ -380,6 +398,15 @@ class EventletFactory:
         self.oldest_active_time = min(
             (ev.earliest_time() for ev in self.active), default=None
         )
+
+        # Write out last_slice.json. This is used to resume processing from a point.
+        # Useful for interrupted runs and operation on rolling data.
+        last_slice = {
+            "time": time,
+            "active_events": [ev.to_dict() for ev in self.active]
+        }
+        with open("last_slice.json", "w") as f:
+            json.dump(last_slice, f)
 
     def flush(self):
         for ev in self.active:
@@ -580,8 +607,6 @@ class EventletFactory:
                 lon -= 360
             iLon = int(np.round(lon * 4))
             return (iLat << 16) | (iLon & 0xffff)
-
-
 
         catalogue_event = {
             "id": full_event["id"],
