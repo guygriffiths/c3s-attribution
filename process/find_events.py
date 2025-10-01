@@ -268,7 +268,8 @@ class EventletFactory:
         neighbor_radius=4.5,
         output_path="/data/output-debug/events",
         use_dbscan=False,
-        last_slice=None
+        last_slice=None,
+        eventtype='heat',
     ):
         self.data = data
         self.threshold = threshold
@@ -284,6 +285,7 @@ class EventletFactory:
         self.radius = neighbor_radius
         self.output_path = output_path
         self.use_dbscan = use_dbscan
+        self.eventtype = eventtype
 
         # Store the full thresholded mask
         if self.over_threshold:
@@ -483,7 +485,7 @@ class EventletFactory:
         lats, lons = zip(*all_coords)
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
-        event_id = get_id(all_times[0], centroids[0])
+        event_id = get_id(self.eventtype, all_times[0], centroids[0])
         max_values = to_serialisable(
             [
                 np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
@@ -573,6 +575,7 @@ class EventletFactory:
 
         full_event = {
             "id": event_id,
+            "event_type": self.eventtype,
             "times": [formatTime(t) for t in all_times],
             "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
             "total_region": get_region(total_region_shape),
@@ -610,6 +613,7 @@ class EventletFactory:
 
         catalogue_event = {
             "id": full_event["id"],
+            "event_type": self.eventtype,
             "times": full_event["times"],
             "regions": full_event["regions"],
             "total_region": full_event["total_region"],
@@ -680,7 +684,7 @@ def stable_cluster_hash(time, centroid):
     return int.from_bytes(hash_bytes[:4], byteorder="big")  # 32 bits
 
 
-def get_id(time, centroid):
+def get_id(eventtype, time, centroid):
     """
     Generate a stable ID for an event based on time and centroid.
     This is a simple hash function that combines the time and centroid coordinates.
@@ -693,7 +697,7 @@ def get_id(time, centroid):
     lat_code = int(round((lat + 90) * 1000))  # 0 → 180000 range
     lon_code = int(round((lon + 180) * 1000))  # 0 → 360000 range
 
-    return f"{time.strftime('%Y%m%d')}{lat_code:06d}{lon_code:06d}"
+    return f"{eventtype}{time.strftime('%Y%m%d')}{lat_code:06d}{lon_code:06d}"
 
 
 def downstream_worker(q, clusterer):
@@ -747,6 +751,11 @@ def main():
     os.makedirs(out_path, exist_ok=True)
     os.makedirs(f"{out_path}/events", exist_ok=True)
 
+    last_slice = None
+    if os.path.exists("last_slice.json"):
+        with open("last_slice.json", "r") as f:
+            last_slice = json.load(f)
+
     factory = EventletFactory(
         data_var,
         ref_data=ref_data,
@@ -756,6 +765,8 @@ def main():
         neighbor_radius=nr,
         output_path=out_path,
         use_dbscan=False,
+        last_slice=last_slice,
+        type='hot' if heatwave else 'cold',
     )
 
     for i in range(time_dim.size):
