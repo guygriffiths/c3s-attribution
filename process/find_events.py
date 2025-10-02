@@ -201,7 +201,7 @@ class Eventlet:
             idx = self.times.index(time)
             self.slices[idx] = np.vstack((self.slices[idx], coords_arr))
             self.values[idx] = np.concatenate((self.values[idx], values_arr))
-        else:
+    else:
             self.times.append(time)
             self.slices.append(coords_arr)
             self.values.append(values_arr)
@@ -269,7 +269,7 @@ class EventletFactory:
         output_path="/data/output-debug/events",
         use_dbscan=False,
         last_slice=None,
-        eventtype='heat',
+        eventtype='hot',
     ):
         self.data = data
         self.threshold = threshold
@@ -404,7 +404,7 @@ class EventletFactory:
         # Write out last_slice.json. This is used to resume processing from a point.
         # Useful for interrupted runs and operation on rolling data.
         last_slice = {
-            "time": time,
+            "time": formatTime(time),
             "active_events": [ev.to_dict() for ev in self.active]
         }
         with open("last_slice.json", "w") as f:
@@ -735,11 +735,11 @@ def main():
 
     # for dbscan in [False, True]:
     #     for perc in [98, 99]:
-    stat = "mean"
-    perc = "1.0"
-    thresh = 2
+    stat = "max"
+    perc = "99.0"
+    thresh = 28
     nr = 9
-    heatwave = False
+    heatwave = True
 
     data_var, ref_data, land_sea_mask = load_data(
         f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
@@ -766,7 +766,7 @@ def main():
         output_path=out_path,
         use_dbscan=False,
         last_slice=last_slice,
-        type='hot' if heatwave else 'cold',
+        eventtype='hot' if heatwave else 'cold',
     )
 
     for i in range(time_dim.size):
