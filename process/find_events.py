@@ -14,8 +14,8 @@ from datetime import timedelta
 from shapely.geometry import MultiPoint
 from shapely.ops import unary_union
 import json
-import queue
 import alphashape
+import pickle
 
 
 def walk_scan(D_coo: coo_matrix, eps: float, min_samples: int = 1):
@@ -201,10 +201,10 @@ class Eventlet:
             idx = self.times.index(time)
             self.slices[idx] = np.vstack((self.slices[idx], coords_arr))
             self.values[idx] = np.concatenate((self.values[idx], values_arr))
-    else:
-            self.times.append(time)
-            self.slices.append(coords_arr)
-            self.values.append(values_arr)
+        else:
+                self.times.append(time)
+                self.slices.append(coords_arr)
+                self.values.append(values_arr)
 
         # Keep times + slices sorted
         sorted_triplets = sorted(
@@ -407,8 +407,8 @@ class EventletFactory:
             "time": formatTime(time),
             "active_events": [ev.to_dict() for ev in self.active]
         }
-        with open("last_slice.json", "w") as f:
-            json.dump(last_slice, f)
+        with open("last_slice.pkl", "wb") as f:
+            pickle.dump(last_slice, f)
 
     def flush(self):
         for ev in self.active:
@@ -752,9 +752,9 @@ def main():
     os.makedirs(f"{out_path}/events", exist_ok=True)
 
     last_slice = None
-    if os.path.exists("last_slice.json"):
-        with open("last_slice.json", "r") as f:
-            last_slice = json.load(f)
+    if os.path.exists("last_slice.pkl"):
+        with open("last_slice.pkl", "rb") as f:
+            last_slice = pickle.load(f)
 
     factory = EventletFactory(
         data_var,
