@@ -1,5 +1,4 @@
 // lib/renderer.ts
-import * as d3 from 'd3'
 import { differenceInDays } from 'date-fns'
 import L from 'leaflet'
 import { h } from 'vue'
@@ -129,6 +128,8 @@ export const getCanvasFromCache = (
 	viewMode: ViewMode,
 	intensityRange: [number, number],
 	eventHeatmapRef: any | null,
+	colorForValue: (v: number) => string,
+	intensityForValue: (v: number) => number,
 ) => {
 	if (tileImageCache.has(key.key)) {
 		// console.log('Cache hit for tile:', key.key)
@@ -154,17 +155,11 @@ export const getCanvasFromCache = (
 		const selectedIndex =
 			differenceInDays(selectedTime, selectedEvent?.times[0]!) || 0
 		latLonValues = selectedEvent?.slices[selectedIndex] || []
-		dataValues = selectedEvent?.values[selectedIndex] || []
+		dataValues = selectedEvent?.values[selectedIndex].map(intensityForValue) || []
 	} else {
 		latLonValues = selectedEvent?.pixel_set || []
-		dataValues = selectedEvent?.pixel_peak_values || []
+		dataValues = selectedEvent?.pixel_peak_values.map(intensityForValue) || []
 	}
-
-	const scale = d3
-		.scaleLinear()
-		.domain(intensityRange)
-		.range([0, 1])
-		.clamp(true)
 
 	const geometry = getTileGeometry(key.coords, layer.leafletObject)
 
@@ -176,8 +171,7 @@ export const getCanvasFromCache = (
 		const geom = geometry(latLon[0], latLon[1])
 		if (!geom) continue
 
-		const color = d3.interpolateMagma(scale(dataValue))
-		ctx.fillStyle = color
+		ctx.fillStyle = colorForValue(dataValue)
 		ctx.fillRect(geom.x, geom.y, geom.w, geom.h)
 	}
 
@@ -194,6 +188,8 @@ export const drawEventTile =
 		viewMode: ViewMode,
 		intensityRange: [number, number],
 		eventHeatmapRef: any | null,
+		colorForValue: (v: number) => string,
+		intensityForValue: (v: number) => number,
 	) =>
 	() => {
 		const key = eventTileKey(
@@ -203,6 +199,8 @@ export const drawEventTile =
 				: 0,
 			selectedEvent?.id || '0',
 		)
+
+		console.log('Drawing event tile', intensityRange, intensityForValue, colorForValue)
 
 		const canvas = document.createElement('canvas')
 		canvas.width = TILE_SIZE
@@ -216,6 +214,8 @@ export const drawEventTile =
 			viewMode,
 			intensityRange,
 			eventHeatmapRef,
+			colorForValue,
+			intensityForValue,
 		)
 
 		if (ctx !== null) {

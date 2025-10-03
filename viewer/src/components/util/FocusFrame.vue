@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useStore } from '@/store/store'
+import { useStore } from '@/store/eventStore'
 import { faClose } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
-const store = useStore()
+const eventStore = useStore()
 const props = defineProps<{
 	active: boolean
 }>()
 const emit = defineEmits(['close'])
+
+const eventType = computed(() => eventStore.selectedEvent?.event_type || 'unknown')
 </script>
 
 <template>
-	<div class="focus-frame" :class="{ active: props.active }">
+	<div class="focus-frame" :class="{ active: props.active, [eventType]: true }">
 		<div class="top">
 			<button @click="emit('close')">
 				<FontAwesomeIcon :icon="faClose" />
@@ -49,7 +51,25 @@ const emit = defineEmits(['close'])
 	.left,
 	.right {
 		position: absolute;
+		background-color: rgba(100,100,100,0.5);
 		background-color: $c3sred;
+	}
+	
+	.hot {
+		.top,
+		.bottom,
+		.left,
+		.right {
+			background-color: $c3sred;
+		}
+	}
+	.cold {
+		.top,
+		.bottom,
+		.left,
+		.right {
+			background-color: $c3sblue;
+		}
 	}
 
 	.top,

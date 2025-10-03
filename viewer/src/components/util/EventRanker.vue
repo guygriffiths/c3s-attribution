@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import * as d3 from 'd3'
-import { onRegionEventsReady } from '@/lib/eventFiltering'
-const store = useStore()
 const eventStore = useEventStore()
 
+const ROW_SIZE = 24
 const props = defineProps<{
 	events: ExtremeEvent[] // The events to rank
 	// The metric to rank by
@@ -17,6 +15,7 @@ const props = defineProps<{
 const eventRankerSvgRef = ref<SVGSVGElement | null>(null)
 const scrollerRef = ref<HTMLDivElement | null>(null)
 const width = ref(300)
+const height = ref(ROW_SIZE * 10)
 
 watch(eventRankerSvgRef, (el) => {
 	if (!el) return
@@ -26,12 +25,20 @@ watch(eventRankerSvgRef, (el) => {
 	ro.observe(el)
 })
 
+watch(scrollerRef, (el) => {
+	if (!el) return
+	const ro = new ResizeObserver(([entry]) => {
+		height.value = entry.contentRect.height
+	})
+	ro.observe(el)
+})
+
 const widthScale = computed(() => {
 	// Find the max duration in the currently filtered events
 	return d3
 		.scaleLinear()
 		.domain(eventStore.durationRange)
-		.range([12, width.value - 12])
+		.range([12, width.value - 28])
 		.clamp(true)
 })
 const heightScale = computed(() => {
@@ -104,7 +111,7 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 				<svg
 					width="100%"
 					ref="eventRankerSvgRef"
-					:height="24 * eventsInRanker"
+					:height="ROW_SIZE * eventsInRanker"
 					preserveAspectRatio="none"
 					style="pointer-events: none"
 				>
@@ -112,20 +119,22 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 						v-for="(event, idx) in rankedEvents"
 						class="ranked-event"
 						:key="idx"
-						:x="0"
-						:y="idx * 24 + 12 - 0.5 * heightScale(event.pixel_set.length)"
-						:width="widthScale(event.duration)"
-						:height="heightScale(event.pixel_set.length)"
+						x="0"
+						y="0"
+						:transform="`translate(0, ${idx * ROW_SIZE + 0.5 * ROW_SIZE - 0.5 * heightScale(eventStore.sizeForEvent(event) || 0)})`"
+						:width="widthScale(eventStore.durationForEvent(event) || 0)"
+						:height="heightScale(eventStore.sizeForEvent(event) || 0)"
 						:fill="eventStore.colorForEvent(event) || scssVars.c3sred"
 					/>
 					<text
 						v-for="(event, idx) in rankedEvents"
-						:key="`text-${event.id}`"
+						:key="`text-${idx}`"
 						class="ranked-event"
-						:x="widthScale(event.duration) + 4"
-						:y="idx * 24 + 18"
-						font-size="16"
-						fill="black"
+						:class="event.event_type"
+						x="0"
+						y="0"
+						:transform="`translate(${widthScale(event.duration) + 4}, ${idx * ROW_SIZE + 18})`"
+						font-size="14"
 					>
 						{{ idx + 1 }}
 					</text>
@@ -190,10 +199,20 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 		.ranked-event {
 			position: relative;
 			transition:
+				x $rate ease-out,
 				all $rate ease-out;
 			rx: 2;
 			stroke: black;
 			stroke-width: 0.5;
+
+			&.hot {
+				stroke-width: 0;
+				fill: $c3sred !important;
+			}
+			&.cold {
+				stroke-width: 0;
+				fill: $c3sblue !important;
+			}
 		}
 	}
 }

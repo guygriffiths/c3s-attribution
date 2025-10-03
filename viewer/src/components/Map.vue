@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { debounce } from '@/lib/utils'
 import { useStore } from '@/store/store'
-import { useStore as useEventStore } from '@/store/eventStore'
+import {
+	colorForValue,
+	intensityForValue,
+	useStore as useEventStore,
+} from '@/store/eventStore'
 import {
 	LControl,
 	LControlScale,
@@ -27,6 +31,7 @@ import { Feature, MultiPolygon, Polygon } from 'geojson'
 import FilterPanel from './FilterPanel.vue'
 import RegionControl from './util/RegionControl.vue'
 import { useStore as useTimeStore } from '@/store/timeStore'
+import * as d3 from 'd3'
 
 const store = useStore()
 const timeStore = useTimeStore()
@@ -49,17 +54,11 @@ import {
 	onRegionEventsReady,
 	onCurrentEventsReady,
 } from '@/lib/eventFiltering'
-// create a single canvas renderer for all polygons
-const canvasRenderer = L.canvas({ padding: 0.5, pane: 'eventPane' })
-canvasRenderer.on('update', () => {
-	const ctx = (canvasRenderer as any)._ctx as CanvasRenderingContext2D
-	if (ctx) ctx.globalCompositeOperation = 'multiply'
-})
+import EventTypeToggle from './util/EventTypeToggle.vue'
+// create a single canvas renderer for the heatmap
+const heatmapRenderer = L.canvas({ padding: 0.5, pane: 'eventPane' })
+// create a single canvas renderer for the rapidly-changing filter events
 const fastRenderer = L.canvas({ padding: 0.5, pane: 'fastEventPane' })
-fastRenderer.on('update', () => {
-	const ctx = (fastRenderer as any)._ctx as CanvasRenderingContext2D
-	if (ctx) ctx.globalCompositeOperation = 'multiply'
-})
 
 const mapOptions = {
 	zoomControl: false,
@@ -73,7 +72,7 @@ const zoom = ref(2)
 
 const bgLayer = {
 	name: 'Stadia OSM Bright',
-	url: 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}{r}.png',
+	url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
 	attribution:
 		'&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
 }
@@ -89,7 +88,6 @@ const updateWmtsUrl = debounce((newVal: string) => {
 	)
 	// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
 }, 500)
-watch(() => timeStore.isoDatetime, updateWmtsUrl)
 
 watch(
 	() => store.filteringByRegion,
@@ -123,13 +121,15 @@ onCurrentEventsReady(() => {
 })
 const eventPointFilter = ref<[number, number] | null>(null)
 const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
-const regionFilteredEvents = ref([] as ExtremeEvent[])
+let regionFilteredEvents = [] as ExtremeEvent[]
 const globalHeatmapEvents = ref([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
 	// Triggered when the global events have changed.
 	// This is on first load, or when any of the high-level filters change
 	// @ts-ignore
 	globalHeatmapEvents.value = getGlobalFilteredEvents()
+	// @ts-ignore
+	heatmapRenderer._update()
 })
 
 const drawRegion = () => {
@@ -149,7 +149,9 @@ const drawRegion = () => {
 		eventRegionFilter.value = layer.toGeoJSON() as Feature<
 			Polygon | MultiPolygon
 		>
-		regionFilteredEvents.value = setFilterToRegion(eventRegionFilter.value)
+		regionFilteredEvents = setFilterToRegion(eventRegionFilter.value)
+		// @ts-ignore
+		fastRenderer._update()
 		store.regionFilterReady = true
 		store.setLoadingDone()
 	})
@@ -157,7 +159,6 @@ const drawRegion = () => {
 const cancelDrawRegion = () => {
 	drawControl.value.disable()
 	eventRegionFilter.value = null
-	clearFilter()
 }
 
 const pointSelectorAdded = (event: any) => {
@@ -165,7 +166,9 @@ const pointSelectorAdded = (event: any) => {
 	store.setLoadingDone()
 	const { lat, lng } = (event.target as L.Marker).getLatLng()
 	console.log('Setting point filter to', lat, lng)
-	regionFilteredEvents.value = setFilterToPoint(lat, lng)
+	regionFilteredEvents = setFilterToPoint(lat, lng)
+	// @ts-ignore
+	fastRenderer._update()
 	store.lastPoint = [lat, lng]
 	console.log('Set point filter to', lat, lng)
 }
@@ -179,7 +182,9 @@ const updatePointSelector = (event: LeafletMouseEvent) => {
 	rafId = requestAnimationFrame(() => {
 		const { lat, lng } = (event.target as L.Marker).getLatLng()
 		setFilterToPoint(lat, lng)
-		regionFilteredEvents.value = getFilteredEvents()
+		regionFilteredEvents = getFilteredEvents()
+		// @ts-ignore
+		fastRenderer._update()
 	})
 }
 
@@ -187,7 +192,9 @@ const pointSelectorSettled = (event: any) => {
 	if (mapRef.value) {
 		const { lat, lng } = (event.target as L.Marker).getLatLng()
 		setFilterToPoint(lat, lng)
-		regionFilteredEvents.value = getFilteredEvents()
+		regionFilteredEvents = getFilteredEvents()
+		// @ts-ignore
+		fastRenderer._update()
 		store.lastPoint = [lat, lng]
 		store.draggingFilter = false
 		// TODO pop up an auto-zoom button with a countdown. Two options - auto zoom in 3 seconds, or click to zoom now. Pick up the marker to cancel the zoom.
@@ -230,9 +237,6 @@ watch(
 	() => timeStore.selectedTime,
 	(newVal) => {
 		currentEvents.value = getCurrentEvents(newVal)
-		if (store.viewMode === 'heatmap') {
-			globalHeatmapEvents.value = getGlobalFilteredEvents()
-		}
 		if (wmtsUrl.value) {
 			updateWmtsUrl(newVal.toISOString().split('T')[0])
 		}
@@ -240,22 +244,18 @@ watch(
 )
 
 watch(
-	() => eventStore.selectedEvent,
-	(event) => {
-		if (!event || !map.value) return
-		map.value.fitBounds(
-			[
-				[event.bbox[0], event.bbox[1]],
-				[event.bbox[2], event.bbox[3]],
-			],
-			{
-				paddingTopLeft: [64, 64],
-				paddingBottomRight: [32, map.value.getSize().y * 0.5 + 32],
-				maxZoom: 12,
+	() => [eventStore.coldEventsOn, eventStore.hotEventsOn],
+	() => {
+		if (store.viewMode === 'heatmap') {
+			globalHeatmapEvents.value = getGlobalFilteredEvents()
+			// @ts-ignore
+			heatmapRenderer._update()
+			if (store.filteringByPoint || store.filteringByRegion) {
+				regionFilteredEvents = getFilteredEvents()
 				// @ts-ignore
-				duration: scssVars.animTime,
-			},
-		)
+				fastRenderer._update()
+			}
+		}
 	},
 	{ immediate: true },
 )
@@ -265,21 +265,49 @@ watch(
 	(newVal) => {
 		if (newVal === 'heatmap') {
 			wmtsUrl.value = ''
+			globalHeatmapEvents.value = getGlobalFilteredEvents()
+			// @ts-ignore
+			heatmapRenderer._update()
+			if (store.filteringByPoint || store.filteringByRegion) {
+				regionFilteredEvents = getFilteredEvents()
+				// @ts-ignore
+				fastRenderer._update()
+			}
 		} else {
 			wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${timeStore.isoDatetime}`
 		}
 	},
 )
 
-const renderTile = (props: any) =>
-	drawEventTile(
+const renderTile = (props: any) => {
+	const cScale = d3
+		.scaleLinear()
+		.domain([
+			intensityForValue(
+				eventStore.selectedEvent?.min_value,
+				eventStore.selectedEvent?.event_type === 'hot',
+			),
+			intensityForValue(
+				eventStore.selectedEvent?.max_value,
+				eventStore.selectedEvent?.event_type === 'hot',
+			),
+		])
+		.range([0, 1])
+	return drawEventTile(
 		props,
 		eventStore.selectedEvent,
 		timeStore.selectedTime,
 		store.viewMode,
-		eventStore.intensityRange,
+		eventStore.selectedEvent?.event_type == 'hot'
+			? eventStore.heatIntensityRange
+			: eventStore.coldIntensityRange,
 		eventPixelsRef.value,
+		(v: number) =>
+			colorForValue(v, eventStore.selectedEvent?.event_type === 'hot', cScale),
+		(v: number) =>
+			intensityForValue(v, eventStore.selectedEvent?.event_type === 'hot'),
 	)
+}
 
 const addEventPanes = () => {
 	const map = mapRef.value?.leafletObject as LeafletMap
@@ -293,12 +321,123 @@ const addEventPanes = () => {
 	const pane = map.getPane('eventPane')!
 	// set zIndex: just under overlay (z=400)
 	pane.style.zIndex = '380'
+	heatmapRenderer.addTo(map)
+	heatmapRenderer.on('update', () => {
+		// TODO - add pixel accurate method?
+		const ctx = (heatmapRenderer as any)._ctx as CanvasRenderingContext2D
+		if (!ctx) return
+
+		ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+
+		ctx.globalCompositeOperation = 'multiply'
+		for (const event of globalHeatmapEvents.value) {
+			// ctx.globalCompositeOperation = event.event_type === 'hot' ? 'multiply' : 'lighten'
+			ctx.beginPath()
+			for (const ring of event.total_region || []) {
+				// @ts-ignore
+				ring.forEach(([lat, lng], i) => {
+					// @ts-ignore
+					const point = heatmapRenderer._map.latLngToLayerPoint([lat, lng])
+					if (i === 0) ctx.moveTo(point.x, point.y)
+					else ctx.lineTo(point.x, point.y)
+				})
+				// @ts-ignore
+				ring.forEach(([lat, lng], i) => {
+					// @ts-ignore
+
+					const point = heatmapRenderer._map.latLngToLayerPoint([
+						lat,
+						lng - 360,
+					])
+					if (i === 0) ctx.moveTo(point.x, point.y)
+					else ctx.lineTo(point.x, point.y)
+				})
+				// @ts-ignore
+				ring.forEach(([lat, lng], i) => {
+					// @ts-ignore
+
+					const point = heatmapRenderer._map.latLngToLayerPoint([
+						lat,
+						lng + 360,
+					])
+					if (i === 0) ctx.moveTo(point.x, point.y)
+					else ctx.lineTo(point.x, point.y)
+				})
+			}
+			ctx.closePath()
+			// const alpha = Math.min(0.25, Math.max(0.1
+			ctx.fillStyle = (
+				event.event_type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
+			)
+				.replace(')', event.event_type === 'hot' ? ',0.1)' : ',0.1)')
+				.replace('rgb', 'rgba')
+			ctx.fill()
+		}
+	})
 
 	// create a pane just below overlayPane
 	map.createPane('fastEventPane')
 	const fastPane = map.getPane('fastEventPane')!
 	// set zIndex: just under overlay (z=400)
 	fastPane.style.zIndex = '390'
+	fastRenderer.addTo(map)
+	fastRenderer.on('update', () => {
+		const ctx = (fastRenderer as any)._ctx as CanvasRenderingContext2D
+		if (!ctx) return
+
+		ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+		ctx.globalCompositeOperation = 'multiply'
+
+		for (const event of regionFilteredEvents) {
+			ctx.beginPath()
+			for (const ring of event.total_region || []) {
+				// @ts-ignore
+				ring.forEach(([lat, lng], i) => {
+					// @ts-ignore
+					const point = fastRenderer._map.latLngToLayerPoint([lat, lng])
+					if (i === 0) ctx.moveTo(point.x, point.y)
+					else ctx.lineTo(point.x, point.y)
+				})
+			}
+			for (const ring of event.total_region || []) {
+				// @ts-ignore
+				ring.forEach(([lat, lng], i) => {
+					// @ts-ignore
+					const point = fastRenderer._map.latLngToLayerPoint([lat, lng + 360])
+					if (i === 0) ctx.moveTo(point.x, point.y)
+					else ctx.lineTo(point.x, point.y)
+				})
+			}
+			for (const ring of event.total_region || []) {
+				// @ts-ignore
+				ring.forEach(([lat, lng], i) => {
+					// @ts-ignore
+					const point = fastRenderer._map.latLngToLayerPoint([lat, lng - 360])
+					if (i === 0) ctx.moveTo(point.x, point.y)
+					else ctx.lineTo(point.x, point.y)
+				})
+			}
+			ctx.closePath()
+			const alpha = Math.min(0.25, Math.max(0.1, 1000 / getEventCount()))
+			ctx.fillStyle = (
+				event.event_type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
+			)
+				.replace(')', `,${alpha})`)
+				.replace('rgb', 'rgba')
+			ctx.fill()
+		}
+	})
+}
+
+const shifted = (region: [number, number][]) => {
+	if (!region?.length) return []
+	if (region[0][1] >= 0) {
+		// All points are positive longitude, so shift left
+		return region.map((coord) => [coord[0], coord[1] - 360])
+	} else {
+		// All points are negative longitude, so shift right
+		return region.map((coord) => [coord[0], coord[1] + 360])
+	}
 }
 </script>
 
@@ -312,6 +451,8 @@ const addEventPanes = () => {
 					(store.regionFilterReady && store.filteringByRegion)),
 			dragging: store.draggingFilter,
 			focussed: store.isFocused,
+			heatmap: store.viewMode === 'heatmap',
+			timemachine: store.viewMode === 'timemachine',
 		}"
 	>
 		<LMap
@@ -342,74 +483,27 @@ const addEventPanes = () => {
 			></LTileLayer>
 
 			<!-- Events -->
-			<!-- All of the "current" events -->
-			<!-- This could just be all events if we're in heatmap mode -->
+			<!-- Current events as polygons -->
 			<LPolygon
-				v-if="store.viewMode === 'heatmap'"
-				v-for="event of globalHeatmapEvents"
-				:key="`hm-${event.id}`"
-				:lat-lngs="event.total_region || []"
-				:weight="0"
-				:fill="true"
-				:fill-opacity="0.1"
-				:color="'rgb(151, 24, 65)'"
-				:options="{ renderer: canvasRenderer }"
-				@click="eventStore.selectEvent(event.id)"
-			>
-			</LPolygon>
-			<LPolygon
-				v-else
+				v-if="store.viewMode === 'timemachine'"
 				v-for="event in currentEvents"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event)"
-				:weight="2"
+				:weight="1"
 				:fill="true"
-				:fill-opacity="0.1"
-				:color="scssVars.c3sblue"
+				:fill-opacity="1"
+				:color="event.event_type == 'hot' ? scssVars.c3sred : scssVars.c3sblue"
 				:fill-color="eventStore.colorForEvent(event)"
 				@click="eventStore.selectEvent(event.id)"
 			>
 			</LPolygon>
-			<!-- Fast filter events. We want to update these while dragging, so they need to be fast -->
-			<LPolygon
-				v-if="store.viewMode === 'heatmap'"
-				v-for="event in regionFilteredEvents"
-				:key="event.id"
-				:lat-lngs="event.total_region || []"
-				:weight="0"
-				:fill="true"
-				:fill-opacity="Math.min(0.8, Math.max(0.05, 1 / getEventCount()))"
-				:color="scssVars.c3sred"
-				:options="{ renderer: fastRenderer }"
-			>
-			</LPolygon>
-			<!-- When an event is selected, draw a ghost trail of its regions over time -->
-			<!-- <LPolygon
-				v-if="store.viewMode !== 'heatmap' && eventStore.eventSelected"
-				v-for="(region, idx) in eventStore.selectedEvent!.regions"
-				:key="idx"
-				:lat-lngs="region"
-				:weight="1"
-				:fill="false"
-				:opacity="
-					eventStore.selectedEvent
-						? getZeitgeistOpacity(
-								Math.abs(
-									differenceInDays(
-										timeStore.selectedTime,
-										eventStore.selectedEvent.times[idx],
-									),
-								),
-							)
-						: 0
-				"
-				:color="eventStore.selectedEvent?.color || scssVars.c3sred"
-				@click="selectEvent(eventStore.selectedEvent?.id!)"
-			>
-			</LPolygon> -->
+			<!-- Heatmap and fast filter events have now moved to their own renderers. They are blisteringly fast -->
+			<!-- They were previously loops of LPolygon components, like this, but it proved too slo -->
+
 			<!-- Event pixel values -->
 			<!-- Uses a custom grid layer to render event pixels otherwise it's too slow -->
 			<LGridLayer
+				v-if="eventStore.selectedEvent"
 				ref="eventPixelsRef"
 				:tileSize="TILE_SIZE"
 				:child-render="renderTile"
@@ -453,6 +547,13 @@ const addEventPanes = () => {
 			<LControl position="topright" class="the-toggle">
 				<ModeToggle v-model="store.viewMode" />
 			</LControl>
+			<EventTypeToggle
+				class="event-type-toggle"
+				v-model:cold="eventStore.coldEventsOn"
+				v-model:hot="eventStore.hotEventsOn"
+				@update:cold="eventStore.coldEventsOn = $event"
+				@update:hot="eventStore.hotEventsOn = $event"
+			/>
 			<LControl position="topleft" class="region-control">
 				<RegionControl v-show="store.viewMode === 'heatmap'" />
 				<button
@@ -478,18 +579,6 @@ const addEventPanes = () => {
 								: 7,
 						},
 						{
-							key: 'intensity',
-							label: 'Intensity',
-							type: 'range',
-							pass: 'high-pass',
-							min: eventStore.intensityRange
-								? eventStore.intensityRange[0]
-								: 300,
-							max: eventStore.intensityRange
-								? eventStore.intensityRange[1]
-								: 350,
-						},
-						{
 							key: 'size',
 							label: 'Size',
 							type: 'range',
@@ -512,7 +601,7 @@ const addEventPanes = () => {
 				position="bottomright"
 				class="map-scale"
 			></LControlScale>
-			<LControl position="bottomleft" class="panel debug"
+			<LControl position="bottomleft" class="panel debug" style="z-index: 5000"
 				><div class="panel debug">
 					{{ regionFilteredEvents.length }}
 				</div></LControl
@@ -531,6 +620,14 @@ const addEventPanes = () => {
 
 	.the-toggle {
 		margin: $panelMargin;
+	}
+
+	.event-type-toggle {
+		top: 0;
+		left: 50%;
+		transform: translateX(-50%);
+		position: absolute;
+		z-index: 1000;
 	}
 
 	:deep(.leaflet-top),
@@ -559,7 +656,13 @@ const addEventPanes = () => {
 		opacity: 0;
 	}
 	:deep(.leaflet-event-pane) {
-		opacity: 1;
+		opacity: 0;
+		transition: opacity $animTime ease-in-out;
+	}
+	&.heatmap {
+		:deep(.leaflet-event-pane) {
+			opacity: 1;
+		}
 	}
 	&.have-regional {
 		:deep(.leaflet-fast-event-pane) {
@@ -571,15 +674,11 @@ const addEventPanes = () => {
 	}
 	&.dragging {
 		:deep(.leaflet-fast-event-pane) {
-			opacity: 0.67;
+			opacity: 1;
 		}
 		:deep(.leaflet-event-pane) {
-			opacity: 0.33;
+			opacity: 0.1;
 		}
-	}
-	:deep(.leaflet-event-pane) {
-		opacity: 1;
-		transition: opacity $animTime ease-in-out;
 	}
 
 	.filter-panel {

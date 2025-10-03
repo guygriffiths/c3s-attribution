@@ -11,6 +11,8 @@
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as d3 from 'd3'
+import { binGradient } from '@/lib/utils'
+import scssVars from '@/assets/styles/scssVars.module.scss'
 
 type Props = {
 	data: number[]
@@ -20,12 +22,11 @@ type Props = {
 	units?: string | null
 	nbins?: number
 	yMaxPct?: number | null
-	noAnimation?: boolean
 	highlightValue?: number | null
+	types?: ('hot' | 'cold')[]
 }
 
 const props = defineProps<Props>()
-
 // defaults
 const nbins = props.nbins ?? 10
 const units = props.units ?? ''
@@ -52,6 +53,11 @@ onMounted(() => {
 		height.value = newHeight
 	})
 	resizeObserver.value.observe(containerRef.value)
+	console.log(
+		'Histogram: observing container for resize',
+		props.xmin,
+		props.xmax,
+	)
 })
 
 onBeforeUnmount(() => {
@@ -87,16 +93,44 @@ const domain = computed(() => {
 	return [a, b] as [number, number]
 })
 
-// compute bins with d3.bin
+// Set the fixed bin thresholds based on domain
+// The last bin edge is set based on data max to ensure all data is included
+// This means the last bin will be wider than the others
 const bins = computed(() => {
 	const d = props.data ?? []
+	const types = props.types ?? []
 	const [xmin, xmax] = domain.value
-	const thresholds = []
-	for (let i = 0; i <= nbins-1; i++) {
-		thresholds.push(xmin + ((xmax - xmin) * i) / nbins)
+
+	const step = (xmax - xmin) / (nbins + 1)
+	const thresholds = Array.from({ length: nbins }, (_, i) => xmin + i * step)
+	thresholds.push(
+		dataExtent.value[1] + 0.5 * (dataExtent.value[1] - dataExtent.value[0]),
+	)
+
+	const binned = thresholds.slice(0, -1).map((t0, i) => {
+		const t1 = thresholds[i + 1]
+		const binIdx = d
+			.map((val, j) => ({ val, j }))
+			.filter(({ val }) => val >= t0 && val < t1)
+
+		const hotCount = binIdx.filter(({ j }) => types[j] === 'hot').length
+		const coldCount = binIdx.filter(({ j }) => types[j] === 'cold').length
+		const total = binIdx.length || 1
+
+		const binPoints = binIdx.map(({ val }) => val)
+		return Object.assign(binPoints, {
+			x0: t0,
+			x1: t1,
+			hotPct: hotCount / total,
+			coldPct: coldCount / total,
+		})
+	})
+
+	if (binned.length > 0) {
+		binned[binned.length - 1].x1 = xmax
 	}
-	const binGen = d3.bin().domain([xmin, xmax]).thresholds(thresholds)
-	return binGen(d)
+
+	return binned
 })
 
 // y values expressed as percentage of total data count
@@ -134,24 +168,24 @@ const yScale = computed(() =>
 )
 
 // x-axis tick formatting
-const xTicks = computed(() => xScale.value.ticks(Math.min(2, nbins)))
-const yTicks = computed(() => yScale.value.ticks(5))
+// const xTicks = computed(() => xScale.value.ticks(Math.min(2, nbins)))
+// const yTicks = computed(() => yScale.value.ticks(5))
 
 const highlightBin = computed(() => {
 	if (props.highlightValue == null) return null
-	const ret =
-		bins.value.findIndex((b) => {
-			return (
-				(b.x0 as number) <= props.highlightValue! &&
-				(b.x1 as number) >= props.highlightValue!
-			)
-		}) ?? null
+	const ret = bins.value.findIndex((b) => {
+		return (
+			(b.x0 as number) <= props.highlightValue! &&
+			(b.x1 as number) > props.highlightValue!
+		)
+	})
+	if (ret < 0) return bins.value.length - 1
 	return ret
 })
 
 // bar rectangles data (x, width, y, height, pct, count)
-const bars = computed(() =>
-	bins.value.map((b, idx) => {
+const bars = computed(() => {
+	const ret = bins.value.map((b, idx) => {
 		const x = xScale.value(b.x0 as number)
 		const x1p = xScale.value(b.x1 as number)
 		const w = Math.max(0, x1p - x)
@@ -168,9 +202,11 @@ const bars = computed(() =>
 			count: counts.value[idx],
 			bin0: b.x0,
 			bin1: b.x1,
+			color: binGradient(b.hotPct, b.coldPct, scssVars.c3sred, scssVars.c3sblue), // red→blue
 		}
-	}),
-)
+	})
+	return ret
+})
 
 // optional: animate transitions by giving CSS transitions to rect attrs
 // We'll use straightforward attribute binding + CSS transitions on transform/height where possible
@@ -191,13 +227,17 @@ watch(
 			<!-- group for plotting area -->
 			<g :transform="`translate(${margin.left},${margin.top})`">
 				<!-- X axis ticks -->
-				<g class="x-axis" :transform="`translate(0, ${innerHeight})`">
+				<g
+					class="x-axis"
+					:transform="`translate(0, ${innerHeight})`"
+					v-if="xmin != null && xmax != null"
+				>
 					<text :x="2" y="12" text-anchor="start">{{ labelFunc(xmin) }}</text>
 					<text :x="innerWidth / 2" y="12" text-anchor="middle">
 						{{ units }}
 					</text>
 					<text :x="innerWidth - 2" y="12" text-anchor="end">
-						{{ labelFunc(xmax) }}
+						{{ labelFunc(bins[bins.length - 1].x0) }}+
 					</text>
 				</g>
 
@@ -212,23 +252,24 @@ watch(
 						<!-- default bar rect -->
 						<rect
 							class="bar-rect"
-							:x="0.05 * Math.max(1, b.w - 1)"
+							:x="1"
 							:y="b.y - 1"
-							:width="0.9 * Math.max(1, b.w - 1)"
+							:width="Math.max(3, b.w - 2)"
 							:height="b.h + 1"
 							:data-pct="b.pct"
 							:data-count="b.count"
 							:class="{
 								highlight: highlightBin === b.idx,
 							}"
+							:fill="b.color"
 						/>
-						<circle
+						<!-- <circle
 							:opacity="highlightBin === b.idx ? 1 : 0"
 							class="bar-halo"
 							:cx="Math.max(1, b.w - 1) / 2"
 							:cy="b.y"
-							:r="b.w * 0.5"
-						/>
+							:r="b.w / 3"
+						/> -->
 					</g>
 				</g>
 			</g>
@@ -244,7 +285,6 @@ watch(
 	height: 100%;
 	/* the container controls svg width via ResizeObserver */
 	.histogram-svg {
-		border: 1px solid #e2e8f0;
 		width: 100%;
 		height: 100%;
 		display: block;
@@ -271,16 +311,20 @@ watch(
 		opacity 200ms ease;
 }
 
+$rate: 0.5 * $animTime;
+
 .bar-rect {
 	stroke: black;
 	stroke-width: 0.5;
-	fill: $c3sred;
+	// fill: $c3sred;
 	rx: 2;
-	transition: all $animTime ease-in-out;
+	transition: all $rate ease-in-out;
+	
 	&.highlight {
 		fill: $lightbulb;
 		stroke: lighten($lightbulb, 20%);
 		stroke-width: 1;
+		filter: drop-shadow(0 0 2px $lightbulb) drop-shadow(0 0 4px $lightbulb);
 	}
 }
 
@@ -288,7 +332,7 @@ watch(
 	fill: rgba($lightbulb, 0.33);
 	stroke: $lightbulb;
 	stroke-width: 1;
-	transition: all $animTime ease-in-out;
+	transition: all $rate ease-in-out;
 	filter: drop-shadow(0 0 1px $lightbulb) drop-shadow(0 0 2px $lightbulb)
 		drop-shadow(0 0 4px $lightbulb) drop-shadow(0 0 8px $lightbulb);
 	pointer-events: none;

@@ -35,6 +35,8 @@ select {
 	margin-bottom: 0.5rem;
 }
 
+$highlight: white;
+
 button {
 	font-size: 1rem;
 	background-color: $c3sblue;
@@ -57,18 +59,17 @@ button {
 	}
 
 	&.selected {
-		color: $c3sred;
+		color: $highlight;
 		text-shadow:
-			0px 0px 1px rgb(255, 255, 255),
-			0px 0px 2px rgb(255, 255, 255),
-			0px 0px 5vw rgb(255, 255, 255),
-			0px 0px 10px rgb(255, 255, 255);
+			0px 0px 1px $highlight,
+			0px 0px 2px $highlight,
+			0px 0px 5vw $highlight,
+			0px 0px 10px $highlight;
 		svg {
-			color: $c3sred !important;
-			filter: drop-shadow(0 0 1px rgb(255, 255, 255))
-				drop-shadow(0 0 2px rgb(255, 255, 255))
-				drop-shadow(0 0 5px rgb(255, 255, 255))
-				drop-shadow(0 0 10px rgb(255, 255, 255));
+			color: $highlight!important;
+			filter: 
+				drop-shadow(0 0 2px $highlight)
+				drop-shadow(0 0 5px $highlight);
 		}
 	}
 

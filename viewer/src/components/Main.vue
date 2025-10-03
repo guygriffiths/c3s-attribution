@@ -7,6 +7,7 @@ import { useStore as useEventStore } from '@/store/eventStore'
 import MapComponent from './Map.vue'
 import Panel from './util/Panel.vue'
 import Histogram from './util/Histogram.vue'
+import ScatterPlot from './util/ScatterPlot.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
 import EventInfo from './EventInfo.vue'
@@ -30,9 +31,13 @@ import {
 	getGlobalFilteredEvents,
 	onGlobalEventsReady,
 	onRegionEventsReady,
+	setColdOnly,
+	setHotColdBoth,
+	setHotOnly,
 } from '@/lib/eventFiltering'
-import { getDayOfYear } from 'date-fns'
+import { differenceInDays } from 'date-fns'
 import { glob } from 'fs'
+import { difference } from 'd3'
 
 const $l = useLabels()
 const store = useStore()
@@ -66,47 +71,29 @@ const globalEventsOfInterest = computed((): boolean => {
 	return (
 		store.viewMode === 'timemachine' ||
 		store.exploreGlobal ||
-		(!store.regionFilterReady && !store.filteringByPoint)
+		(!(store.filteringByRegion && store.regionFilterReady) &&
+			!store.filteringByPoint)
 	)
 })
 
 const globalFilteredEvents = ref([] as ExtremeEvent[])
+const eventsOfInterest = ref([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
-	// @ts-ignore
-	console.log('Filter ready, getting global heatmap events')
 	globalFilteredEvents.value = getGlobalFilteredEvents()
 	if (globalEventsOfInterest.value) {
 		eventsOfInterest.value = globalFilteredEvents.value
 	}
 })
 
-const eventsOfInterest = ref([] as ExtremeEvent[])
 onRegionEventsReady(() => {
-	eventsOfInterest.value = [...getFilteredEvents()]
-	if (
-		eventStore.eventSelected &&
-		!getFilteredIds().has(eventStore.selectedEventId!)
-	) {
-		eventsOfInterest.value.push(eventStore.selectedEvent!)
-	}
+	eventsOfInterest.value = getFilteredEvents()
 })
 watch(
 	() => eventStore.selectedEvent,
 	(newVal) => {
 		if (globalEventsOfInterest.value) {
-			return
-		}
-		if (newVal) {
-			// Ensure selected event is in the list
-			eventsOfInterest.value = getFilteredEvents()
-			if (
-				eventStore.eventSelected &&
-				!getFilteredIds().has(eventStore.selectedEventId!)
-			) {
-				eventsOfInterest.value.push(eventStore.selectedEvent!)
-			}
+			eventsOfInterest.value = globalFilteredEvents.value
 		} else {
-			// Event doesn't need to be in the list, So reset the list to just the filtered events
 			eventsOfInterest.value = getFilteredEvents()
 		}
 	},
@@ -114,12 +101,12 @@ watch(
 watch(
 	() => [
 		store.filteringByRegion,
+		store.regionFilterReady,
 		store.filteringByPoint,
 		store.exploreGlobal,
 		store.viewMode,
 	],
 	() => {
-		console.log('Triggering watch on events of interest')
 		if (globalEventsOfInterest.value) {
 			eventsOfInterest.value = globalFilteredEvents.value
 		} else {
@@ -129,10 +116,33 @@ watch(
 	{ immediate: true },
 )
 
+watch(
+	() => [eventStore.coldEventsOn, eventStore.hotEventsOn],
+	() => {
+		if (eventStore.coldEventsOn && eventStore.hotEventsOn) {
+			setHotColdBoth()
+		} else if (eventStore.coldEventsOn) {
+			setColdOnly()
+		} else if (eventStore.hotEventsOn) {
+			setHotOnly()
+		} else {
+			// none selected, default to both
+			setHotColdBoth()
+		}
+		if (globalEventsOfInterest.value) {
+			globalFilteredEvents.value = getGlobalFilteredEvents()
+			eventsOfInterest.value = globalFilteredEvents.value
+		} else {
+			eventsOfInterest.value = getFilteredEvents()
+		}
+	},
+	{ immediate: true },
+)
+
 const mode = computed((): TimeReelMode => {
+	if (store.viewMode === 'heatmap') return 'timeline'
 	if (eventStore.eventSelected) return 'eventzoom'
 	if (timeStore.timePanelExpanded) return 'overview'
-	if (store.viewMode === 'heatmap') return 'timeline'
 	return 'default'
 })
 </script>
@@ -169,6 +179,9 @@ const mode = computed((): TimeReelMode => {
 				:show-bars="timeStore.showBars"
 				:color-for-event="eventStore.colorForEvent"
 				:class="mode"
+				:hot="eventStore.hotEventsOn"
+				:cold="eventStore.coldEventsOn"
+				:value-extractor="eventStore.intensityForEvent"
 			></TimeReel>
 			<button
 				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
@@ -219,8 +232,11 @@ const mode = computed((): TimeReelMode => {
 				</h1>
 				<EventRanker
 					:events="eventsOfInterest"
-					:sort-func="(a, b) => b.duration - a.duration"
-					:topN="1000"
+					:sort-func="
+						(a, b) =>
+							eventStore.durationForEvent(b) - eventStore.durationForEvent(a)
+					"
+					:topN="200"
 				/>
 			</div>
 			<div class="ranker" v-show="store.exploringRegion || store.exploreGlobal">
@@ -230,8 +246,10 @@ const mode = computed((): TimeReelMode => {
 				</h1>
 				<EventRanker
 					:events="eventsOfInterest"
-					:sort-func="(a, b) => b.total_area - a.total_area"
-					:topN="1000"
+					:sort-func="
+						(a, b) => eventStore.sizeForEvent(b) - eventStore.sizeForEvent(a)
+					"
+					:topN="200"
 				/>
 			</div>
 			<div class="ranker" v-show="store.exploringRegion || store.exploreGlobal">
@@ -241,10 +259,67 @@ const mode = computed((): TimeReelMode => {
 				</h1>
 				<EventRanker
 					:events="eventsOfInterest"
-					:sort-func="(a, b) => b.peak_value - a.peak_value"
-					:topN="1000"
+					:sort-func="
+						(a, b) =>
+							eventStore.intensityForEvent(b) - eventStore.intensityForEvent(a)
+					"
+					:topN="200"
 				/>
 			</div>
+		</Panel>
+		<Panel
+			id="event-ts-panel"
+			class="right"
+			:active="
+				store.viewMode === 'heatmap' &&
+				(store.exploringRegion || store.exploreGlobal)
+			"
+		>
+			<ScatterPlot
+				:xdata="
+					eventsOfInterest.map((e) =>
+						differenceInDays(e.times[0], timeStore.startTime),
+					)
+				"
+				:ydata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
+				:types="eventsOfInterest.map((e) => e.event_type)"
+				:xmin="0"
+				:xmax="differenceInDays(timeStore.endTime, timeStore.startTime)"
+				:ymin="eventStore.durationRange[0]"
+				:ymax="eventStore.durationRange[1]"
+				:ids="eventsOfInterest.map((e) => e.id)"
+				:highlightId="eventStore.selectedEventId"
+			/>
+			<ScatterPlot
+				:xdata="
+					eventsOfInterest.map((e) =>
+						differenceInDays(e.times[0], timeStore.startTime),
+					)
+				"
+				:ydata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
+				:types="eventsOfInterest.map((e) => e.event_type)"
+				:xmin="0"
+				:xmax="differenceInDays(timeStore.endTime, timeStore.startTime)"
+				:ymin="eventStore.sizeRange[0]"
+				:ymax="eventStore.sizeRange[1]"
+				:ids="eventsOfInterest.map((e) => e.id)"
+				:highlightId="eventStore.selectedEventId"
+			/>
+			<ScatterPlot
+				:xdata="
+					eventsOfInterest.map((e) =>
+						differenceInDays(e.times[0], timeStore.startTime),
+					)
+				"
+				:ydata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
+				:types="eventsOfInterest.map((e) => e.event_type)"
+				:xmin="0"
+				:xmax="differenceInDays(timeStore.endTime, timeStore.startTime)"
+				:ymin="eventStore.intensityRange[0]"
+				:ymax="eventStore.intensityRange[1]"
+				:ids="eventsOfInterest.map((e) => e.id)"
+				:highlightId="eventStore.selectedEventId"
+			/>
 		</Panel>
 		<Panel
 			id="event-histograms-panel"
@@ -258,38 +333,148 @@ const mode = computed((): TimeReelMode => {
 				:data="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
 				:nbins="10"
 				:xmin="eventStore.durationRange[0]"
-				:xmax="eventStore.durationRange[1]"
+				:xmax="
+					eventStore.selectedEvent
+						? Math.max(
+								eventStore.durationRange[1],
+								eventStore.durationForEvent(eventStore.selectedEvent),
+							)
+						: eventStore.durationRange[1]
+				"
+				:labelFunc="(v: number) => v.toFixed(0)"
 				:units="'days'"
 				:highlight-value="
 					eventStore.selectedEvent
 						? eventStore.durationForEvent(eventStore.selectedEvent)
 						: null
 				"
+				:types="eventsOfInterest.map((e) => e.event_type)"
 			/>
 			<Histogram
 				:data="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
 				:nbins="10"
 				:xmin="eventStore.sizeRange[0]"
-				:xmax="eventStore.sizeRange[1]"
+				:xmax="
+					eventStore.selectedEvent
+						? Math.max(
+								eventStore.sizeRange[1],
+								eventStore.sizeForEvent(eventStore.selectedEvent),
+							)
+						: eventStore.sizeRange[1]
+				"
+				:labelFunc="(v: number) => (v / 1000).toFixed(1) + 'k'"
 				:units="'pixels'"
 				:highlight-value="
 					eventStore.selectedEvent
 						? eventStore.sizeForEvent(eventStore.selectedEvent)
 						: null
 				"
+				:types="eventsOfInterest.map((e) => e.event_type)"
 			/>
 			<Histogram
 				:data="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
 				:nbins="10"
 				:xmin="eventStore.intensityRange[0]"
-				:xmax="eventStore.intensityRange[1]"
-				:labelFunc="(v: number) => (v - 273.15).toFixed(1)"
+				:xmax="
+					eventStore.selectedEvent
+						? Math.max(
+								eventStore.intensityRange[1],
+								eventStore.intensityForEvent(eventStore.selectedEvent),
+							)
+						: eventStore.intensityRange[1]
+				"
+				:labelFunc="(v: number) => v.toFixed(0)"
 				:units="'°C'"
 				:highlight-value="
 					eventStore.selectedEvent
 						? eventStore.intensityForEvent(eventStore.selectedEvent)
 						: null
 				"
+				:types="eventsOfInterest.map((e) => e.event_type)"
+			/>
+		</Panel>
+		<Panel
+			id="event-scatter-panel"
+			class="right"
+			:active="
+				store.viewMode === 'heatmap' &&
+				(store.exploringRegion || store.exploreGlobal)
+			"
+		>
+			<ScatterPlot
+				:xdata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
+				:ydata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
+				:types="eventsOfInterest.map((e) => e.event_type)"
+				:xmin="eventStore.durationRange[0]"
+				:xmax="
+					eventStore.selectedEvent
+						? Math.max(
+								eventStore.durationRange[1],
+								eventStore.durationForEvent(eventStore.selectedEvent),
+							)
+						: eventStore.durationRange[1]
+				"
+				:ymin="eventStore.intensityRange[0]"
+				:ymax="
+					eventStore.selectedEvent
+						? Math.max(
+								eventStore.intensityRange[1],
+								eventStore.intensityForEvent(eventStore.selectedEvent),
+							)
+						: eventStore.intensityRange[1]
+				"
+				:ids="eventsOfInterest.map((e) => e.id)"
+				:highlightId="eventStore.selectedEventId"
+			/>
+			<ScatterPlot
+				:xdata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
+				:ydata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
+				:types="eventsOfInterest.map((e) => e.event_type)"
+				:xmin="eventStore.sizeRange[0]"
+				:xmax="
+					eventStore.selectedEvent
+						? Math.max(
+								eventStore.sizeRange[1],
+								eventStore.sizeForEvent(eventStore.selectedEvent),
+							)
+						: eventStore.sizeRange[1]
+				"
+				:ymin="eventStore.durationRange[0]"
+				:ymax="
+					eventStore.selectedEvent
+						? Math.max(
+								eventStore.durationRange[1],
+								eventStore.durationForEvent(eventStore.selectedEvent),
+							)
+						: eventStore.durationRange[1]
+				"
+				:ids="eventsOfInterest.map((e) => e.id)"
+				:highlightId="eventStore.selectedEventId"
+			/>
+			<ScatterPlot
+				:xdata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
+				:ydata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
+				:types="eventsOfInterest.map((e) => e.event_type)"
+				:xmin="eventStore.intensityRange[0]"
+				:xmax="
+					eventStore.selectedEvent
+						? Math.max(
+								eventStore.intensityRange[1],
+								eventStore.intensityForEvent(eventStore.selectedEvent),
+							)
+						: eventStore.intensityRange[1]
+				"
+				:ymin="eventStore.sizeRange[0]"
+				:ymax="
+					eventStore.selectedEvent
+						? Math.max(
+								eventStore.sizeRange[1],
+								eventStore.sizeForEvent(eventStore.selectedEvent),
+							)
+						: eventStore.sizeRange[1]
+				"
+				:ids="eventsOfInterest.map((e) => e.id)"
+				:highlightId="eventStore.selectedEventId"
 			/>
 		</Panel>
 	</div>
@@ -335,7 +520,7 @@ $smallTimePanelHeight: max(6rem, 10%);
 		height: 40%;
 
 		&.expanded {
-			height: calc(100% - 1 * $panelMargin);
+			height: calc(100% - 4 * $panelMargin);
 		}
 
 		z-index: 20;
@@ -352,8 +537,10 @@ $smallTimePanelHeight: max(6rem, 10%);
 			border-bottom-left-radius: 0;
 		}
 
+		transition: height 0 linear;
 		&.heatmap {
 			height: $smallTimePanelHeight;
+			transition: height $animTime linear;
 		}
 
 		#times {
@@ -404,23 +591,14 @@ $smallTimePanelHeight: max(6rem, 10%);
 		}
 	}
 
-	#event-panel {
-		bottom: calc($eventTimePanelHeight + $panelMargin);
-		right: $panelMargin;
-		left: $panelMargin;
-		border-radius: 0;
-		border-top-right-radius: 6px;
-		border-bottom: none;
-		padding-top: 1rem;
-		display: flex;
-		// box-shadow: rgba(0, 0, 0, 0.5) 3px 0px 3px 0px;
-	}
-
 	#event-rankings-panel {
 		// z-index: 500;
 		width: calc(40% - $panelMargin);
 		height: calc(30% - 2 * $panelMargin);
-		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+
+		bottom: calc(
+			1 * $panelMargin + $smallTimePanelHeight + 30% + 30% - 1 * $panelMargin
+		);
 		right: calc(1 * $panelMargin);
 		gap: 0.5rem;
 		display: flex;
@@ -467,18 +645,65 @@ $smallTimePanelHeight: max(6rem, 10%);
 		}
 	}
 
+	#event-ts-panel {
+		// z-index: 500;
+		width: calc(40% - 2 * $panelMargin);
+		height: calc(20% - 2 * $panelMargin);
+		bottom: calc(1 * $panelMargin + $smallTimePanelHeight + 40%);
+		right: calc(1 * $panelMargin);
+		gap: 0;
+		display: flex;
+		flex-direction: column;
+		padding: calc(0.5 * $panelMargin);
+		// padding-top: calc(1.25 * $panelMargin);
+		// padding-bottom: 2px;
+
+		.scatter-root {
+			flex: 1 1 33%;
+			height: 33%;
+			// box-shadow:
+			// 	rgba(0, 0, 0, 0.5) 0px 4px 6px -1px,
+			// 	rgba(0, 0, 0, 0.25) 0px 2px 4px -1px;
+		}
+	}
+
 	#event-histograms-panel {
 		// z-index: 500;
 		width: calc(40% - $panelMargin);
-		height: calc(30% - 2 * $panelMargin);
-		bottom: calc(1 * $panelMargin + $smallTimePanelHeight + 30%);
+		height: calc(20% - 2 * $panelMargin);
+		bottom: calc(1 * $panelMargin + $smallTimePanelHeight + 20%);
 		right: calc(1 * $panelMargin);
 		gap: 0.5rem;
 		display: flex;
 		flex-direction: row;
 		padding: calc(0.5 * $panelMargin);
-		padding-top: calc(1.25 * $panelMargin);
-		padding-bottom: 2px;
+		// padding-top: calc(1.25 * $panelMargin);
+		// padding-bottom: 2px;
+
+		.histogram-root {
+			box-shadow:
+				rgba(0, 0, 0, 0.5) 0px 4px 6px -1px,
+				rgba(0, 0, 0, 0.25) 0px 2px 4px -1px;
+		}
+	}
+
+	#event-scatter-panel {
+		// z-index: 500;
+		width: calc(40% - $panelMargin);
+		height: calc(20% - 2 * $panelMargin);
+		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+		right: calc(1 * $panelMargin);
+		gap: 0.5rem;
+		display: flex;
+		flex-direction: row;
+		padding: calc(0.5 * $panelMargin);
+		// padding-top: calc(1.25 * $panelMargin);
+		// padding-bottom: 2px;
+		.scatter-root {
+			box-shadow:
+				rgba(0, 0, 0, 0.5) 0px 4px 6px -1px,
+				rgba(0, 0, 0, 0.25) 0px 2px 4px -1px;
+		}
 	}
 }
 </style>

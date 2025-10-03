@@ -73,7 +73,7 @@ export function buildEventFilters(events: ExtremeEvent[]) {
 		console.log('Event filters built')
 	}
 	pixelWorker.postMessage(events)
-	
+
 	const dateWorker = new DateWorker()
 	dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
 		dateIndex = e.data
@@ -94,13 +94,21 @@ export function setFilterToPoint(lat: number, lon: number): ExtremeEvent[] {
 	resultReady = false
 	lastPointFilter = [lat, lon]
 	lastRegionFilter = null
-	lastResult = (pixelIndex[packPixelToInt(lat, lon)] || []).map(
-		(idx) => _filteredEvents[idx],
-	)
+	lastResult = (pixelIndex[packPixelToInt(lat, lon)] || [])
+		.map((idx) => _events[idx])
+		.filter((e) => _filteredIds.has(e.id))
+	// TODO Find out why this is occasionally undefined
+	lastResult = lastResult.filter((e) => e) // filter out undefined
 	lastIds = new Set(lastResult.map((e) => e.id))
 	resultReady = true
 	regionEventsReadyTriggers.forEach((cb) => cb())
 
+	if(coldOnly) {
+		return lastResult.filter(e => e.event_type === 'cold')
+	}
+	if(hotOnly) {
+		return lastResult.filter(e => e.event_type === 'hot')
+	}
 	return lastResult
 }
 
@@ -138,14 +146,32 @@ export function setFilterToRegion(
 
 	// // `ids` now contains all unique event IDs that intersect the polygon
 	lastResult = Array.from(ids).map((idx) => _filteredEvents[idx])
+	lastIds = new Set(lastResult.map((e) => e.id))
 	resultReady = true
 	regionEventsReadyTriggers.forEach((cb) => cb())
 
+	if(coldOnly) {
+		return lastResult.filter(e => e.event_type === 'cold')
+	}
+	if(hotOnly) {
+		return lastResult.filter(e => e.event_type === 'hot')
+	}
 	return lastResult
 }
 
-export function setPostFilters(filters: MainStore['filters']) {
-	_filteredEvents = postFilterEvents(_events, filters)
+export function setPostFilters(
+	filters: MainStore['filters'],
+	durationGetter: (e: ExtremeEvent) => number = (e) => e.duration,
+	intensityGetter: (e: ExtremeEvent) => number = (e) => e.peak_value || 0,
+	sizeGetter: (e: ExtremeEvent) => number = (e) => e.pixel_set.length || 0,
+) {
+	_filteredEvents = postFilterEvents(
+		_events,
+		filters,
+		durationGetter,
+		intensityGetter,
+		sizeGetter,
+	)
 	_filteredIds = new Set(_filteredEvents.map((e) => e.id))
 	if (lastPointFilter !== null) {
 		setFilterToPoint(lastPointFilter[0], lastPointFilter[1])
@@ -158,17 +184,18 @@ export function setPostFilters(filters: MainStore['filters']) {
 const postFilterEvents = (
 	events: ExtremeEvent[],
 	filters: MainStore['filters'],
+	durationGetter: (e: ExtremeEvent) => number = (e) => e.duration,
+	intensityGetter: (e: ExtremeEvent) => number = (e) => e.peak_value || 0,
+	sizeGetter: (e: ExtremeEvent) => number = (e) => e.pixel_set.length || 0,
 ): ExtremeEvent[] => {
 	const fe = events.filter((event: ExtremeEvent, i) => {
 		if (!filters.includeOceanEvents && event.ocean_only) return false
 
-		if (event.duration < filters.duration) return false
+		if (durationGetter(event) < filters.duration) return false
 
-		const intensity = event.peak_value || 0
-		if (intensity < filters.intensity) return false
+		if (intensityGetter(event) < filters.intensity) return false
 
-		const pixelCount = event.pixel_count || 0
-		if (pixelCount < filters.size) return false
+		if (sizeGetter(event) < filters.size) return false
 
 		return true
 	})
@@ -195,10 +222,22 @@ export function clearFilter() {
 }
 
 export function getFilteredEvents(): ExtremeEvent[] {
+	if(coldOnly) {
+		return lastResult.filter(e => e.event_type === 'cold')
+	}
+	if(hotOnly) {
+		return lastResult.filter(e => e.event_type === 'hot')
+	}
 	return lastResult
 }
 
 export function getFilteredIds(): Set<string> {
+	if(coldOnly) {
+		return new Set(lastResult.filter(e => e.event_type === 'cold').map(e => e.id))
+	}
+	if(hotOnly) {
+		return new Set(lastResult.filter(e => e.event_type === 'hot').map(e => e.id))
+	}
 	return lastIds
 }
 
@@ -214,6 +253,13 @@ export function getCurrentEvents(time: Date): ExtremeEvent[] {
 		const ev = _events[idx]
 		if (_filteredIds.has(ev.id)) result.push(ev)
 	}
+
+	if(coldOnly) {
+		return result.filter(e => e.event_type === 'cold')
+	}
+	if(hotOnly) {
+		return result.filter(e => e.event_type === 'hot')
+	}
 	return result
 }
 
@@ -222,5 +268,34 @@ export function getCurrentDayCounts(): Map<number, Array<number>> {
 }
 
 export function getGlobalFilteredEvents(): ExtremeEvent[] {
+	if(coldOnly) {
+		return _filteredEvents.filter(e => e.event_type === 'cold')
+	}
+	if(hotOnly) {
+		return _filteredEvents.filter(e => e.event_type === 'hot')
+	}
 	return _filteredEvents
+}
+
+let coldOnly = false
+let hotOnly = false
+export function setColdOnly() {
+	if (coldOnly) return
+	coldOnly = true
+	hotOnly = false
+	regionEventsReadyTriggers.forEach((cb) => cb())
+	globalEventsReadyTriggers.forEach((cb) => cb())
+	currentEventTriggers.forEach((cb) => cb())
+}
+
+export function setHotOnly() {
+	if (hotOnly) return
+	hotOnly = true
+	coldOnly = false
+}
+
+export function setHotColdBoth() {
+	if (!hotOnly && !coldOnly) return
+	hotOnly = false
+	coldOnly = false
 }

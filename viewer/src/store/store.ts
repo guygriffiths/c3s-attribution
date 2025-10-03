@@ -103,7 +103,7 @@ export const useStore = defineStore('main', {
 			this.loadingCount--
 		},
 
-		init() {
+		async init() {
 			this.setLoading()
 			const eventStore = useEventStore()
 			watch(() => [this.filters], eventStore.runFilters, {
@@ -118,57 +118,65 @@ export const useStore = defineStore('main', {
 				},
 			)
 
-			let path = `/events.jsonl`
+			const respH = await fetch('/events-hw.jsonl')
+			if (!respH.ok) {
+				throw new Error('Network response was not ok')
+			}
+			const textH = await respH.text()
+			const linesH = textH.trim().split('\n')
+			const objectsH = linesH.map((line) => JSON.parse(line))
+			const data = objectsH
 
-			fetch(path)
-				.then((response) => {
-					if (!response.ok) {
-						throw new Error('Network response was not ok')
+			let firstEventTime = new Date(9999, 0, 1)
+			let lastEventTime = new Date(0)
+			const massageData = (data: any[], type: 'hot' | 'cold' | 'wet' | 'windy' | 'dry') => {
+				data.forEach((event: any) => {
+					// console.log('Processing event:', event)
+					event.times = event.times.map((time: string) => new Date(time))
+					const startDate = new Date(event.times[0])
+					if (startDate < firstEventTime) {
+						firstEventTime = new Date(startDate)
 					}
-					return response.text()
-				})
-				.then((text) => {
-					const lines = text.trim().split('\n')
-					const objects = lines.map((line) => JSON.parse(line))
-					return objects
-				})
-				.then((data) => {
-					let firstEventTime = new Date(9999, 0, 1)
-					let lastEventTime = new Date(0)
-					data.forEach((event: any) => {
-						// console.log('Processing event:', event)
-						event.times = event.times.map((time: string) => new Date(time))
-						const startDate = new Date(event.times[0])
-						if (startDate < firstEventTime) {
-							firstEventTime = new Date(startDate)
-						}
-						startDate.setHours(0, 0, 0, 0)
-						const endDate = addHours(new Date(event.times[event.times.length - 1]), 24)
-						if (endDate > lastEventTime) {
-							lastEventTime = new Date(endDate)
-						}
-						
+					startDate.setHours(0, 0, 0, 0)
+					const endDate = addHours(
+						new Date(event.times[event.times.length - 1]),
+						24,
+					)
+					if (endDate > lastEventTime) {
+						lastEventTime = new Date(endDate)
+					}
 
-						event.duration =
-							1 +
-							differenceInDays(
-								event.times[event.times.length - 1],
-								event.times[0],
-							)
-					})
-					const timeStore = useTimeStore()
-					timeStore.startTime = new Date(
-						Date.UTC(firstEventTime.getUTCFullYear(), 0, 1),
-					)
-					timeStore.endTime = new Date(
-						Date.UTC(lastEventTime.getUTCFullYear(), 11, 31),
-					)
-					eventStore.setEvents(data as ExtremeEvent[])
-					this.setLoadingDone()
+					event.duration =
+						1 +
+						differenceInDays(
+							event.times[event.times.length - 1],
+							event.times[0],
+						)
+					event.event_type = type
 				})
-				.catch((error) => {
-					console.error('There was a problem with the fetch operation:', error)
-				})
+			}
+			massageData(data, 'hot')
+
+			const respC = await fetch('/events-cw.jsonl')
+			if (!respC.ok) {
+				throw new Error('Network response was not ok')
+			}
+			const textC = await respC.text()
+			const linesC = textC.trim().split('\n')
+			const objectsC = linesC.map((line) => JSON.parse(line))
+			massageData(objectsC, 'cold')
+			data.push(...objectsC)
+
+			const timeStore = useTimeStore()
+			timeStore.startTime = new Date(
+				Date.UTC(firstEventTime.getUTCFullYear(), 0, 1),
+			)
+			timeStore.endTime = new Date(
+				Date.UTC(lastEventTime.getUTCFullYear(), 11, 31),
+			)
+			eventStore.setEvents(data as ExtremeEvent[])
+			this.setLoadingDone()
+
 		},
 	},
 })

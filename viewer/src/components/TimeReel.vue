@@ -2,7 +2,7 @@
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import { useLabels } from '@/lib/labels'
 import {
-	assignTimelinePositions,
+	getEventBoxes,
 	dayStr,
 	monthsForYear,
 	TOTAL_DAYS,
@@ -35,16 +35,22 @@ const $l = useLabels()
 const props = defineProps({
 	start: { type: Date, default: () => new Date(1970, 0, 1) },
 	end: { type: Date, default: () => new Date(2024, 0, 1) },
-	events: { type: Array<WeatherEvent>, default: () => [] as WeatherEvent[] },
-	selectedEvent: { type: Object as () => WeatherEvent | null, default: null },
+	events: { type: Array<ExtremeEvent>, default: () => [] },
+	selectedEvent: { type: Object as () => ExtremeEvent | null, default: null },
 	mode: {
 		type: String as PropType<TimeReelMode>,
 		default: 'default',
 	},
 	showBars: { type: Boolean, default: true },
+	hot: { type: Boolean, default: true },
+	cold: { type: Boolean, default: true },
 	colorForEvent: {
 		type: Function as PropType<(event: ExtremeEvent) => string | null>,
 		default: (event: ExtremeEvent) => event.color || null,
+	},
+	valueExtractor: {
+		type: Function as PropType<(event: ExtremeEvent) => number>,
+		default: (event: ExtremeEvent) => event.peak_value || 0,
 	},
 })
 
@@ -151,11 +157,6 @@ const updateRowHeight = () => {
 	const parentHeight = timeReelRef.value?.clientHeight || 0
 	rowHeight.value = parentHeight > 0 ? parentHeight / rowsToShow.value : 128
 }
-watch(
-	() => props.mode,
-	() => false && updateRowHeight(),
-	{ immediate: false },
-)
 
 const oneRow = ref(false)
 watch(oneRow, () => updateRowHeight())
@@ -172,21 +173,11 @@ const rowsToShow = computed(() => {
 			return 2
 	}
 })
+watch(rowsToShow, () => updateRowHeight())
 
 const maxSimultaneousEvents = computed(() => {
-	return Math.max(3, Math.max(...dayCounts.value))
+	return Math.max(3, ...hwDayCounts.value, ...cwDayCounts.value)
 })
-
-const populateEvents = () => {
-	years.value.forEach((year) => {
-		const { events: eventsForYear, maxEvents } = assignTimelinePositions(
-			props.events,
-			year,
-		)
-
-		eventsByYear.value.set(year, eventsForYear)
-	})
-}
 
 const eventIsSelected = (event: { id: string }) =>
 	event.id === props.selectedEvent?.id
@@ -308,14 +299,16 @@ const handleDrag = (event: MouseEvent) => {
 	}
 }
 
-const eventClicked = (event: WeatherEvent) => {
-	emits('eventSelected', event.id)
+const eventClicked = (id: string) => {
+	emits('eventSelected', id)
 }
+
 const needleOffset = computed(() => {
 	if (props.mode === 'default' || props.mode === 'overview') {
 		const offset = (selectedDay.value / TOTAL_DAYS) * 100
 		return Math.max(Math.min(offset, 100), 0)
 	} else if (props.mode === 'timeline') {
+		const totalDays = differenceInDays(props.end, props.start) + 1
 	} else if (props.mode === 'eventzoom') {
 		// In zoom mode, we want to center the needle on the selected event
 		if (props.selectedEvent) {
@@ -334,17 +327,24 @@ const needleOffset = computed(() => {
 	}
 })
 
-const positionY = (y: number) => {
-	// return 0.5 * y * eventHeight.value
-	if (y % 2 === 0) {
-		return -0.5 * eventHeight.value * y
+const eventBoxesForYear = ref<Record<number, EventBox[]>>({})
+const positionY = (y: number, eventType: 'hot' | 'cold') => {
+	if (props.hot && props.cold) {
+		return (0.5 + y) * 0.5 * eventHeight.value * (eventType === 'hot' ? -1 : 1)
 	} else {
-		return 0.5 * eventHeight.value * (y + 1)
+		if (y % 2 !== 0) {
+			return 0.5 * (y-1) * eventHeight.value
+		} else {
+			return -0.5 * (y+2) * eventHeight.value
+		}
 	}
 }
 
 onMounted(() => {
-	populateEvents()
+	for (let year of years.value) {
+		const res = getEventBoxes(props.events, year, props.hot && props.cold)
+		eventBoxesForYear.value[year] = res.events
+	}
 	const handleKey = (e: KeyboardEvent) => {
 		// TODO Should all of this go in a global key handler? Perhaps not, since people use arrow keys on maps?
 		if (e.key === 'PageUp') prevYear()
@@ -379,32 +379,79 @@ onMounted(() => {
 })
 
 const topRowHeight = computed(() => {
-	return `calc(0.5 * (100% - (100% / ${rowsToShow.value})))`
+	return props.mode === 'overview'
+		? '0'
+		: `calc(0.5 * (100% - (100% / ${rowsToShow.value})))`
 })
 const bottomRowHeight = computed(() => {
-	return `calc(0.5 * (100% - (100% / ${rowsToShow.value})))`
+	return props.mode === 'overview'
+		? '0'
+		: `calc(0.5 * (100% - (100% / ${rowsToShow.value})))`
 })
 
-const highlightRowHeight = computed(() => `calc(100% / ${rowsToShow.value})`)
+const highlightRowHeight = computed(() =>
+	props.mode === 'overview' ? '100%' : `calc(100% / ${rowsToShow.value})`,
+)
 
 const getAreaString = () => {
-	// TODO cache the global one? How will we know
-	const data: Array<{ x: number; y: number }> = dayCounts.value.map((d, i) => ({
-		x: i,
-		y: d,
-	}))
+	const data: Array<{ x: number; y0: number; y1: number }> = props.hot
+		? props.cold
+			? // Hot and cold events
+				hwDayCounts.value.map((d, i) => ({
+					x: i,
+					y0: cwDayCounts.value[i],
+					y1: d,
+				}))
+			: // Hot events only
+				hwDayCounts.value.map((d, i) => ({
+					x: i,
+					y0: d,
+					y1: d,
+				}))
+		: // Cold events only
+			cwDayCounts.value.map((d, i) => ({
+				x: i,
+				y0: d,
+				y1: d,
+			}))
+
 	const yScale = d3
 		.scaleLinear()
-		.domain([0, 1.05 * maxSimultaneousEvents.value])
+		// .domain([0, 1.05 * maxSimultaneousEvents.value])
+		.domain([
+			Math.min(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 0,
+			Math.max(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 1,
+		])
 		.range([0, 0.5])
 	const areaStr = d3
-		.area<{ x: number; y: number }>()
+		.area<{ x: number; y0: number; y1: number }>()
 		.x((d) => d.x)
-		.y0((d) => -yScale(d.y))
-		.y1((d) => yScale(d.y))
-		.defined((d) => d.x >= 0 && d.x < dayCounts.value.length)
-		.curve(d3.curveMonotoneX)(data! || [])
-	return areaStr || ''
+		.y0((d) => yScale(d.y0))
+		.y1((d) => -yScale(d.y1))
+		.defined((d) => d.x >= 0 && d.x < hwDayCounts.value.length)
+		.curve(d3.curveMonotoneX)
+
+	const ret: Record<number, string> = {}
+	for (let year of years.value) {
+		const startOfYear = Date.UTC(year, 0, 1) // Jan 1 UTC
+		const endOfYear = Date.UTC(year + 1, 0, 1) // Jan 1 next year UTC
+
+		const startIdx = Math.max(
+			0,
+			Math.floor((startOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)),
+		)
+		const endIdx = Math.min(
+			data.length,
+			Math.floor((endOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)),
+		)
+
+		// We add 2 invisible moves to ensure that the centre of the object's bounding box is always at y=0
+		// That way when we apply a vertical gradient, it is always centered
+		ret[year] =
+			areaStr(data.slice(startIdx, endIdx)) + ` M0,${-2} L0,0 M0,${2} L0,0` ||
+			''
+	}
+	return ret
 }
 
 const scrollListener = () => {
@@ -415,54 +462,59 @@ const scrollListener = () => {
 	setDate(newDate)
 }
 
-const eventsByYear = ref(new Map<number, WeatherEvent[]>())
-const dayCounts = ref<number[]>([])
+const eventsForYear = computed(() => {
+	return (year: number) =>
+		props.events.filter(
+			(e) =>
+				e.times[0]?.getUTCFullYear() === year ||
+				e.times[e.times.length - 1]?.getUTCFullYear() === year,
+		)
+})
+
+const cwDayCounts = ref<number[]>([])
+const hwDayCounts = ref<number[]>([])
 watch(
 	() => props.events,
 	() => {
-		// console.log('events changed, recalculating positions', props.events)
-		const byYear = new Map<number, WeatherEvent[]>()
-		for (const event of props.events) {
-			const startYear = event.times[0]?.getUTCFullYear()
-			const endYear = event.times[event.times.length - 1]?.getUTCFullYear()
-			if (startYear === endYear) {
-				if (!byYear.has(startYear)) byYear.set(startYear, [])
-				byYear.get(startYear)!.push(event)
-			} else {
-				for (let y = startYear; y <= endYear; y++) {
-					if (!byYear.has(y)) byYear.set(y, [])
-					byYear.get(y)!.push(event)
-				}
-			}
+		for (let year of years.value) {
+			const res = getEventBoxes(props.events, year, props.hot && props.cold)
+			eventBoxesForYear.value[year] = res.events
 		}
-		eventsByYear.value = byYear
-		populateEvents()
 
 		const totalDays = differenceInDays(props.end, props.start) + 1
-		const counts = new Array(totalDays).fill(0)
-		props.events.forEach((event: WeatherEvent) => {
-			event?.times.forEach((time) => {
+		const cwCounts = new Array(totalDays).fill(0)
+		const hwCounts = new Array(totalDays).fill(0)
+		// TODO - Allow the value to be something other than the event count
+		// e.g. total duration, or average duration, or peak value, etc. Pass in a valueFunc prop, and if it's null, use count
+		const cwValues = new Array(totalDays).fill(0)
+		const hwValues = new Array(totalDays).fill(0)
+		props.events.forEach((event) => {
+			event?.times.forEach((time, i) => {
 				const daysFromStart = differenceInDays(time, props.start)
-				counts[daysFromStart] += 1
+				if (event.event_type === 'cold') {
+					cwCounts[daysFromStart] += 1
+					cwValues[daysFromStart] += event.duration || 0
+				} else if (event.event_type === 'hot') {
+					hwCounts[daysFromStart] += 1
+					hwValues[daysFromStart] += event.duration || 0
+				}
 			})
 		})
-		dayCounts.value = counts
+		cwDayCounts.value = cwCounts
+			// .map((d, i) => cwValues[i] / d || 0)
+			// .map((d) => (isNaN(d) ? 0 : d))
+		hwDayCounts.value = hwCounts
+			// .map((d, i) => hwValues[i] / d || 0)
+			// .map((d) => (isNaN(d) ? 0 : d))
 
 		const newD = getAreaString()
-		const animTime = parseFloat(scssVars.animTime.replaceAll('s', '')) * 1000
-		if (model.value > props.end) {
-			model.value = new Date(props.end.getTime())
-		} else if (model.value < props.start) {
-			model.value = new Date(props.start.getTime())
-		}
+
 		for (const year of years.value) {
 			d3.select(`#events-line-${year}`)
 				.transition()
-				.duration(50)
-				.attr('d', newD)
-			assignTimelinePositions(props.events, year)
+				.duration(500)
+				.attr('d', newD[year])
 		}
-		// console.log('updated events by year', eventsByYear.value)
 
 		if (container.value) {
 			const yearsOffset = selectedYear.value - startYear.value
@@ -470,9 +522,38 @@ watch(
 			container.value.scrollTo({
 				top: scrollOffset * rowHeight.value,
 			})
+			console.log('and scrolled to', selectedYear.value)
 		}
 	},
 	{ immediate: true, deep: false },
+)
+
+watch(
+	() => props.selectedEvent,
+	(newVal, oldVal) => {
+		// When the selected event changes, ensure the year is in view
+		// In timeline mode, this happens instantly, at the same time as the line transition,
+		// so that we don't see any movement, but we are in the right place to transition back to defualt mode,
+		if (newVal !== oldVal && container.value) {
+			const yearsOffset = selectedYear.value - startYear.value
+			const scrollOffset = 0.5 * (yearsOffset * 2 - 1)
+			container.value.scrollTo({
+				top: scrollOffset * rowHeight.value,
+				behavior: props.mode === 'timeline' ? 'auto' : 'smooth',
+			})
+		}
+	},
+)
+
+watch(
+	() => [props.start, props.end],
+	() => {
+		if (model.value > props.end) {
+			model.value = new Date(props.end.getTime())
+		} else if (model.value < props.start) {
+			model.value = new Date(props.start.getTime())
+		}
+	},
 )
 
 const viewportTransform = computed(() => {
@@ -492,14 +573,11 @@ const viewportTransform = computed(() => {
 
 const lineTransform = computed(() => {
 	return (year: number): string =>
-		props.mode == 'timeline'
-			? `translate(0, ${-year + selectedYear.value}) scale(${1.0 / years.value.length}, 1)`
-			: `translate(${-differenceInDays(new Date(Date.UTC(year, 0, 1)), props.start)},0)`
-})
-
-const monthsTransform = computed(() => {
-	return (year: number): string =>
-		`scale(${1.0 / years.value.length}, 1) translate(${differenceInDays(new Date(Date.UTC(year, 0, 1)), props.start)}, ${-year + selectedYear.value}) `
+		props.mode === 'timeline'
+			? `translate(0,${selectedYear.value - year}) scale(${1.0 / years.value.length}, 1)`
+			: props.mode === 'overview'
+				? `translate(${0.5 - differenceInDays(new Date(Date.UTC(year, 0, 1)), props.start)},0) scale(1, 1.25)`
+				: `translate(${0.5 - differenceInDays(new Date(Date.UTC(year, 0, 1)), props.start)},0)`
 })
 
 const yearTransform = computed(() => {
@@ -509,21 +587,17 @@ const yearTransform = computed(() => {
 
 const lineOpacity = computed(() => {
 	return (year: number): number => {
-		if (props.mode === 'timeline') {
-			return year === selectedYear.value ? 1.0 : 0.1
-		}
-		return 1
-		// else if ((props.showBars || zoom) && year === selectedYear.value)
-		// 	return 0.25
-		// else return 1.0
+		return props.showBars &&
+			props.mode !== 'timeline' &&
+			selectedYear.value === year
+			? 0.5
+			: 1
 	}
 })
 
-const svgStyle = computed(() => {
-	return ''
-	const yOffset = (rowsToShow.value - 1) * 0.5 * rowHeight.value
-	const height = totalYears.value * rowHeight.value
-	return `transform: translateY(${yOffset}px); height: ${height}px;`
+const yearPadding = computed(() => {
+	if (props.mode === 'overview') return 0
+	return (rowsToShow.value - 1) * 0.5 * rowHeight.value
 })
 </script>
 
@@ -540,7 +614,6 @@ const svgStyle = computed(() => {
 				{{ dayStr(selectedDay, selectedYear) }}
 			</div>
 			<div class="buttons">
-				<!-- <button @click="oneRow = !oneRow">Toggle Rows</button> -->
 				<button @click="prevYear" :disabled="selectedYear <= startYear">
 					<span class="sr-only">{{ $l.prevYear }}</span>
 					<font-awesome-icon :icon="faFastBackward" />
@@ -573,17 +646,14 @@ const svgStyle = computed(() => {
 			class="scroller"
 			@scroll="scrollListener"
 			@mousedown="startDrag"
-			@click="console.log('click')"
 			@prevent.default
 			:class="{
 				timeline: props.mode === 'timeline',
+				overview: props.mode === 'overview',
 				eventzoom: props.mode === 'eventzoom',
 			}"
 		>
-			<div
-				class="scrollee"
-				:style="`margin: ${(rowsToShow - 1) * 0.5 * rowHeight}px 0;`"
-			>
+			<div class="scrollee" :style="`margin: ${yearPadding}px 0;`">
 				<div
 					v-for="year in years"
 					:key="year"
@@ -608,9 +678,16 @@ const svgStyle = computed(() => {
 						ref="containerRef"
 						xmlns="http://www.w3.org/2000/svg"
 						:viewBox="`0 0 366 ${endYear - startYear + 1}`"
-						:style="svgStyle"
 						preserveAspectRatio="none"
 					>
+						<defs>
+							<linearGradient id="heatColdGradient" x1="0" y1="0" x2="0" y2="1">
+								<stop offset="0%" :stop-color="scssVars.c3sred" />
+								<stop offset="49%" :stop-color="scssVars.c3sred" />
+								<stop offset="51%" :stop-color="scssVars.c3sblue" />
+								<stop offset="100%" :stop-color="scssVars.c3sblue" />
+							</linearGradient>
+						</defs>
 						<g :transform="viewportTransform">
 							<g
 								v-for="year in years"
@@ -621,6 +698,7 @@ const svgStyle = computed(() => {
 								<path
 									:id="`events-line-${year}`"
 									class="event-line"
+									:class="{ hot: props.hot, cold: props.cold }"
 									d=""
 									vector-effect="non-scaling-stroke"
 									:stroke-width="3"
@@ -629,41 +707,23 @@ const svgStyle = computed(() => {
 								/>
 								<transition-group tag="g" name="daily-event-fx" v-if="showBars">
 									<rect
-										v-for="event in eventsByYear
-											.get(year)
-											?.filter(() => year == selectedYear) || []"
+										v-if="year === selectedYear"
+										v-for="box in eventBoxesForYear[year]"
 										class="event-bar"
-										:data-id="event.id"
-										:key="event.id"
-										:x="event.startX! - 0.5"
-										:width="event.endX! - event.startX! + 1"
-										:y="
-											eventIsSelected(event)
-												? -0.5
-												: positionY(event.y!) - 0.5 * eventHeight
-										"
-										:height="
-											eventIsSelected(event)
-												? 2 * eventHeight
-												: 0.9 * eventHeight
-										"
-										:fill="
-											colorForEvent(event as any as ExtremeEvent) || '#ff0000'
-										"
+										:data-id="`${box.startX}-${box.endX}`"
 										:class="{
-											selected: eventIsSelected(event),
-											unselected:
-												!eventIsSelected(event) && props.selectedEvent !== null,
+											[box.event.event_type]: true,
 										}"
-										:opacity="
-											eventIsSelected(event) ||
-											props.mode === 'eventzoom' ||
-											year !== selectedYear
-												? 0.9
-												: 1
+										:fill="colorForEvent(box.event) || scssVars.c3sred"
+										:x="-0.5 + box.startX - year * TOTAL_DAYS"
+										:width="box.endX - box.startX"
+										:y="positionY(box.y, box.event.event_type)"
+										:height="
+											props.hot && props.cold ? 0.5 * eventHeight : eventHeight
 										"
-										@click="eventClicked(event)"
-									/>
+										:key="box.event.id"
+										vector-effect="non-scaling-stroke"
+									></rect>
 								</transition-group>
 								<rect
 									v-for="(month, i) in monthsForYear(
@@ -671,20 +731,31 @@ const svgStyle = computed(() => {
 										props.mode === 'default' || props.mode === 'overview',
 										$l,
 									)"
-									:transform="
-										props.mode === 'timeline'
-											? monthsTransform(year)
-											: 'translate(0,0)'
-									"
-									:key="`${year}${i}`"
-									class="background"
+									:key="`year-bg-${year}-month-${i}`"
+									class="background month-bg"
 									:class="{ oddyear: year % 2 === 0 }"
 									:x="month.startX"
 									:width="month.length"
 									:y="-0.5"
 									:height="1"
 									:fill="month.color"
-									:opacity="zoom ? 0 : 1"
+									:opacity="zoom || props.mode === 'timeline' ? 0 : 1"
+								/>
+								<rect
+									v-for="year in years"
+									:key="`year-bg-${year}`"
+									class="background year-bg"
+									:class="{ oddyear: year % 2 === 0 }"
+									:x="(year - startYear) * (366 / years.length)"
+									:width="366 / years.length"
+									:y="-0.5"
+									:height="1"
+									:fill="
+										year % 2 === 0
+											? 'rgba(200,200,200,0.1)'
+											: 'rgba(100,100,100,0.1)'
+									"
+									:opacity="props.mode === 'timeline' ? 1 : 0"
 								/>
 							</g>
 						</g>
@@ -693,7 +764,15 @@ const svgStyle = computed(() => {
 			</div>
 		</div>
 
-		<div class="year-highlights" @prevent.default>
+		<div
+			class="year-highlights"
+			@prevent.default
+			:class="{
+				timeline: props.mode === 'timeline',
+				overview: props.mode === 'overview',
+				eventzoom: props.mode === 'eventzoom',
+			}"
+		>
 			<div
 				class="highlight-row fade-top"
 				:class="{ examining: props.mode === 'default' }"
@@ -791,10 +870,28 @@ const svgStyle = computed(() => {
 			overflow-y: hidden;
 		}
 
+		&.overview {
+			.event-line {
+				stroke-width: 2;
+				opacity: 0.8;
+			}
+			.label {
+				font-size: 0.75rem !important;
+			}
+			.scrollee {
+				.clipper{
+				.events-svg {
+					margin-right: 2.5rem;
+					margin-bottom: 1.5rem;
+					width: calc(100% - 2.5rem);
+					height: calc(100% - 1.5rem);
+				}}
+			}
+		}
+
 		.scrollee {
 			position: relative;
 			width: 100%;
-			background-color: aqua;
 
 			.clipper {
 				position: absolute;
@@ -808,7 +905,7 @@ const svgStyle = computed(() => {
 
 				.events-svg {
 					position: absolute;
-					transition: all $animTime ease-in-out;
+					transition: all $animTime linear;
 					top: 0;
 					left: 0;
 					height: 100%;
@@ -816,8 +913,9 @@ const svgStyle = computed(() => {
 					width: 100%;
 					margin: 0;
 					padding: 0;
+					overflow: visible;
 					.background {
-						transition: all calc(1 * $animTime) ease-in-out;
+						transition: all $animTime linear;
 						&.oddyear {
 							background-color: rgba($c3sblue, 0.1);
 						}
@@ -828,8 +926,8 @@ const svgStyle = computed(() => {
 			.year {
 				// border: 2px solid red;
 				transition:
-					all $animTime ease-in-out,
-					height 0s linear;
+					all $animTime linear,
+					height 0 linear;
 
 				scroll-snap-align: center;
 				background-color: $panelBg;
@@ -853,19 +951,33 @@ const svgStyle = computed(() => {
 
 	.event-line {
 		stroke: $c3sblue;
-		// stroke-width: 0.025;
+		stroke-width: 3;
 		fill: $c3sblue;
 		fill-opacity: 0.25;
 		pointer-events: none;
-		// transition: all calc(1.0 * $animTime) ease-in-out calc(1.0 * $animTime);
-		transition: all calc(1 * $animTime) ease-in-out;
+		// transition: all $animTime linear;
+
+		&.hot {
+			stroke: $c3sred;
+			fill: $c3sred;
+		}
+		&.cold {
+			stroke: $c3sblue;
+			fill: $c3sblue;
+		}
+		&.hot.cold {
+			stroke: url(#heatColdGradient);
+			fill: url(#heatColdGradient);
+		}
 	}
 
 	.timeline {
 		.event-line {
-			stroke: $c3sred;
-			fill: $c3sred;
-			transition: all calc(1 * $animTime) ease-in-out;
+			stroke-width: 0.5;
+			transition: all 0 linear;
+		}
+		.highlight-row {
+			transition: all $animTime linear;
 		}
 	}
 
@@ -881,13 +993,20 @@ const svgStyle = computed(() => {
 		display: block;
 		z-index: 2;
 		pointer-events: none;
-		transition: all $animTime ease-in-out;
+		transition: all $animTime linear;
 		border: none;
 
 		$fadeColor: #aaaaaa;
 
+		&.overview {
+			.month-labels {
+				padding-right: 2.5rem;
+				// width: calc(100% - 2.5rem);
+			}
+		}
+
 		.highlight-row {
-			transition: all $animTime ease-in-out;
+			transition: all $animTime linear;
 			overflow: hidden;
 
 			&.fade-top {
@@ -972,7 +1091,7 @@ const svgStyle = computed(() => {
 						z-index: 1;
 						pointer-events: none;
 						user-select: none;
-						transition: opacity $animTime ease-in-out;
+						transition: opacity $animTime linear;
 
 						&.hidden {
 							opacity: 0;
@@ -1046,7 +1165,7 @@ const svgStyle = computed(() => {
 
 	.events-svg {
 		.year-group {
-			transition: all $animTime ease-in-out;
+			transition: all $animTime linear;
 		}
 
 		.background {
@@ -1055,24 +1174,16 @@ const svgStyle = computed(() => {
 		}
 
 		.event-bar {
-			cursor: pointer;
+			// This
+			pointer-events: none;
+			transition: all 0.25*$animTime linear;
+			stroke-width: 0.5;
 
-			transition:
-				all $settleTime ease-in-out $animTime,
-				opacity $animTime ease-in-out;
-
-			&.selected {
-				transition:
-					all $settleTime ease-in-out $animTime,
-					opacity 0s ease-in-out calc($animTime + $settleTime);
+			&.hot {
+				stroke: $c3sred;
 			}
-
-			&.unselected {
-				transition:
-					all $settleTime ease-in-out,
-					opacity 0.5 ease-in-out;
-				// TODO looks iffy
-				opacity: 1;
+			&.cold {
+				stroke: $c3sblue;
 			}
 		}
 		.day-box {
@@ -1082,7 +1193,7 @@ const svgStyle = computed(() => {
 
 		.daily-event-fx-enter-from {
 			opacity: 0;
-			transition: opacity $animTime ease-in-out;
+			transition: opacity $animTime linear;
 		}
 		.daily-event-fx-enter-to {
 			opacity: 1;
@@ -1090,43 +1201,43 @@ const svgStyle = computed(() => {
 
 		.daily-event-fx-leave-from {
 			opacity: 1;
-			transition: opacity $animTime ease-in-out;
+			transition: opacity $animTime linear;
 		}
 		.daily-event-fx-leave-to {
 			opacity: 0;
 		}
 
-		.selected-event-fx-enter-from {
-			opacity: 0;
-			stroke-width: 0;
-		}
-		.selected-event-fx-enter-to {
-			opacity: 1;
-			stroke-width: 2;
-		}
-		.selected-event-fx-enter-active {
-			transition:
-				stroke-width 0s ease-out calc($animTime + $settleTime + var(--i) * 20ms),
-				opacity 0s ease-out calc($animTime + $settleTime);
-		}
+		// .selected-event-fx-enter-from {
+		// 	opacity: 0;
+		// 	stroke-width: 0;
+		// }
+		// .selected-event-fx-enter-to {
+		// 	opacity: 1;
+		// 	stroke-width: 2;
+		// }
+		// .selected-event-fx-enter-active {
+		// 	// transition:
+		// 	// 	stroke-width 0s ease-out calc($animTime + $settleTime + var(--i) * 20ms),
+		// 	// 	opacity 0s ease-out calc($animTime + $settleTime);
+		// }
 
-		.selected-event-fx-leave-from {
-			opacity: 1;
-			stroke-width: 2;
-		}
-		.selected-event-fx-leave-to {
-			opacity: 0;
-			stroke-width: 0;
-		}
-		.selected-event-fx-leave-active {
-			// transition:
-			// 	stroke-width $animTime ease calc(var(--i) * 20ms) $settleTime,
-			// 	opacity $animTime ease-in-out $settleTime;
-			transition:
-				transform 0s ease-in-out,
-				stroke-width 0s ease-out calc(var(--i) * 20ms),
-				opacity 0s ease-out $settleTime;
-		}
+		// .selected-event-fx-leave-from {
+		// 	opacity: 1;
+		// 	stroke-width: 2;
+		// }
+		// .selected-event-fx-leave-to {
+		// 	opacity: 0;
+		// 	stroke-width: 0;
+		// }
+		// .selected-event-fx-leave-active {
+		// 	// transition:
+		// 	// 	stroke-width $animTime ease calc(var(--i) * 20ms) $settleTime,
+		// 	// 	opacity $animTime linear $settleTime;
+		// 	// transition:
+		// 	// 	transform 0s linear,
+		// 	// 	stroke-width 0s ease-out calc(var(--i) * 20ms),
+		// 	// 	opacity 0s ease-out $settleTime;
+		// }
 	}
 }
 </style>

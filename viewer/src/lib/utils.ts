@@ -1,3 +1,4 @@
+import * as d3 from 'd3'
 
 export const debounce = (func: (...args: any[]) => void, delay: number) => {
 	let timeout: ReturnType<typeof setTimeout> | null = null
@@ -9,12 +10,15 @@ export const debounce = (func: (...args: any[]) => void, delay: number) => {
 	}
 }
 
+// This is the same algorithm used in the backend to pack lat/lon to a pixel.
 export const packPixelToInt = (lat: number, lon: number) => {
 	const iLat = Math.round(lat * 4)
+	while (lon < -180) lon += 360
+	while (lon > 180) lon -= 360
 	const iLon = Math.round(lon * 4)
+
 	return (iLat << 16) | (iLon & 0xffff)
 }
-
 
 export const toPx = (value: string): number => {
 	if (value.endsWith('%')) {
@@ -32,4 +36,26 @@ export const toPx = (value: string): number => {
 	return parseFloat(value) // fallback
 }
 
+export function interpolateColor(baseColor: string = 'rgb(151, 24, 65)') {
+	const hsl = d3.hsl(baseColor)
+	// lock hue/sat, vary lightness 0→1
+	return (t: number) => d3.hsl(hsl.h, hsl.s, (1 - t) * 0.7 + 0.2).toString()
+}
 
+export function binGradient(
+	startPct: number,
+	endPct: number,
+	startColor: string,
+	endColor: string,
+) {
+	// Interpolate between red and blue based on startPct
+	// startPct=1 => red, startPct=0 => blue
+	const mix = d3.interpolateRgb(
+		startColor ?? 'rgb(151, 24, 65)',
+		endColor ?? 'rgb(44, 102, 162)',
+	)(endPct) // or 1-startPct
+
+	return mix
+
+	// return `linear-gradient(135deg, ${startColor} ${startPct * 100}%, ${mix} 50%, ${endColor} ${endPct * 100}%)`
+}

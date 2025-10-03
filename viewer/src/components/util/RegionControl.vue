@@ -20,7 +20,6 @@ const $l = useLabels()
 
 const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
 const setSelectingPoint = () => {
-	console.log('setSelectingPoint')
 	if (store.filteringByPoint) {
 		// Cancel selecting point
 		store.filteringByPoint = false
@@ -49,7 +48,6 @@ const setDrawingRegion = () => {
 		store.regionFilterReady = false
 		store.exploreGlobal = false
 		store.filteringByPoint = false
-		return
 	} else {
 		store.filteringByRegion = true
 		store.regionFilterReady = false

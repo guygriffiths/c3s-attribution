@@ -2,7 +2,7 @@
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faGauge, faCalendarDays } from '@fortawesome/free-solid-svg-icons'
 import { nextTick, watch } from 'vue'
-import { useStore, ViewMode } from '@/store/store'
+import { useStore } from '@/store/store'
 
 const mode = defineModel<ViewMode>({ required: true })
 

@@ -9,6 +9,8 @@ declare global {
 
 	type TimeReelMode = 'default' | 'timeline' | 'eventzoom' | 'overview'
 
+	type EventType = 'hot' | 'cold' // | 'wet' | 'windy' | 'dry'
+
 	interface ExtremeEvent {
 		id: string
 		times: Date[]
@@ -24,6 +26,7 @@ declare global {
 		packedPixelSet?: Set<number>
 		ocean_only: boolean
 		color: string
+		event_type: EventType
 	}
 
 	interface ExtremeEventFull extends ExtremeEvent {
@@ -36,13 +39,11 @@ declare global {
 		pixel_peak_values: number[]
 	}
 
-	interface WeatherEvent {
-		id: string
-		times: Date[]
-		color?: string
-		y?: number
-		startX?: number
-		endX?: number
+	interface EventBox {
+		event: ExtremeEvent
+		y: number
+		startX: number
+		endX: number
 	}
 }
 

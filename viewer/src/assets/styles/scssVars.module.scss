@@ -1,8 +1,9 @@
 // Official colors
 $c3sred: rgb(151, 24, 65);
-$lightbulb: rgb(242, 219, 44);
+$lightbulb: rgb(247, 205, 81);
 $c3sredContrast: rgb(105, 17, 45);
-$c3sblue: rgb(24, 56, 151);
+// $c3sblue: rgb(22, 104, 180);
+$c3sblue: rgb(44, 102, 162);
 $panelBg: rgb(255, 255, 255);
 
 // Crap I've made up and will definitely be replacing later
@@ -12,7 +13,7 @@ $textColor: rgb(27, 11, 9);
 $primary: rgb(50, 108, 184);
 $highlight: rgb(211, 54, 130);
 
-$animTime: 0.5s;
+$animTime: 0.25s;
 $settleTime: 0.25s;
 
 $headerHeight: 4rem;
@@ -30,6 +31,7 @@ $panelMargin: 1rem;
 :export {
 	c3sred: $c3sred;
 	c3sblue: $c3sblue;
+	lightbulb: $lightbulb;
 	animTime: $animTime;
 	frameBorderWidth: $frameBorderWidth;
 	panelMargin: $panelMargin;

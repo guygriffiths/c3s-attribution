@@ -1,4 +1,6 @@
+import scssVars from '@/assets/styles/scssVars.module.scss'
 import { buildEventFilters, setPostFilters } from '@/lib/eventFiltering'
+import { interpolateColor } from '@/lib/utils'
 import * as d3 from 'd3'
 import { differenceInDays } from 'date-fns'
 import { defineStore } from 'pinia'
@@ -20,12 +22,44 @@ interface State {
 	// These are the events after having the threshold filters applied
 	// globalFilteredEvents: ExtremeEvent[]
 
-	minDuration: number
-	maxDuration: number
-	minIntensity: number
-	maxIntensity: number
-	minSize: number
-	maxSize: number
+	durationRange: [number, number]
+	heatIntensityRange: [number, number]
+	coldIntensityRange: [number, number]
+	hotEventsOn: boolean
+	coldEventsOn: boolean
+	sizeRange: [number, number]
+}
+
+export const intensityForValue = (v: number, hot: boolean) => {
+	if (hot) {
+		let baseline = 278.15
+		return v - baseline
+	} else {
+		let baseline = 271.15
+		return baseline - v
+	}
+}
+
+export const colorForValue = (
+	v: number,
+	hot: boolean,
+	scale: d3.ScaleLinear<number, number>,
+) => {
+	// if (!event || !scale) return (v: number) => 'transparent'
+	if (hot) {
+		return interpolateColor(scssVars.c3sred)(scale(v))
+	} else {
+		return interpolateColor(scssVars.c3sblue)(scale(v))
+	}
+}
+
+export const colorForEvent = (
+	event: ExtremeEvent,
+	scale: d3.ScaleLinear<number, number>,
+) => {
+	
+	const value = intensityForValue(event.peak_value, event.event_type === 'hot')
+	return colorForValue(value, event.event_type === 'hot', scale)
 }
 
 export const useStore = defineStore('events', {
@@ -36,55 +70,74 @@ export const useStore = defineStore('events', {
 			startYear: 1979,
 			endYear: new Date().getUTCFullYear(),
 			hoveringEventId: null,
-			minDuration: 3,
-			maxDuration: 14,
-			minIntensity: 300,
-			maxIntensity: 330,
-			minSize: 0,
-			maxSize: 100,
+			durationRange: [3, 14],
+			heatIntensityRange: [305, 320],
+			coldIntensityRange: [270, 250],
+			hotEventsOn: false,
+			coldEventsOn: true,
+			sizeRange: [0, 100],
 		}
 	},
 	getters: {
+		dualMode: (state: State) => {
+			return state.hotEventsOn && state.coldEventsOn
+		},
+		intensityRange: (state: State) => {
+			if (state.hotEventsOn && state.coldEventsOn) {
+				return [
+					Math.min(state.coldIntensityRange[0], state.heatIntensityRange[0]),
+					Math.max(state.coldIntensityRange[1], state.heatIntensityRange[1]),
+				]
+			} else if (state.hotEventsOn) {
+				return state.heatIntensityRange
+			} else if (state.coldEventsOn) {
+				return state.coldIntensityRange
+			} else {
+				return [0, 1]
+			}
+		},
 		eventSelected: (state: State) => {
 			return state.selectedEventId !== null // && state.selectedEvent !== undefined
 		},
-		colorForEvent: (state: State) => {
-			const scale = d3
+		hotScale: (state: State) => {
+			return d3
 				.scaleLinear()
-				// @ts-ignore
-				.domain(state.intensityRange)
+				.domain(state.heatIntensityRange)
 				.range([0, 1])
 				.clamp(true)
+		},
+		coldScale: (state: State) => {
+			return d3
+				.scaleLinear()
+				.domain(state.coldIntensityRange)
+				.range([0, 1])
+				.clamp(true)
+		},
+		colorForEvent: (state: State) => {
 			// TODO Logic for configurable intensity definition.
 			return (event: ExtremeEvent) => {
-				return d3.interpolateWarm(scale(event.peak_value || 0))
+				const hot = event.event_type === 'hot'
+				return colorForValue(
+					state.intensityForEvent(event),
+					hot,
+					hot ? state.hotScale : state.coldScale,
+				)
 			}
 		},
 		durationForEvent: (state: State) => {
 			return (event: ExtremeEvent) => event.duration
 		},
-		durationRange: (state: State): [number, number] => {
-			return [state.minDuration, state.maxDuration]
-		},
-		intensityForEvent: (state: State) => {
-			// TODO This should be configurable between min/max/mean, something else?
-			return (event: ExtremeEvent) => event.peak_value
-		},
-		intensityRange: (state: State): [number, number] => {
-			// TODO - Definition of intensity should be configurable
-			return [state.minIntensity, state.maxIntensity]
-		},
 		sizeForEvent: (state: State) => {
 			return (event: ExtremeEvent) => event.pixel_set?.length || 0
 		},
-		sizeRange: (state: State): [number, number] => {
-			// TODO - Definition of size should be configurable
-			return [state.minSize, state.maxSize]
+		intensityForEvent: (state: State) => {
+			return (event: ExtremeEvent) => {
+				return intensityForValue(event.peak_value, event.event_type === 'hot')
+			}
 		},
 	},
 	actions: {
 		async selectEvent(id: string | null) {
-			console.log('Clicked select', id)
 			const mainStore = useMainStore()
 			const timeStore = useTimeStore()
 			if (id === null) {
@@ -94,16 +147,15 @@ export const useStore = defineStore('events', {
 			}
 			// if (this.selectedEvent?.id === id) {
 			if (this.selectedEventId === id) {
-				console.log('Deselecting event', id)
 				this.selectedEvent = null
 				this.selectedEventId = null
 			} else {
 				mainStore.setLoading()
 				this.selectedEventId = id
+				console.log('setting selected event to', id)
 				let path = `/events/event-${id}.json`
 				const resp = await fetch(path)
 				const event = await resp.json()
-				console.log('Fetched event details', event)
 				// // This should always be the case...
 				event.id = id
 				event.times = event.times.map((time: string) => new Date(time))
@@ -117,6 +169,8 @@ export const useStore = defineStore('events', {
 				) {
 					timeStore.selectedTime = new Date(event.times[0])
 				}
+				event.max_value = event.peak_value
+				event.min_value = event.mean_value - (event.peak_value - event.mean_value)
 				mainStore.setLoadingDone()
 			}
 		},
@@ -129,45 +183,75 @@ export const useStore = defineStore('events', {
 			const mainStore = useMainStore()
 			mainStore.setLoading()
 
-			setPostFilters(mainStore.filters)
+			setPostFilters(
+				mainStore.filters,
+				this.durationForEvent,
+				this.intensityForEvent,
+				this.sizeForEvent,
+			)
 			// This needs to get set by the leaflet layers
 			mainStore.setLoadingDone()
 		},
 		setEvents(data: ExtremeEvent[]) {
-			console.log('Setting events, count:', data.length)
+			console.log(
+				'Setting events, count:',
+				data.length,
+				data.filter((e) => e.event_type === 'hot').length,
+				data.filter((e) => e.event_type === 'cold').length,
+			)
 			const mainStore = useMainStore()
+			// Throw away the top x% of values for setting the range on colour scales, histograms etc
+			const N = Math.ceil(data.length * 0.025)
 			mainStore.setLoading()
 			// Preprocess events a bit
-			let minDuration = Infinity,
-				maxDuration = -Infinity
-			let minIntensity = Infinity,
-				maxIntensity = -Infinity
-			let minSize = Infinity,
-				maxSize = -Infinity
-			for (const e of data) {
-				if (this.durationForEvent(e) != null) {
-					minDuration = Math.min(minDuration, this.durationForEvent(e))
-					maxDuration = Math.max(maxDuration, this.durationForEvent(e))
-				}
-				if (this.intensityForEvent(e) != null) {
-					minIntensity = Math.min(minIntensity, this.intensityForEvent(e))
-					maxIntensity = Math.max(maxIntensity, this.intensityForEvent(e))
-				}
-				if (this.sizeForEvent(e) != null) {
-					minSize = Math.min(minSize, this.sizeForEvent(e))
-					maxSize = Math.max(maxSize, this.sizeForEvent(e))
-				}
-			}
-			this.minDuration = minDuration
-			this.maxDuration = maxDuration
-			this.minIntensity = minIntensity
-			this.maxIntensity = maxIntensity
-			this.minSize = minSize
-			this.maxSize = maxSize
-			console.log('Compute event stats', minSize, maxSize)
+			const durations = data
+				.map((e) => this.durationForEvent(e))
+				.filter((v) => v != null)
+				.sort((a, b) => b - a)
 
-			// this.events = data
-			// console.log('Stored events')
+			const heatIntensities = data
+				.filter((d) => d != null && d.event_type === 'hot')
+				.map((e) => this.intensityForEvent(e))
+				.sort((a, b) => b - a)
+
+			const coldIntensities = data
+				.filter((d) => d != null && d.event_type === 'cold')
+				.map((e) => this.intensityForEvent(e))
+				.sort((a, b) => b - a)
+
+			const sizes = data
+				.map((e) => this.sizeForEvent(e))
+				.filter((v) => v != null)
+				.sort((a, b) => b - a)
+
+			this.durationRange = [
+				Math.max(3, durations[durations.length - 1]),
+				durations[Math.min(Math.floor(0.1 * N), durations.length - 1)],
+			]
+			this.heatIntensityRange = [
+				heatIntensities[heatIntensities.length - 1],
+				heatIntensities[
+					Math.min(Math.floor(0.1 * N), heatIntensities.length - 1)
+				],
+			]
+			console.log('heat intensity range', this.heatIntensityRange)
+			// This is if we want to reverse the cold scale so that "more extreme" is always lower
+			// this.coldIntensityRange = [
+			// 	coldIntensities[Math.min(N, coldIntensities.length - 1)],
+			// 	coldIntensities[coldIntensities.length - 1],
+			// ]
+			this.coldIntensityRange = [
+				coldIntensities[coldIntensities.length - 1],
+				coldIntensities[
+					Math.min(Math.floor(0.1 * N), coldIntensities.length - 1)
+				],
+			]
+			console.log('cold intensity range', this.coldIntensityRange)
+
+			this.sizeRange = [
+				sizes[sizes.length - 1],
+				sizes[Math.min(N, sizes.length - 1)],
+			]
 
 			buildEventFilters(data) // Kick off building the pixel index
 
