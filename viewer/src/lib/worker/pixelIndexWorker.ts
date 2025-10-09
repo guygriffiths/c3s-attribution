@@ -1,10 +1,9 @@
-import { packPixelToInt } from '../utils'
 export { }
 
 
 self.onmessage = (e: MessageEvent) => {
 	const events = e.data as {
-		pixel_set?: [number, number][]
+		pixel_set?: number[]
 	}[]
 
 	const pixelIndex: Record<number, number[]> = {}
@@ -12,8 +11,8 @@ self.onmessage = (e: MessageEvent) => {
 	for (let idx =0; idx < events.length; idx++) {
 		const event = events[idx]
 		if (!event.pixel_set) continue
-		for (let [lat,lon] of event.pixel_set) {
-			const pid = packPixelToInt(lat, lon)
+		for (let pid of event.pixel_set) {
+			// const pid = packPixelToInt(lat, lon)
 			if (!pixelIndex[pid]) {
 				pixelIndex[pid] = []
 			}

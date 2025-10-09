@@ -53,11 +53,6 @@ onMounted(() => {
 		height.value = newHeight
 	})
 	resizeObserver.value.observe(containerRef.value)
-	console.log(
-		'Histogram: observing container for resize',
-		props.xmin,
-		props.xmax,
-	)
 })
 
 onBeforeUnmount(() => {
@@ -279,6 +274,7 @@ watch(
 
 <style lang="scss" scoped>
 @use '@/assets/styles/scssVars.module.scss' as *;
+@use 'sass:color';
 
 .histogram-root {
 	width: 100%;
@@ -322,7 +318,7 @@ $rate: 0.5 * $animTime;
 	
 	&.highlight {
 		fill: $lightbulb;
-		stroke: lighten($lightbulb, 20%);
+		stroke: color.adjust($lightbulb, $lightness: 20%);
 		stroke-width: 1;
 		filter: drop-shadow(0 0 2px $lightbulb) drop-shadow(0 0 4px $lightbulb);
 	}

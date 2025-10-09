@@ -23,7 +23,7 @@ import 'leaflet/dist/leaflet.css'
 import { computed, nextTick, ref, watch } from 'vue'
 
 import scssVars from '@/assets/styles/scssVars.module.scss'
-import { markerIcon } from '@/lib/map-utils'
+import { centreMapOnDiv, fitBoundsToDiv, markerIcon } from '@/lib/map-utils'
 import { drawEventTile, TILE_SIZE } from '@/lib/renderer'
 import { faClose, faFilter } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -128,8 +128,13 @@ onGlobalEventsReady(() => {
 	// This is on first load, or when any of the high-level filters change
 	// @ts-ignore
 	globalHeatmapEvents.value = getGlobalFilteredEvents()
-	// @ts-ignore
-	heatmapRenderer._update()
+	try {
+		// @ts-ignore
+		heatmapRenderer._update()
+	} catch (e) {
+		console.warn('Error updating heatmap renderer', e)
+	}
+	// heatmapRenderer._update()
 })
 
 const drawRegion = () => {
@@ -167,8 +172,13 @@ const pointSelectorAdded = (event: any) => {
 	const { lat, lng } = (event.target as L.Marker).getLatLng()
 	console.log('Setting point filter to', lat, lng)
 	regionFilteredEvents = setFilterToPoint(lat, lng)
-	// @ts-ignore
-	fastRenderer._update()
+	try {
+		// @ts-ignore
+		fastRenderer._update()
+	} catch (e) {
+		console.warn('Error updating fast renderer', e)
+	}
+
 	store.lastPoint = [lat, lng]
 	console.log('Set point filter to', lat, lng)
 }
@@ -183,8 +193,12 @@ const updatePointSelector = (event: LeafletMouseEvent) => {
 		const { lat, lng } = (event.target as L.Marker).getLatLng()
 		setFilterToPoint(lat, lng)
 		regionFilteredEvents = getFilteredEvents()
-		// @ts-ignore
-		fastRenderer._update()
+		try {
+			// @ts-ignore
+			fastRenderer._update()
+		} catch (e) {
+			console.warn('Error updating fast renderer', e)
+		}
 	})
 }
 
@@ -193,8 +207,13 @@ const pointSelectorSettled = (event: any) => {
 		const { lat, lng } = (event.target as L.Marker).getLatLng()
 		setFilterToPoint(lat, lng)
 		regionFilteredEvents = getFilteredEvents()
-		// @ts-ignore
-		fastRenderer._update()
+		try {
+			// @ts-ignore
+			fastRenderer._update()
+		} catch (e) {
+			console.warn('Error updating fast renderer', e)
+		}
+
 		store.lastPoint = [lat, lng]
 		store.draggingFilter = false
 		// TODO pop up an auto-zoom button with a countdown. Two options - auto zoom in 3 seconds, or click to zoom now. Pick up the marker to cancel the zoom.
@@ -248,12 +267,20 @@ watch(
 	() => {
 		if (store.viewMode === 'heatmap') {
 			globalHeatmapEvents.value = getGlobalFilteredEvents()
-			// @ts-ignore
-			heatmapRenderer._update()
+			try {
+				// @ts-ignore
+				heatmapRenderer._update()
+			} catch (e) {
+				console.warn('Error updating heatmap renderer', e)
+			}
 			if (store.filteringByPoint || store.filteringByRegion) {
 				regionFilteredEvents = getFilteredEvents()
-				// @ts-ignore
-				fastRenderer._update()
+				try {
+					// @ts-ignore
+					fastRenderer._update()
+				} catch (e) {
+					console.warn('Error updating fast renderer', e)
+				}
 			}
 		}
 	},
@@ -279,16 +306,54 @@ watch(
 	},
 )
 
+watch(
+	() => store.showMultiEventPanel,
+	(newVal) => {
+		centreMapOnDiv(
+			mapRef.value!.leafletObject as L.Map,
+			document.getElementById('multi-event-window')!,
+			!newVal,
+		)
+	},
+)
+
+const lastCentreZoom = ref<{ centre: L.LatLng; zoom: number } | null>(null)
+watch(
+	() => eventStore.selectedEvent,
+	(newVal) => {
+		if (store.viewMode === 'heatmap') {
+			if (newVal) {
+				lastCentreZoom.value = {
+					centre: map.value!.getCenter(),
+					zoom: map.value!.getZoom(),
+				}
+				fitBoundsToDiv(
+					mapRef.value!.leafletObject as L.Map,
+					document.getElementById(newVal ? 'multi-event-window' : 'map')!,
+					newVal ? newVal.bbox : [-85, -180, 85, 180],
+				)
+			} else if (lastCentreZoom.value) {
+				map.value!.setView(
+					lastCentreZoom.value.centre,
+					lastCentreZoom.value.zoom,
+					{ animate: true },
+				)
+				lastCentreZoom.value = null
+			}
+		}
+	},
+)
+
 const renderTile = (props: any) => {
 	const cScale = d3
 		.scaleLinear()
 		.domain([
 			intensityForValue(
-				eventStore.selectedEvent?.min_value,
+				eventStore.selectedEvent?.min_value!,
 				eventStore.selectedEvent?.event_type === 'hot',
 			),
 			intensityForValue(
-				eventStore.selectedEvent?.max_value,
+				eventStore.selectedEvent?.max_value!,
 				eventStore.selectedEvent?.event_type === 'hot',
 			),
 		])
@@ -428,17 +493,6 @@ const addEventPanes = () => {
 		}
 	})
 }
-
-const shifted = (region: [number, number][]) => {
-	if (!region?.length) return []
-	if (region[0][1] >= 0) {
-		// All points are positive longitude, so shift left
-		return region.map((coord) => [coord[0], coord[1] - 360])
-	} else {
-		// All points are negative longitude, so shift right
-		return region.map((coord) => [coord[0], coord[1] + 360])
-	}
-}
 </script>
 
 <template>
@@ -489,9 +543,9 @@ const shifted = (region: [number, number][]) => {
 				v-for="event in currentEvents"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event)"
-				:weight="1"
+				:weight="event.id === eventStore.selectedEventId ? 0.2 : 1"
 				:fill="true"
-				:fill-opacity="1"
+				:fill-opacity="event.id === eventStore.selectedEventId ? 0.3 : 0.9"
 				:color="event.event_type == 'hot' ? scssVars.c3sred : scssVars.c3sblue"
 				:fill-color="eventStore.colorForEvent(event)"
 				@click="eventStore.selectEvent(event.id)"
@@ -544,9 +598,6 @@ const shifted = (region: [number, number][]) => {
 			/>
 
 			<!-- Controls -->
-			<LControl position="topright" class="the-toggle">
-				<ModeToggle v-model="store.viewMode" />
-			</LControl>
 			<EventTypeToggle
 				class="event-type-toggle"
 				v-model:cold="eventStore.coldEventsOn"
@@ -652,20 +703,21 @@ const shifted = (region: [number, number][]) => {
 		}
 	}
 
-	:deep(.leaflet-fast-event-pane) {
+	:deep(.leaflet-fastEvent-pane) {
 		opacity: 0;
 	}
 	:deep(.leaflet-event-pane) {
 		opacity: 0;
 		transition: opacity $animTime ease-in-out;
 	}
+
 	&.heatmap {
 		:deep(.leaflet-event-pane) {
 			opacity: 1;
 		}
 	}
 	&.have-regional {
-		:deep(.leaflet-fast-event-pane) {
+		:deep(.leaflet-fastEvent-pane) {
 			opacity: 1;
 		}
 		:deep(.leaflet-event-pane) {
@@ -673,11 +725,20 @@ const shifted = (region: [number, number][]) => {
 		}
 	}
 	&.dragging {
-		:deep(.leaflet-fast-event-pane) {
+		:deep(.leaflet-fastEvent-pane) {
 			opacity: 1;
 		}
 		:deep(.leaflet-event-pane) {
 			opacity: 0.1;
+		}
+	}
+	&.timemachine {
+
+		:deep(.leaflet-event-pane) {
+			opacity: 0;
+		}
+		:deep(.leaflet-fastEvent-pane) {
+			opacity: 0;
 		}
 	}
 

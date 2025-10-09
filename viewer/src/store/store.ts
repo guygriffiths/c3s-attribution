@@ -34,8 +34,9 @@ interface State {
 	filteringByPoint: boolean // Whether we are currently filtering by a point
 	regionFilterReady: boolean // Whether we are currently drawing a region on the map
 
-	exploreGlobal: boolean // Whether to explore globally or just the current map view
 	draggingFilter: boolean
+
+	showMultiEventPanel: boolean // Whether to show the multi-event summary panel
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -75,13 +76,17 @@ export const useStore = defineStore('main', {
 			},
 			draggingFilter: false,
 			lastPoint: null,
-			exploreGlobal: false,
 			filteringByRegion: false,
 			regionFilterReady: false, // Whether we are currently drawing a region on the map
 			filteringByPoint: false, // Whether we are currently filtering by a point
+
+			showMultiEventPanel: false,
 		}
 	},
 	getters: {
+		exploreGlobal: (state) => {
+			return !state.filteringByPoint && !state.regionFilterReady
+		},
 		isFocused: (state) => {
 			const eventStore = useEventStore()
 			return eventStore.selectedEventId !== null

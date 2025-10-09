@@ -23,6 +23,69 @@ export const fitMapToBounds = (map: L.Map, event: ExtremeEvent) => {
 	)
 }
 
+export const centreMapOnDiv = (
+	map: L.Map,
+	div: HTMLElement,
+	uncentre: boolean,
+) => {
+	// `map` = your Leaflet map
+	// `div` = your HTML element where you want the map centre
+	const rect = div.getBoundingClientRect()
+	const mapSize = map.getSize()
+
+	// calculate pixel offset from map centre
+	const offsetX = rect.left + rect.width / 2 - mapSize.x / 2
+	const offsetY = rect.top + rect.height / 2 - mapSize.y / 2
+	console.log('centring map on div', rect, mapSize, offsetX, offsetY)
+	// pan by the negative of that offset so the div moves to centre
+	if (!uncentre) {
+		map.panBy([-offsetX, -offsetY], {
+			animate: true,
+			// duration: parseFloat(scssVars.animTime.replace('s', '')) * 1000,
+		})
+	} else {
+		map.panBy([offsetX, offsetY], {
+			animate: true,
+			// duration: parseFloat(scssVars.animTime.replace('s', '')) * 1000,
+		})
+	}
+}
+
+export const fitBoundsToDiv = (
+	map: L.Map,
+	div: HTMLElement,
+	bbox: [number, number, number, number],
+) => {
+	const mapRect = map.getContainer().getBoundingClientRect()
+	const divRect = div.getBoundingClientRect()
+
+	// calculate padding for fitBounds
+	const paddingTopLeft: L.PointExpression = [
+		divRect.left - mapRect.left,
+		divRect.top - mapRect.top,
+	]
+	const paddingBottomRight: L.PointExpression = [
+		mapRect.right - divRect.right,
+		mapRect.bottom - divRect.bottom,
+	]
+
+	console.log('fitting bounds to div', bbox, paddingTopLeft, paddingBottomRight)
+	// @ts-ignore
+
+	map.fitBounds(
+		[
+			[bbox[0], bbox[1]],
+			[bbox[2], bbox[3]],
+		],
+		{
+			paddingTopLeft,
+			paddingBottomRight,
+			// duration: parseFloat(scssVars.animTime.replace('s', '')) * 1000,
+			animate: true,
+		},
+	)
+}
+
 export const getZeitgeistOpacity = (stepsFromNow: number) => {
 	if (stepsFromNow === 0) {
 		return 1

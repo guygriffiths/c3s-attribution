@@ -162,7 +162,7 @@ export function setFilterToRegion(
 export function setPostFilters(
 	filters: MainStore['filters'],
 	durationGetter: (e: ExtremeEvent) => number = (e) => e.duration,
-	intensityGetter: (e: ExtremeEvent) => number = (e) => e.peak_value || 0,
+	intensityGetter: (e: ExtremeEvent) => number = (e) => e.max_value || 0,
 	sizeGetter: (e: ExtremeEvent) => number = (e) => e.pixel_set.length || 0,
 ) {
 	_filteredEvents = postFilterEvents(
@@ -185,8 +185,8 @@ const postFilterEvents = (
 	events: ExtremeEvent[],
 	filters: MainStore['filters'],
 	durationGetter: (e: ExtremeEvent) => number = (e) => e.duration,
-	intensityGetter: (e: ExtremeEvent) => number = (e) => e.peak_value || 0,
-	sizeGetter: (e: ExtremeEvent) => number = (e) => e.pixel_set.length || 0,
+	intensityGetter: (e: ExtremeEvent) => number = (e) => e.max_value || 0,
+	sizeGetter: (e: ExtremeEvent) => number = (e) => e.total_area || 0,
 ): ExtremeEvent[] => {
 	const fe = events.filter((event: ExtremeEvent, i) => {
 		if (!filters.includeOceanEvents && event.ocean_only) return false

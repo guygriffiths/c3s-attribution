@@ -21,24 +21,16 @@ const $l = useLabels()
 const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
 const setSelectingPoint = () => {
 	if (store.filteringByPoint) {
-		// Cancel selecting point
+		// Turn off point filtering and go back to global
 		store.filteringByPoint = false
-		store.exploreGlobal = false
 		store.regionFilterReady = false
 		store.filteringByRegion = false
 		return
 	}
-	console.log('Not already filtering by point')
 	store.setLoading() // start loading immediately
-	console.log('Set loading')
 	store.filteringByPoint = true
-	console.log('Set filtering by point')
-	store.exploreGlobal = false
-	console.log('Set not exploring globally')
 	store.regionFilterReady = false
-	console.log('Set region filter not ready')
 	store.filteringByRegion = false
-	console.log('Set region filtering off')
 }
 
 const setDrawingRegion = () => {
@@ -46,36 +38,20 @@ const setDrawingRegion = () => {
 		// Cancel drawing
 		store.filteringByRegion = false
 		store.regionFilterReady = false
-		store.exploreGlobal = false
 		store.filteringByPoint = false
+		// Set back to global
 	} else {
 		store.filteringByRegion = true
 		store.regionFilterReady = false
 		store.filteringByPoint = false
-		store.exploreGlobal = false
 	}
 }
 
 const setExploreGlobal = () => {
-	if (store.exploreGlobal) {
-		// Cancel exploring global
-		store.exploreGlobal = false
-		store.filteringByPoint = false
-		store.regionFilterReady = false
-		store.filteringByRegion = false
-		return
-	}
-	store.exploreGlobal = true
+	// Don't toggle this, there's nothing to unset
 	store.filteringByPoint = false
 	store.regionFilterReady = false
 	store.filteringByRegion = false
-}
-
-const noExplore = () => {
-	store.regionFilterReady = false
-	store.filteringByRegion = false
-	store.filteringByPoint = false
-	store.exploreGlobal = false
 }
 
 const ready = ref(false)
@@ -93,25 +69,24 @@ onFilterBuilt(() => {
 		<!-- <p> {{ eventStore.eventPointFilter }}</p> -->
 
 		<div>
-			<button
+			<!-- <button
 				class="none-button"
 				:class="{
 					selected:
 						store.filteringByPoint === false &&
 						store.filteringByRegion === false &&
-						store.exploreGlobal === false,
 				}"
 				:style="{ backgroundColor: scssModule.c3sred }"
 				title="No event charts, just view the global heatmap"
 				@click="noExplore"
 			>
 				<FontAwesomeIcon :icon="faBan" />
-			</button>
+			</button> -->
 
 			<button
 				:style="{ backgroundColor: scssModule.c3sred }"
 				:class="{
-					selected: store.exploreGlobal,
+					selected: store.exploreGlobal
 				}"
 				title="Explore global events"
 				@click="setExploreGlobal"

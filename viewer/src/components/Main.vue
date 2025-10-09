@@ -21,9 +21,12 @@ import {
 	faClock,
 	faExpand,
 	faTemperatureHigh,
+	faRankingStar,
+	faCalendarDays,
 } from '@fortawesome/free-solid-svg-icons'
 import FocusFrame from './util/FocusFrame.vue'
 import EventRanker from './util/EventRanker.vue'
+import ModeToggle from './util/ModeToggle.vue'
 import {
 	clearFilter,
 	getFilteredEvents,
@@ -155,6 +158,7 @@ const mode = computed((): TimeReelMode => {
 			@close="exitFocus"
 		/>
 		<MapComponent id="map"></MapComponent>
+		<ModeToggle v-model="store.viewMode" id="mode-toggle" />
 		<Panel
 			id="time-panel"
 			:active="timeStore.timePanelVisible || eventStore.eventSelected"
@@ -183,7 +187,7 @@ const mode = computed((): TimeReelMode => {
 				:cold="eventStore.coldEventsOn"
 				:value-extractor="eventStore.intensityForEvent"
 			></TimeReel>
-			<button
+			<!-- <button
 				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
 				class="panel-hide"
 				@click="toggleTimePanelHidden"
@@ -192,7 +196,7 @@ const mode = computed((): TimeReelMode => {
 					:icon="!timeStore.timePanelExpanded ? faChevronUp : faAnglesUp"
 					:class="{ 'fa-rotate-180': timeStore.timePanelVisible }"
 				/>
-			</button>
+			</button> -->
 			<button
 				v-if="
 					timeStore.timePanelVisible &&
@@ -203,7 +207,7 @@ const mode = computed((): TimeReelMode => {
 				@click="toggleTimePanelExpanded"
 			>
 				<font-awesome-icon
-					:icon="!timeStore.timePanelExpanded ? faAnglesUp : faClose"
+					:icon="!timeStore.timePanelExpanded ? faCalendarDays : faClose"
 				/>
 			</button>
 			<button
@@ -218,18 +222,37 @@ const mode = computed((): TimeReelMode => {
 		</Panel>
 
 		<Panel
-			id="event-rankings-panel"
+			id="multi-event-panel"
 			class="right"
+			:class="{ small: store.viewMode === 'timemachine' }"
 			:active="
-				store.viewMode === 'heatmap' &&
-				(store.exploringRegion || store.exploreGlobal)
+				store.showMultiEventPanel &&
+				(store.viewMode !== 'timemachine' || eventStore.eventSelected)
 			"
 		>
-			<div class="ranker" v-show="store.exploringRegion || store.exploreGlobal">
+			<button
+				class="panel-toggle"
+				@click="store.showMultiEventPanel = !store.showMultiEventPanel"
+			>
+				<font-awesome-icon
+					:icon="!store.showMultiEventPanel ? faRankingStar : faClose"
+				/>
+			</button>
+			<div class="title-panel">
 				<h1>
 					<FontAwesomeIcon :icon="faClock" />
 					Duration
 				</h1>
+				<h1>
+					<FontAwesomeIcon :icon="faExpand" />
+					Size
+				</h1>
+				<h1>
+					<FontAwesomeIcon :icon="faTemperatureHigh" />
+					Intensity
+				</h1>
+			</div>
+			<div class="medals-subpanel subpanel">
 				<EventRanker
 					:events="eventsOfInterest"
 					:sort-func="
@@ -238,12 +261,6 @@ const mode = computed((): TimeReelMode => {
 					"
 					:topN="200"
 				/>
-			</div>
-			<div class="ranker" v-show="store.exploringRegion || store.exploreGlobal">
-				<h1>
-					<FontAwesomeIcon :icon="faExpand" />
-					Size
-				</h1>
 				<EventRanker
 					:events="eventsOfInterest"
 					:sort-func="
@@ -251,12 +268,7 @@ const mode = computed((): TimeReelMode => {
 					"
 					:topN="200"
 				/>
-			</div>
-			<div class="ranker" v-show="store.exploringRegion || store.exploreGlobal">
-				<h1>
-					<FontAwesomeIcon :icon="faTemperatureHigh" />
-					Intensity
-				</h1>
+
 				<EventRanker
 					:events="eventsOfInterest"
 					:sort-func="
@@ -266,217 +278,151 @@ const mode = computed((): TimeReelMode => {
 					:topN="200"
 				/>
 			</div>
+			<div class="histogram-subpanel subpanel">
+				<Histogram
+					:data="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
+					:nbins="10"
+					:xmin="eventStore.durationRange[0]"
+					:xmax="
+						eventStore.selectedEvent
+							? Math.max(
+									eventStore.durationRange[1],
+									eventStore.durationForEvent(eventStore.selectedEvent),
+								)
+							: eventStore.durationRange[1]
+					"
+					:labelFunc="(v: number) => v.toFixed(0)"
+					:units="'days'"
+					:highlight-value="
+						eventStore.selectedEvent
+							? eventStore.durationForEvent(eventStore.selectedEvent)
+							: null
+					"
+					:types="eventsOfInterest.map((e) => e.event_type)"
+				/>
+				<Histogram
+					:data="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
+					:nbins="10"
+					:xmin="eventStore.sizeRange[0]"
+					:xmax="
+						eventStore.selectedEvent
+							? Math.max(
+									eventStore.sizeRange[1],
+									eventStore.sizeForEvent(eventStore.selectedEvent),
+								)
+							: eventStore.sizeRange[1]
+					"
+					:labelFunc="(v: number) => (v / 1000).toFixed(1) + 'k'"
+					:units="'m²'"
+					:highlight-value="
+						eventStore.selectedEvent
+							? eventStore.sizeForEvent(eventStore.selectedEvent)
+							: null
+					"
+					:types="eventsOfInterest.map((e) => e.event_type)"
+				/>
+				<Histogram
+					:data="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
+					:nbins="10"
+					:xmin="eventStore.intensityRange[0]"
+					:xmax="
+						eventStore.selectedEvent
+							? Math.max(
+									eventStore.intensityRange[1],
+									eventStore.intensityForEvent(eventStore.selectedEvent),
+								)
+							: eventStore.intensityRange[1]
+					"
+					:labelFunc="(v: number) => v.toFixed(0)"
+					:units="'°C'"
+					:highlight-value="
+						eventStore.selectedEvent
+							? eventStore.intensityForEvent(eventStore.selectedEvent)
+							: null
+					"
+					:types="eventsOfInterest.map((e) => e.event_type)"
+				/>
+			</div>
+			<div class="scatter-subpanel subpanel">
+				<ScatterPlot
+					:xdata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
+					:ydata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
+					:types="eventsOfInterest.map((e) => e.event_type)"
+					:xmin="eventStore.durationRange[0]"
+					:xmax="
+						eventStore.selectedEvent
+							? Math.max(
+									eventStore.durationRange[1],
+									eventStore.durationForEvent(eventStore.selectedEvent),
+								)
+							: eventStore.durationRange[1]
+					"
+					:ymin="eventStore.intensityRange[0]"
+					:ymax="
+						eventStore.selectedEvent
+							? Math.max(
+									eventStore.intensityRange[1],
+									eventStore.intensityForEvent(eventStore.selectedEvent),
+								)
+							: eventStore.intensityRange[1]
+					"
+					:ids="eventsOfInterest.map((e) => e.id)"
+					:highlightId="eventStore.selectedEventId"
+				/>
+				<ScatterPlot
+					:xdata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
+					:ydata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
+					:types="eventsOfInterest.map((e) => e.event_type)"
+					:xmin="eventStore.sizeRange[0]"
+					:xmax="
+						eventStore.selectedEvent
+							? Math.max(
+									eventStore.sizeRange[1],
+									eventStore.sizeForEvent(eventStore.selectedEvent),
+								)
+							: eventStore.sizeRange[1]
+					"
+					:ymin="eventStore.durationRange[0]"
+					:ymax="
+						eventStore.selectedEvent
+							? Math.max(
+									eventStore.durationRange[1],
+									eventStore.durationForEvent(eventStore.selectedEvent),
+								)
+							: eventStore.durationRange[1]
+					"
+					:ids="eventsOfInterest.map((e) => e.id)"
+					:highlightId="eventStore.selectedEventId"
+				/>
+				<ScatterPlot
+					:xdata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
+					:ydata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
+					:types="eventsOfInterest.map((e) => e.event_type)"
+					:xmin="eventStore.intensityRange[0]"
+					:xmax="
+						eventStore.selectedEvent
+							? Math.max(
+									eventStore.intensityRange[1],
+									eventStore.intensityForEvent(eventStore.selectedEvent),
+								)
+							: eventStore.intensityRange[1]
+					"
+					:ymin="eventStore.sizeRange[0]"
+					:ymax="
+						eventStore.selectedEvent
+							? Math.max(
+									eventStore.sizeRange[1],
+									eventStore.sizeForEvent(eventStore.selectedEvent),
+								)
+							: eventStore.sizeRange[1]
+					"
+					:ids="eventsOfInterest.map((e) => e.id)"
+					:highlightId="eventStore.selectedEventId"
+				/>
+			</div>
 		</Panel>
-		<Panel
-			id="event-ts-panel"
-			class="right"
-			:active="
-				store.viewMode === 'heatmap' &&
-				(store.exploringRegion || store.exploreGlobal)
-			"
-		>
-			<ScatterPlot
-				:xdata="
-					eventsOfInterest.map((e) =>
-						differenceInDays(e.times[0], timeStore.startTime),
-					)
-				"
-				:ydata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-				:types="eventsOfInterest.map((e) => e.event_type)"
-				:xmin="0"
-				:xmax="differenceInDays(timeStore.endTime, timeStore.startTime)"
-				:ymin="eventStore.durationRange[0]"
-				:ymax="eventStore.durationRange[1]"
-				:ids="eventsOfInterest.map((e) => e.id)"
-				:highlightId="eventStore.selectedEventId"
-			/>
-			<ScatterPlot
-				:xdata="
-					eventsOfInterest.map((e) =>
-						differenceInDays(e.times[0], timeStore.startTime),
-					)
-				"
-				:ydata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-				:types="eventsOfInterest.map((e) => e.event_type)"
-				:xmin="0"
-				:xmax="differenceInDays(timeStore.endTime, timeStore.startTime)"
-				:ymin="eventStore.sizeRange[0]"
-				:ymax="eventStore.sizeRange[1]"
-				:ids="eventsOfInterest.map((e) => e.id)"
-				:highlightId="eventStore.selectedEventId"
-			/>
-			<ScatterPlot
-				:xdata="
-					eventsOfInterest.map((e) =>
-						differenceInDays(e.times[0], timeStore.startTime),
-					)
-				"
-				:ydata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-				:types="eventsOfInterest.map((e) => e.event_type)"
-				:xmin="0"
-				:xmax="differenceInDays(timeStore.endTime, timeStore.startTime)"
-				:ymin="eventStore.intensityRange[0]"
-				:ymax="eventStore.intensityRange[1]"
-				:ids="eventsOfInterest.map((e) => e.id)"
-				:highlightId="eventStore.selectedEventId"
-			/>
-		</Panel>
-		<Panel
-			id="event-histograms-panel"
-			class="right"
-			:active="
-				store.viewMode === 'heatmap' &&
-				(store.exploringRegion || store.exploreGlobal)
-			"
-		>
-			<Histogram
-				:data="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-				:nbins="10"
-				:xmin="eventStore.durationRange[0]"
-				:xmax="
-					eventStore.selectedEvent
-						? Math.max(
-								eventStore.durationRange[1],
-								eventStore.durationForEvent(eventStore.selectedEvent),
-							)
-						: eventStore.durationRange[1]
-				"
-				:labelFunc="(v: number) => v.toFixed(0)"
-				:units="'days'"
-				:highlight-value="
-					eventStore.selectedEvent
-						? eventStore.durationForEvent(eventStore.selectedEvent)
-						: null
-				"
-				:types="eventsOfInterest.map((e) => e.event_type)"
-			/>
-			<Histogram
-				:data="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-				:nbins="10"
-				:xmin="eventStore.sizeRange[0]"
-				:xmax="
-					eventStore.selectedEvent
-						? Math.max(
-								eventStore.sizeRange[1],
-								eventStore.sizeForEvent(eventStore.selectedEvent),
-							)
-						: eventStore.sizeRange[1]
-				"
-				:labelFunc="(v: number) => (v / 1000).toFixed(1) + 'k'"
-				:units="'pixels'"
-				:highlight-value="
-					eventStore.selectedEvent
-						? eventStore.sizeForEvent(eventStore.selectedEvent)
-						: null
-				"
-				:types="eventsOfInterest.map((e) => e.event_type)"
-			/>
-			<Histogram
-				:data="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-				:nbins="10"
-				:xmin="eventStore.intensityRange[0]"
-				:xmax="
-					eventStore.selectedEvent
-						? Math.max(
-								eventStore.intensityRange[1],
-								eventStore.intensityForEvent(eventStore.selectedEvent),
-							)
-						: eventStore.intensityRange[1]
-				"
-				:labelFunc="(v: number) => v.toFixed(0)"
-				:units="'°C'"
-				:highlight-value="
-					eventStore.selectedEvent
-						? eventStore.intensityForEvent(eventStore.selectedEvent)
-						: null
-				"
-				:types="eventsOfInterest.map((e) => e.event_type)"
-			/>
-		</Panel>
-		<Panel
-			id="event-scatter-panel"
-			class="right"
-			:active="
-				store.viewMode === 'heatmap' &&
-				(store.exploringRegion || store.exploreGlobal)
-			"
-		>
-			<ScatterPlot
-				:xdata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-				:ydata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-				:types="eventsOfInterest.map((e) => e.event_type)"
-				:xmin="eventStore.durationRange[0]"
-				:xmax="
-					eventStore.selectedEvent
-						? Math.max(
-								eventStore.durationRange[1],
-								eventStore.durationForEvent(eventStore.selectedEvent),
-							)
-						: eventStore.durationRange[1]
-				"
-				:ymin="eventStore.intensityRange[0]"
-				:ymax="
-					eventStore.selectedEvent
-						? Math.max(
-								eventStore.intensityRange[1],
-								eventStore.intensityForEvent(eventStore.selectedEvent),
-							)
-						: eventStore.intensityRange[1]
-				"
-				:ids="eventsOfInterest.map((e) => e.id)"
-				:highlightId="eventStore.selectedEventId"
-			/>
-			<ScatterPlot
-				:xdata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-				:ydata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-				:types="eventsOfInterest.map((e) => e.event_type)"
-				:xmin="eventStore.sizeRange[0]"
-				:xmax="
-					eventStore.selectedEvent
-						? Math.max(
-								eventStore.sizeRange[1],
-								eventStore.sizeForEvent(eventStore.selectedEvent),
-							)
-						: eventStore.sizeRange[1]
-				"
-				:ymin="eventStore.durationRange[0]"
-				:ymax="
-					eventStore.selectedEvent
-						? Math.max(
-								eventStore.durationRange[1],
-								eventStore.durationForEvent(eventStore.selectedEvent),
-							)
-						: eventStore.durationRange[1]
-				"
-				:ids="eventsOfInterest.map((e) => e.id)"
-				:highlightId="eventStore.selectedEventId"
-			/>
-			<ScatterPlot
-				:xdata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-				:ydata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-				:types="eventsOfInterest.map((e) => e.event_type)"
-				:xmin="eventStore.intensityRange[0]"
-				:xmax="
-					eventStore.selectedEvent
-						? Math.max(
-								eventStore.intensityRange[1],
-								eventStore.intensityForEvent(eventStore.selectedEvent),
-							)
-						: eventStore.intensityRange[1]
-				"
-				:ymin="eventStore.sizeRange[0]"
-				:ymax="
-					eventStore.selectedEvent
-						? Math.max(
-								eventStore.sizeRange[1],
-								eventStore.sizeForEvent(eventStore.selectedEvent),
-							)
-						: eventStore.sizeRange[1]
-				"
-				:ids="eventsOfInterest.map((e) => e.id)"
-				:highlightId="eventStore.selectedEventId"
-			/>
-		</Panel>
+
+		<div id="multi-event-window" />
 	</div>
 </template>
 
@@ -511,21 +457,28 @@ $smallTimePanelHeight: max(6rem, 10%);
 		flex: 1 1 100%;
 		z-index: 0;
 	}
-
+	#mode-toggle {
+		position: absolute;
+		bottom: 0;
+		left: 50%;
+		z-index: 250;
+		transform: translateX(-50%);
+		// border-bottom-right-radius: 0;
+		// border-bottom-left-radius: 0;
+		// padding: 0 3rem;
+	}
 	#time-panel {
 		box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;
 		width: calc(100% - 2 * $panelMargin);
 		right: $panelMargin;
 		bottom: $panelMargin;
 		height: 40%;
+		z-index: 20;
+		transition: all $animTime ease-in-out;
 
 		&.expanded {
 			height: calc(100% - 4 * $panelMargin);
 		}
-
-		z-index: 20;
-
-		transition: all $animTime ease-in-out;
 
 		&.event {
 			// width: calc(50% - $panelMargin);
@@ -569,7 +522,7 @@ $smallTimePanelHeight: max(6rem, 10%);
 			}
 		}
 		.panel-expand {
-			right: 1.2rem;
+			// right: 1.2rem;
 		}
 		.panel-sideline {
 			position: absolute;
@@ -588,6 +541,101 @@ $smallTimePanelHeight: max(6rem, 10%);
 				filter: drop-shadow(0 0 2px rgb(255, 255, 255))
 					drop-shadow(0 0 5px rgb(255, 255, 255));
 			}
+		}
+	}
+
+	#multi-event-window {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 60%;
+		height: 100%; //calc(100% - $panelMargin - $smallTimePanelHeight);
+		pointer-events: none;
+		background-color: rgba(34, 150, 200, 0);
+	}
+
+	#multi-event-panel {
+		display: flex;
+		flex-direction: column;
+		// gap: 0.5rem;
+		width: calc(40% - $panelMargin);
+		height: calc(100% - 3 * $panelMargin - $smallTimePanelHeight);
+		right: $panelMargin;
+		bottom: calc(1 * $panelMargin + $smallTimePanelHeight);
+
+		&.small {
+			transform: scale(0.6) translateX(120%);
+			transform-origin: bottom right;
+
+			&.active {
+				transform: scale(0.6);
+			}
+		}
+
+		.panel-toggle {
+			position: absolute;
+			top: 50%;
+			left: -2.5rem;
+			padding: 1rem;
+			border: none;
+			border-top-right-radius: 0;
+			border-bottom-right-radius: 0;
+			border-top-left-radius: 100%;
+			border-bottom-left-radius: 100%;
+			// padding-left: 1rem;
+			// background-color: transparent;
+			color: $textColor;
+			z-index: -100;
+			&:hover {
+				color: $c3sred;
+			}
+
+			svg {
+				margin-left: -0.5rem;
+			}
+		}
+
+		.title-panel {
+			display: flex;
+			justify-content: space-around;
+			justify-content: space-between;
+			width: 100%;
+			h1 {
+				// position: absolute;
+				// top: -1.75rem;
+				// left: 0;
+				flex: 1 1 100%;
+				margin: 0;
+				padding: 0.5rem 0;
+				background-color: transparent;
+				font-size: 0.9rem;
+				text-align: center;
+				z-index: 10;
+			}
+		}
+
+		.subpanel {
+			flex: 1 1 100%;
+			height: 33%;
+			width: 100%;
+			display: flex;
+			flex-direction: row;
+			// gap: 0.5rem;
+			border: 0.5px solid $c3sred;
+			// margin-bottom: 0.5rem;
+		}
+
+		.medals-subpanel {
+			.event-ranker {
+				flex: 1 1 33%;
+				height: 100%;
+			}
+		}
+
+		.histogram-subpanel {
+		}
+
+		.scatter-subpanel {
 		}
 	}
 

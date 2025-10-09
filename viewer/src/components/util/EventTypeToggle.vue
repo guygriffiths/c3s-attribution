@@ -83,6 +83,7 @@ const bothClickedfromMiddle = () => {
 
 <style scoped lang="scss">
 @use '@/assets/styles/scssVars.module.scss' as *;
+@use 'sass:color';
 
 .toggle-container {
 	position: relative;
@@ -127,11 +128,11 @@ const bothClickedfromMiddle = () => {
 
 		&.hot {
 			background-color: $c3sred;
-			border-color: darken($c3sred, 10%);
+			border-color: color.adjust($c3sred, $lightness: -10%);
 		}
 		&.cold {
 			background-color: $c3sblue;
-			border-color: darken($c3sblue, 10%);
+			border-color: color.adjust($c3sblue, $lightness: -10%);
 		}
 
 		&.middle {
@@ -142,30 +143,30 @@ const bothClickedfromMiddle = () => {
 				$c3sred 90%,
 				$c3sred
 			);
-			border-left: 1px solid darken($c3sblue, 10%);
-			border-right: 1px solid darken($c3sred, 10%);
+			border-left: 1px solid color.adjust($c3sblue, $lightness: -10%);
+			border-right: 1px solid color.adjust($c3sred, $lightness: -10%);
 		}
 
 		&.selected {
 			color: white;
 			// transform: translate(1px,1px);
 			&.hot {
-				background-color: lighten($c3sred, 10%);
+				background-color: color.adjust($c3sred, $lightness: 10%);
 			}
 			&.cold {
-				background-color: lighten($c3sblue, 10%);
-				border-right-color: lighten($c3sblue, 20%);
+				background-color: color.adjust($c3sblue, $lightness: 10%);
+				border-right-color: color.adjust($c3sblue, $lightness: 20%);
 			}
 			&.middle {
 				background: linear-gradient(
 					to right,
-					lighten($c3sblue, 10%),
-					lighten($c3sblue, 10%) 10%,
-					lighten($c3sred, 10%) 90%,
-					lighten($c3sred, 10%)
+					color.adjust($c3sblue, $lightness: 10%),
+					color.adjust($c3sblue, $lightness: 10%) 10%,
+					color.adjust($c3sred, $lightness: 10%) 90%,
+					color.adjust($c3sred, $lightness: 10%)
 				);
-				border-left-color: lighten($c3sblue, 20%);
-				border-right-color: lighten($c3sred, 20%);
+				border-left-color: color.adjust($c3sblue, $lightness: 20%);
+				border-right-color: color.adjust($c3sred, $lightness: 20%);
 			}
 			box-shadow: 0 0 6px rgba(0, 0, 0, 0.2);
 		}

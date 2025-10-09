@@ -60,12 +60,8 @@ export const getTileGeometry = (
 		map.project(L.latLng(latValues[0], lonValues[1]), coords.z).x -
 			map.project(L.latLng(latValues[0], lonValues[0]), coords.z).x,
 	)
-	const h = Math.ceil(
-		map.project(L.latLng(latValues[0], lonValues[0]), coords.z).y -
-			map.project(L.latLng(latValues[1], lonValues[0]), coords.z).y,
-	)
+
 	const wAdjusted = w + 1
-	const hAdjusted = h + 1
 
 	const geometry = new Array(latValues.length * lonValues.length)
 	let index = 0
@@ -75,6 +71,15 @@ export const getTileGeometry = (
 			const point = map.project(L.latLng(lat, lon), coords.z)
 			const x = Math.floor(point.x - originX)
 			const y = Math.floor(point.y - originY)
+			const h = Math.ceil(
+				Math.max(
+					map.project(L.latLng(lat, lon), coords.z).y -
+						map.project(L.latLng(lat + LL_STEP, lon), coords.z).y,
+					map.project(L.latLng(lat - LL_STEP, lon), coords.z).y -
+						map.project(L.latLng(lat, lon), coords.z).y,
+				),
+			)
+			const hAdjusted = h + 1
 			// if (x < 0 || x > TILE_SIZE - 1 || y < 0 || y > TILE_SIZE - 1) {
 			// 	geometry[index++] = null
 			// } else {
@@ -155,10 +160,11 @@ export const getCanvasFromCache = (
 		const selectedIndex =
 			differenceInDays(selectedTime, selectedEvent?.times[0]!) || 0
 		latLonValues = selectedEvent?.slices[selectedIndex] || []
-		dataValues = selectedEvent?.values[selectedIndex].map(intensityForValue) || []
+		dataValues =
+			selectedEvent?.values[selectedIndex].map(intensityForValue) || []
 	} else {
 		latLonValues = selectedEvent?.pixel_set || []
-		dataValues = selectedEvent?.pixel_peak_values.map(intensityForValue) || []
+		dataValues = selectedEvent?.pixel_max_values.map(intensityForValue) || []
 	}
 
 	const geometry = getTileGeometry(key.coords, layer.leafletObject)
@@ -199,8 +205,6 @@ export const drawEventTile =
 				: 0,
 			selectedEvent?.id || '0',
 		)
-
-		console.log('Drawing event tile', intensityRange, intensityForValue, colorForValue)
 
 		const canvas = document.createElement('canvas')
 		canvas.width = TILE_SIZE

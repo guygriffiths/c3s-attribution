@@ -17,7 +17,7 @@ import {
 	faPlay,
 } from '@fortawesome/free-solid-svg-icons'
 import * as d3 from 'd3'
-import { addHours, differenceInDays, getDayOfYear, subHours } from 'date-fns'
+import { addHours, differenceInDays, getDayOfYear, lastDayOfDecade, subHours } from 'date-fns'
 import {
 	computed,
 	defineModel,
@@ -36,7 +36,10 @@ const props = defineProps({
 	start: { type: Date, default: () => new Date(1970, 0, 1) },
 	end: { type: Date, default: () => new Date(2024, 0, 1) },
 	events: { type: Array<ExtremeEvent>, default: () => [] },
-	selectedEvent: { type: Object as () => ExtremeEvent | null, default: null },
+	selectedEvent: {
+		type: Object as () => ExtremeEventFull | null,
+		default: null,
+	},
 	mode: {
 		type: String as PropType<TimeReelMode>,
 		default: 'default',
@@ -50,7 +53,7 @@ const props = defineProps({
 	},
 	valueExtractor: {
 		type: Function as PropType<(event: ExtremeEvent) => number>,
-		default: (event: ExtremeEvent) => event.peak_value || 0,
+		default: (event: ExtremeEvent) => event.max_value || 0,
 	},
 })
 
@@ -333,9 +336,9 @@ const positionY = (y: number, eventType: 'hot' | 'cold') => {
 		return (0.5 + y) * 0.5 * eventHeight.value * (eventType === 'hot' ? -1 : 1)
 	} else {
 		if (y % 2 !== 0) {
-			return 0.5 * (y-1) * eventHeight.value
+			return 0.5 * (y - 1) * eventHeight.value
 		} else {
-			return -0.5 * (y+2) * eventHeight.value
+			return -0.5 * (y + 2) * eventHeight.value
 		}
 	}
 }
@@ -501,11 +504,11 @@ watch(
 			})
 		})
 		cwDayCounts.value = cwCounts
-			// .map((d, i) => cwValues[i] / d || 0)
-			// .map((d) => (isNaN(d) ? 0 : d))
+		// .map((d, i) => cwValues[i] / d || 0)
+		// .map((d) => (isNaN(d) ? 0 : d))
 		hwDayCounts.value = hwCounts
-			// .map((d, i) => hwValues[i] / d || 0)
-			// .map((d) => (isNaN(d) ? 0 : d))
+		// .map((d, i) => hwValues[i] / d || 0)
+		// .map((d) => (isNaN(d) ? 0 : d))
 
 		const newD = getAreaString()
 
@@ -604,15 +607,19 @@ const yearPadding = computed(() => {
 <template>
 	<div class="time-reel" ref="timeReelRef">
 		<div
+			class="date-info"
+			:class="{ dragging: isDragging }"
+			:style="`left: ${isDragging ? needleOffset : 50}%; top: ${isDragging ? '25%' : '-10%'};`"
+		>
+			{{ dayStr(selectedDay, selectedYear, props.mode === 'timeline') }}
+		</div>
+		<div
 			class="controls"
 			:class="{
 				hidden: !(props.mode === 'default' || props.mode === 'eventzoom'),
 				zoom: props.mode === 'eventzoom',
 			}"
 		>
-			<div class="info">
-				{{ dayStr(selectedDay, selectedYear) }}
-			</div>
 			<div class="buttons">
 				<button @click="prevYear" :disabled="selectedYear <= startYear">
 					<span class="sr-only">{{ $l.prevYear }}</span>
@@ -663,6 +670,7 @@ const yearPadding = computed(() => {
 						timeline: mode === 'timeline',
 						highlight: year === selectedYear,
 						odd: year % 2 === 1,
+						'last-year': year === endYear,
 					}"
 				>
 					<h1
@@ -830,6 +838,26 @@ const yearPadding = computed(() => {
 	// overflow-y: scroll;
 	height: 100%;
 
+	.date-info {
+		position: absolute;
+		top: -10%;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 30;
+		background-color: rgba(255, 255, 255, 0.8);
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.25rem;
+		font-size: 0.875rem;
+		user-select: none;
+		transition: all $animTime linear;
+
+		&.dragging {
+			transition: left 0s linear;
+			transition: top $animTime linear;
+			transform: translateX(-50%) translateY(-100%);
+		}
+	}
+
 	.controls {
 		height: 2rem;
 		position: absolute;
@@ -870,25 +898,6 @@ const yearPadding = computed(() => {
 			overflow-y: hidden;
 		}
 
-		&.overview {
-			.event-line {
-				stroke-width: 2;
-				opacity: 0.8;
-			}
-			.label {
-				font-size: 0.75rem !important;
-			}
-			.scrollee {
-				.clipper{
-				.events-svg {
-					margin-right: 2.5rem;
-					margin-bottom: 1.5rem;
-					width: calc(100% - 2.5rem);
-					height: calc(100% - 1.5rem);
-				}}
-			}
-		}
-
 		.scrollee {
 			position: relative;
 			width: 100%;
@@ -927,7 +936,7 @@ const yearPadding = computed(() => {
 				// border: 2px solid red;
 				transition:
 					all $animTime linear,
-					height 0 linear;
+					height 0s linear;
 
 				scroll-snap-align: center;
 				background-color: $panelBg;
@@ -944,6 +953,33 @@ const yearPadding = computed(() => {
 					margin: 0;
 					padding: 0.5rem 0.5rem;
 					transition: opacity 0s linear;
+				}
+			}
+		}
+		&.overview {
+			.event-line {
+				stroke-width: 2;
+				opacity: 0.8;
+			}
+			.scrollee {
+				// padding-bottom: 1.5rem;
+				.year {
+					h1.label {
+						font-size: 0.75rem !important;
+						padding: 0 !important;
+					}
+
+					&.last-year {
+						// padding-bottom: 1.5rem;
+					}
+				}
+				.clipper {
+					.events-svg {
+						margin-right: 2.5rem;
+						// margin-bottom: 1.5rem;
+						width: calc(100% - 2.5rem);
+						height: calc(100%);
+					}
 				}
 			}
 		}
@@ -1176,7 +1212,7 @@ const yearPadding = computed(() => {
 		.event-bar {
 			// This
 			pointer-events: none;
-			transition: all 0.25*$animTime linear;
+			transition: all 0.25 * $animTime linear;
 			stroke-width: 0.5;
 
 			&.hot {

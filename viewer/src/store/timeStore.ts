@@ -18,7 +18,7 @@ interface TimeState {
 export const useStore = defineStore('time', {
 	state: (): TimeState => {
 		return {
-			selectedTime: new Date(Date.UTC(1988, 4, 28, 0, 0, 0)),
+			selectedTime: new Date(Date.UTC(1998, 4, 28, 0, 0, 0)),
 			startTime: new Date(1979, 0, 1),
 			endTime: new Date(),
 			showBars: false,

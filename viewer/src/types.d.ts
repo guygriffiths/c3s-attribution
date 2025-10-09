@@ -18,11 +18,12 @@ declare global {
 		regions: [number, number][][]
 		total_region: [number, number][]
 		bbox: [number, number, number, number]
-		peak_value: number
+		max_value: number
 		mean_value: number
+		min_value: number
 		total_area: number
 		pixel_count: number
-		pixel_set: [number, number][]
+		pixel_set: number[]
 		packedPixelSet?: Set<number>
 		ocean_only: boolean
 		color: string
@@ -34,9 +35,11 @@ declare global {
 		values: number[][]
 		centroids: [number, number][]
 		areas: number[]
-		peak_values: number[]
+		max_values: number[]
 		mean_values: number[]
-		pixel_peak_values: number[]
+		min_values: number[]
+		pixel_set?: [number, number][]
+		pixel_max_values: number[]
 	}
 
 	interface EventBox {

@@ -20,6 +20,14 @@ export const packPixelToInt = (lat: number, lon: number) => {
 	return (iLat << 16) | (iLon & 0xffff)
 }
 
+export const unpackIntToPixel = (packed: number): [number, number] => {
+	const iLat = packed >> 16
+	let iLon = packed & 0xffff
+	if (iLon >= 0x8000) iLon -= 0x10000 // convert to signed
+
+	return [iLat / 4, iLon / 4]
+}
+
 export const toPx = (value: string): number => {
 	if (value.endsWith('%')) {
 		return (window.innerWidth * parseFloat(value)) / 100

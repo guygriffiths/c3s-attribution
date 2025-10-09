@@ -57,6 +57,7 @@ watch(
 		rankedEvents.value = [...(props.events || [])]
 			.sort(props.sortFunc)
 			.splice(0, props.topN)
+		console.log('Ranked events:', [...rankedEvents.value].splice(0, 10).map((e) => `events/event-${e.id}.json`).join(' '))
 	},
 	{ deep: false },
 )
@@ -72,6 +73,7 @@ const selectEvent = (event: ExtremeEvent | null) => {
 	}
 }
 
+const selectFinal = ref(false)
 watch(
 	() => eventStore.selectedEventId,
 	(newVal) => {
@@ -83,8 +85,13 @@ watch(
 				const rankElement = scroller.children[0].children[idx]
 				if (rankElement) {
 					// console.log('rankElement', rankElement)
-					rankElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+					rankElement.scrollTo({ top: rankElement.offsetTop - scroller.offsetHeight / 2, behavior: 'smooth' })
 				}
+				selectFinal.value = false
+			} else if (idx < 0) {
+				// If the selected event is not in the ranked list, scroll to the very bottom
+				scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+				selectFinal.value = true
 			}
 		}
 	},
@@ -107,11 +114,30 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 						hovering: rankedEvents[i - 1]?.id === eventStore.hoveringEventId,
 					}"
 					@click="selectEvent(rankedEvents[i - 1] || null)"
+					:title="`Duration: ${eventStore.durationForEvent(rankedEvents[i - 1])} days\nSize: ${eventStore.sizeForEvent(rankedEvents[i - 1]).toFixed(2)} km²\nIntensity: ${eventStore.intensityForEvent(rankedEvents[i - 1]).toFixed(2)}`"
+				></div>
+				<div
+					v-if="eventsInRanker < props.events.length"
+					class="rank"
+					:class="{
+						odd: topN % 2 === 1,
+						selected: selectFinal,
+					}"
+					:title="
+						eventStore.selectedEvent
+							? `Duration: ${eventStore.durationForEvent(eventStore.selectedEvent)} days\nSize: ${eventStore.sizeForEvent(eventStore.selectedEvent).toFixed(2)} km²\nIntensity: ${eventStore.intensityForEvent(eventStore.selectedEvent).toFixed(2)}`
+							: ''
+					"
 				></div>
 				<svg
 					width="100%"
 					ref="eventRankerSvgRef"
-					:height="ROW_SIZE * eventsInRanker"
+					:height="
+						ROW_SIZE *
+						(eventsInRanker < props.events.length
+							? eventsInRanker + 1
+							: eventsInRanker)
+					"
 					preserveAspectRatio="none"
 					style="pointer-events: none"
 				>
@@ -126,6 +152,29 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 						:height="heightScale(eventStore.sizeForEvent(event) || 0)"
 						:fill="eventStore.colorForEvent(event) || scssVars.c3sred"
 					/>
+					<rect
+						v-if="
+							eventsInRanker < props.events.length && eventStore.selectedEvent
+						"
+						class="ranked-event"
+						x="0"
+						y="0"
+						:transform="`translate(0, ${eventsInRanker * ROW_SIZE + 0.5 * ROW_SIZE - 0.5 * heightScale(eventStore.sizeForEvent(eventStore.selectedEvent) || 0)})`"
+						:width="
+							widthScale(
+								eventStore.durationForEvent(eventStore.selectedEvent) || 0,
+							)
+						"
+						:height="
+							heightScale(
+								eventStore.sizeForEvent(eventStore.selectedEvent) || 0,
+							)
+						"
+						:fill="
+							eventStore.colorForEvent(eventStore.selectedEvent as any as ExtremeEvent) ||
+							scssVars.c3sred
+						"
+					/>
 					<text
 						v-for="(event, idx) in rankedEvents"
 						:key="`text-${idx}`"
@@ -133,10 +182,21 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 						:class="event.event_type"
 						x="0"
 						y="0"
-						:transform="`translate(${widthScale(event.duration) + 4}, ${idx * ROW_SIZE + 18})`"
+						:transform="`translate(${widthScale(eventStore.durationForEvent(event)) + 4}, ${idx * ROW_SIZE + 18})`"
 						font-size="14"
 					>
 						{{ idx + 1 }}
+					</text>
+					<text
+						v-if="eventsInRanker < props.events.length"
+						class="ranked-event"
+						:class="eventStore.selectedEvent?.event_type || 'mixed'"
+						x="0"
+						y="0"
+						:transform="`translate(${eventStore.selectedEvent ? widthScale(eventStore.durationForEvent(eventStore.selectedEvent)) + 4 : 10}, ${eventsInRanker * ROW_SIZE + 14})`"
+						font-size="14"
+					>
+						{{ topN + 1 }} - {{ props.events.length }}
 					</text>
 				</svg>
 			</div>
@@ -146,6 +206,7 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 
 <style lang="scss" scoped>
 @use '@/assets/styles/scssVars.module.scss' as *;
+@use 'sass:color';
 
 .scroller {
 	margin: 0;
@@ -153,6 +214,7 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 	overflow-y: auto;
 	position: relative;
 	.scrollee {
+		min-height: calc(20 * $rankedEventHeight);
 		svg {
 			position: absolute;
 			top: 0;
@@ -175,17 +237,18 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 			cursor: pointer;
 
 			&.odd {
-				background-color: darken($panelBg, 5%);
+				background-color: color.adjust($panelBg, $lightness: -5%);
 			}
 
 			&.hovering,
 			&:hover {
-				background-color: darken($panelBg, 10%);
+				background-color: color.adjust($panelBg, $lightness: -10%);
 				box-shadow: 0 0 10px rgba($c3sred, 0.5);
 			}
 
 			&.selected {
-				border: 2px solid $c3sred;
+				border-top: 2px solid $c3sred;
+				border-bottom: 2px solid $c3sred;
 				box-shadow: 0 0 10px rgba($c3sred, 0.5);
 			}
 
@@ -212,6 +275,10 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 			&.cold {
 				stroke-width: 0;
 				fill: $c3sblue !important;
+			}
+			&.mixed {
+				stroke-width: 0;
+				fill: black;
 			}
 		}
 	}

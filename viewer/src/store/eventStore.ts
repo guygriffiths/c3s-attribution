@@ -32,10 +32,10 @@ interface State {
 
 export const intensityForValue = (v: number, hot: boolean) => {
 	if (hot) {
-		let baseline = 278.15
+		let baseline = 301.15
 		return v - baseline
 	} else {
-		let baseline = 271.15
+		let baseline = 275.15
 		return baseline - v
 	}
 }
@@ -58,7 +58,7 @@ export const colorForEvent = (
 	scale: d3.ScaleLinear<number, number>,
 ) => {
 	
-	const value = intensityForValue(event.peak_value, event.event_type === 'hot')
+	const value = intensityForValue(event.event_type === 'hot' ? event.max_value : event.mean_value, event.event_type === 'hot')
 	return colorForValue(value, event.event_type === 'hot', scale)
 }
 
@@ -73,8 +73,8 @@ export const useStore = defineStore('events', {
 			durationRange: [3, 14],
 			heatIntensityRange: [305, 320],
 			coldIntensityRange: [270, 250],
-			hotEventsOn: false,
-			coldEventsOn: true,
+			hotEventsOn: true,
+			coldEventsOn: false,
 			sizeRange: [0, 100],
 		}
 	},
@@ -115,24 +115,26 @@ export const useStore = defineStore('events', {
 		},
 		colorForEvent: (state: State) => {
 			// TODO Logic for configurable intensity definition.
-			return (event: ExtremeEvent) => {
+			return (event: ExtremeEvent | ExtremeEventFull) => {
 				const hot = event.event_type === 'hot'
 				return colorForValue(
+					// @ts-ignore - this is a getter
 					state.intensityForEvent(event),
 					hot,
+					// @ts-ignore - these are getters
 					hot ? state.hotScale : state.coldScale,
 				)
 			}
 		},
 		durationForEvent: (state: State) => {
-			return (event: ExtremeEvent) => event.duration
+			return (event: ExtremeEvent | ExtremeEventFull) => event.duration
 		},
 		sizeForEvent: (state: State) => {
-			return (event: ExtremeEvent) => event.pixel_set?.length || 0
+			return (event: ExtremeEvent | ExtremeEventFull) => event.total_area || 0
 		},
 		intensityForEvent: (state: State) => {
-			return (event: ExtremeEvent) => {
-				return intensityForValue(event.peak_value, event.event_type === 'hot')
+			return (event: ExtremeEvent | ExtremeEventFull) => {
+				return intensityForValue(event.event_type === 'hot' ? event.max_value : event.mean_value, event.event_type === 'hot')
 			}
 		},
 	},
@@ -169,8 +171,6 @@ export const useStore = defineStore('events', {
 				) {
 					timeStore.selectedTime = new Date(event.times[0])
 				}
-				event.max_value = event.peak_value
-				event.min_value = event.mean_value - (event.peak_value - event.mean_value)
 				mainStore.setLoadingDone()
 			}
 		},
