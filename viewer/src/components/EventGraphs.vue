@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, ComputedRef, ref } from 'vue'
 import * as d3 from 'd3'
-import { FullEvent } from '@/store/store'
 
-const props = defineProps<{ selectedEvent: FullEvent | null }>()
+const props = defineProps<{ selectedEvent: ExtremeEventFull | null }>()
 const emits = defineEmits<{
 	(event: 'dateSelected', date: Date): void
 }>()
@@ -12,8 +11,9 @@ const days = computed(() => props.selectedEvent?.times || [])
 const areaData = computed(
 	() => props.selectedEvent?.slices.map((s) => s.length) || [],
 )
-const peakData = computed(() => props.selectedEvent?.peak_values || [])
+const maxData = computed(() => props.selectedEvent?.max_values || [])
 const meanData = computed(() => props.selectedEvent?.mean_values || [])
+const minData = computed(() => props.selectedEvent?.min_values || [])
 
 const distData = computed(() => {
 	const centroids = props.selectedEvent?.centroids || []
@@ -64,7 +64,7 @@ const areaScale = computed(() =>
 const valueScale = computed(() =>
 	d3
 		.scaleLinear()
-		.domain([303.15, d3.max(peakData.value) || 1])
+		.domain([303.15, d3.max(maxData.value) || 1])
 		.range([height.value, chartTopMargin]),
 )
 const latScale = computed(() =>
@@ -74,9 +74,6 @@ const latScale = computed(() =>
 		.range([height.value, chartTopMargin]),
 )
 
-const getBackgroundColor = (isEven: boolean) => {
-	return isEven ? props.selectedEvent?.color || '#f0f0f0' : '#ffffff'
-}
 </script>
 
 <template>
@@ -118,16 +115,17 @@ const getBackgroundColor = (isEven: boolean) => {
 		<!-- Peak and Mean Value Line Chart -->
 		<g :transform="`translate(0, ${height})`">
 			<text x="10" y="15">Peak & Mean</text>
-			<template v-if="peakData.length">
+			<template v-if="maxData.length">
+				<polyline
 				<polyline
 					fill="none"
 					stroke="#e15759"
 					stroke-width="2"
 					:points="
-						peakData
+						maxData
 							.map(
 								(v, i) =>
-									`${xScale(i.toString()) + xScale.bandwidth() / 2},${valueScale(v)}`,
+									`${xScale(i.toString())! + xScale.bandwidth() / 2},${valueScale(v)}`,
 							)
 							.join(' ')
 					"
@@ -143,7 +141,7 @@ const getBackgroundColor = (isEven: boolean) => {
 						meanData
 							.map(
 								(v, i) =>
-									`${xScale(i.toString()) + xScale.bandwidth() / 2},${valueScale(v)}`,
+									`${xScale(i.toString())! + xScale.bandwidth() / 2},${valueScale(v)}`,
 							)
 							.join(' ')
 					"
@@ -163,7 +161,7 @@ const getBackgroundColor = (isEven: boolean) => {
 						distData
 							.map(
 								(v, i) =>
-									`${xScale(i.toString()) + xScale.bandwidth() / 2},${latScale(v)}`,
+									`${xScale(i.toString())! + xScale.bandwidth() / 2},${latScale(v)}`,
 							)
 							.join(' ')
 					"

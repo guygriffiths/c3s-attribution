@@ -57,7 +57,7 @@ watch(
 		rankedEvents.value = [...(props.events || [])]
 			.sort(props.sortFunc)
 			.splice(0, props.topN)
-		console.log('Ranked events:', [...rankedEvents.value].splice(0, 10).map((e) => `events/event-${e.id}.json`).join(' '))
+		// console.log('Ranked events:', [...rankedEvents.value].splice(0, 10).map((e) => `events/event-${e.id}.json`).join(' '))
 	},
 	{ deep: false },
 )
@@ -85,7 +85,7 @@ watch(
 				const rankElement = scroller.children[0].children[idx]
 				if (rankElement) {
 					// console.log('rankElement', rankElement)
-					rankElement.scrollTo({ top: rankElement.offsetTop - scroller.offsetHeight / 2, behavior: 'smooth' })
+					rankElement.scrollTo({ top: ROW_SIZE * idx, behavior: 'smooth' })
 				}
 				selectFinal.value = false
 			} else if (idx < 0) {

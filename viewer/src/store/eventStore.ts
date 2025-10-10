@@ -4,7 +4,7 @@ import { interpolateColor } from '@/lib/utils'
 import * as d3 from 'd3'
 import { differenceInDays } from 'date-fns'
 import { defineStore } from 'pinia'
-import { useStore as useMainStore } from './store'
+import { DATA_ROOT, useStore as useMainStore } from './store'
 import { useStore as useTimeStore } from './timeStore'
 
 // const worker = createEventFilterWorker()
@@ -155,7 +155,7 @@ export const useStore = defineStore('events', {
 				mainStore.setLoading()
 				this.selectedEventId = id
 				console.log('setting selected event to', id)
-				let path = `/events/event-${id}.json`
+				let path = `${DATA_ROOT}events/event-${id}.json`
 				const resp = await fetch(path)
 				const event = await resp.json()
 				// // This should always be the case...

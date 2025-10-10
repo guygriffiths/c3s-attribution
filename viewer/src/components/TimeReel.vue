@@ -194,7 +194,7 @@ let startDate: Date = new Date(model.value)
 let startMs = 0
 
 const startDrag = (event: MouseEvent) => {
-	isDragging.value = true
+	
 	dragMode.value = null
 
 	startX = event.clientX
@@ -233,6 +233,7 @@ const endDrag = (event: MouseEvent) => {
 }
 
 const handleDrag = (event: MouseEvent) => {
+	isDragging.value = true
 	const dx = event.clientX - startX
 	const dy = event.clientY - startY
 
@@ -441,11 +442,11 @@ const getAreaString = () => {
 
 		const startIdx = Math.max(
 			0,
-			Math.floor((startOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)),
+			Math.floor((startOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)) - 1,
 		)
 		const endIdx = Math.min(
 			data.length,
-			Math.floor((endOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)),
+			Math.floor((endOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
 		)
 
 		// We add 2 invisible moves to ensure that the centre of the object's bounding box is always at y=0
@@ -798,9 +799,6 @@ const yearPadding = computed(() => {
 					:style="`left: ${needleOffset}%; pointer-events: none;`"
 				>
 					<div class="line" />
-					<div class="label" :class="{ hidden: !isDragging }">
-						<p>{{ dayStr(selectedDay, selectedYear) }}</p>
-					</div>
 				</div>
 				<div class="month-labels" v-if="!zoom && props.mode !== 'timeline'">
 					<p v-show="!zoom" class="jan">{{ $l.months.jan }}</p>

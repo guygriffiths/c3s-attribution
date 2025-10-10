@@ -41,6 +41,7 @@ interface State {
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
 export const T2M_LAYER = 'era5/t2m'
+export const DATA_ROOT = import.meta.env.X_PUBLIC_PATH || ''
 
 export const useStore = defineStore('main', {
 	state: (): State => {
@@ -123,7 +124,7 @@ export const useStore = defineStore('main', {
 				},
 			)
 
-			const respH = await fetch('/events-hw.jsonl')
+			const respH = await fetch(`${DATA_ROOT}events-hw.jsonl`)
 			if (!respH.ok) {
 				throw new Error('Network response was not ok')
 			}
@@ -162,7 +163,7 @@ export const useStore = defineStore('main', {
 			}
 			massageData(data, 'hot')
 
-			const respC = await fetch('/events-cw.jsonl')
+			const respC = await fetch(`${DATA_ROOT}events-cw.jsonl`)
 			if (!respC.ok) {
 				throw new Error('Network response was not ok')
 			}

@@ -222,6 +222,14 @@ const mode = computed((): TimeReelMode => {
 		</Panel>
 
 		<Panel
+			id="event-info-panel"
+			class="bottom"
+			:active="eventStore.selectedEvent"
+		>
+			<EventInfo :selected-event="eventStore.selectedEvent" />
+		</Panel>
+
+		<Panel
 			id="multi-event-panel"
 			class="right"
 			:class="{ small: store.viewMode === 'timemachine' }"
@@ -639,119 +647,16 @@ $smallTimePanelHeight: max(6rem, 10%);
 		}
 	}
 
-	#event-rankings-panel {
-		// z-index: 500;
-		width: calc(40% - $panelMargin);
-		height: calc(30% - 2 * $panelMargin);
-
-		bottom: calc(
-			1 * $panelMargin + $smallTimePanelHeight + 30% + 30% - 1 * $panelMargin
-		);
-		right: calc(1 * $panelMargin);
-		gap: 0.5rem;
-		display: flex;
-		flex-direction: row;
-		padding: calc(0.5 * $panelMargin);
-		padding-top: calc(1.25 * $panelMargin);
-		border-top-right-radius: 0;
-
-		&.dragging {
-			opacity: 0.75;
-			pointer-events: none;
-		}
-
-		.ranker {
-			flex: 1 1 33%;
-			// margin-right: 1rem;
-			// box-shadow: rgba(0, 0, 0, 0.2) 0px 4px 6px -1px,
-			// 	rgba(0, 0, 0, 0.1) 0px 2px 4px -1px;
-			// border: 1px solid rgba(0, 0, 0, 0.1);
-			// border: 1px solid rgba(255, 255, 255, 0.1);
-			// backdrop-filter: blur(5px);
-			height: 100%;
-			min-width: 0; // allow flexbox to shrink it
-			padding: 0;
-			border: 1px solid $c3sred;
-			position: relative;
-
-			.event-ranker {
-				height: 100%;
-				width: 100%;
-			}
-
-			h1 {
-				position: absolute;
-				top: -1.75rem;
-				left: 0;
-				margin: 0;
-				padding: 0.5rem 0;
-				background-color: transparent;
-				font-size: 0.9rem;
-				text-align: center;
-				z-index: 10;
-			}
-		}
-	}
-
-	#event-ts-panel {
-		// z-index: 500;
-		width: calc(40% - 2 * $panelMargin);
-		height: calc(20% - 2 * $panelMargin);
-		bottom: calc(1 * $panelMargin + $smallTimePanelHeight + 40%);
-		right: calc(1 * $panelMargin);
-		gap: 0;
-		display: flex;
-		flex-direction: column;
-		padding: calc(0.5 * $panelMargin);
-		// padding-top: calc(1.25 * $panelMargin);
-		// padding-bottom: 2px;
-
-		.scatter-root {
-			flex: 1 1 33%;
-			height: 33%;
-			// box-shadow:
-			// 	rgba(0, 0, 0, 0.5) 0px 4px 6px -1px,
-			// 	rgba(0, 0, 0, 0.25) 0px 2px 4px -1px;
-		}
-	}
-
-	#event-histograms-panel {
-		// z-index: 500;
-		width: calc(40% - $panelMargin);
-		height: calc(20% - 2 * $panelMargin);
-		bottom: calc(1 * $panelMargin + $smallTimePanelHeight + 20%);
-		right: calc(1 * $panelMargin);
-		gap: 0.5rem;
-		display: flex;
-		flex-direction: row;
-		padding: calc(0.5 * $panelMargin);
-		// padding-top: calc(1.25 * $panelMargin);
-		// padding-bottom: 2px;
-
-		.histogram-root {
-			box-shadow:
-				rgba(0, 0, 0, 0.5) 0px 4px 6px -1px,
-				rgba(0, 0, 0, 0.25) 0px 2px 4px -1px;
-		}
-	}
-
-	#event-scatter-panel {
-		// z-index: 500;
-		width: calc(40% - $panelMargin);
-		height: calc(20% - 2 * $panelMargin);
+	#event-info-panel {
+		display: none;
+		box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;
+		width: calc(20% - 2 * $panelMargin);
+		right: 50%;
+		// transform: translateX(50%);
 		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
-		right: calc(1 * $panelMargin);
-		gap: 0.5rem;
-		display: flex;
-		flex-direction: row;
-		padding: calc(0.5 * $panelMargin);
-		// padding-top: calc(1.25 * $panelMargin);
-		// padding-bottom: 2px;
-		.scatter-root {
-			box-shadow:
-				rgba(0, 0, 0, 0.5) 0px 4px 6px -1px,
-				rgba(0, 0, 0, 0.25) 0px 2px 4px -1px;
-		}
+		height: auto;
+		z-index: 20;
+		transition: all $animTime ease-in-out;
 	}
 }
 </style>

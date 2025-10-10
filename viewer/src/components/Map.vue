@@ -321,7 +321,7 @@ const lastCentreZoom = ref<{ centre: L.LatLng; zoom: number } | null>(null)
 watch(
 	() => eventStore.selectedEvent,
 	(newVal) => {
-		if (store.viewMode === 'heatmap') {
+		if (store.viewMode === 'heatmap' || store.viewMode === 'timemachine') {
 			if (newVal) {
 				lastCentreZoom.value = {
 					centre: map.value!.getCenter(),
@@ -543,9 +543,9 @@ const addEventPanes = () => {
 				v-for="event in currentEvents"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event)"
-				:weight="event.id === eventStore.selectedEventId ? 0.2 : 1"
+				:weight="event.id === eventStore.selectedEventId ? 0.5 : 1"
 				:fill="true"
-				:fill-opacity="event.id === eventStore.selectedEventId ? 0.3 : 0.9"
+				:fill-opacity="event.id === eventStore.selectedEventId ? 0.0 : 0.9"
 				:color="event.event_type == 'hot' ? scssVars.c3sred : scssVars.c3sblue"
 				:fill-color="eventStore.colorForEvent(event)"
 				@click="eventStore.selectEvent(event.id)"
