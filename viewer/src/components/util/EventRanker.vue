@@ -85,7 +85,13 @@ watch(
 				const rankElement = scroller.children[0].children[idx]
 				if (rankElement) {
 					// console.log('rankElement', rankElement)
-					rankElement.scrollTo({ top: ROW_SIZE * idx, behavior: 'smooth' })
+					// rankElement.scrollTo({ top: ROW_SIZE * idx, behavior: 'smooth' })
+					rankElement.scrollIntoView({
+						behavior: 'smooth',
+						block: 'center',
+						// @ts-ignore
+						container: 'nearest',
+					})
 				}
 				selectFinal.value = false
 			} else if (idx < 0) {
@@ -171,8 +177,9 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 							)
 						"
 						:fill="
-							eventStore.colorForEvent(eventStore.selectedEvent as any as ExtremeEvent) ||
-							scssVars.c3sred
+							eventStore.colorForEvent(
+								eventStore.selectedEvent as any as ExtremeEvent,
+							) || scssVars.c3sred
 						"
 					/>
 					<text

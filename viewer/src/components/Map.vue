@@ -244,7 +244,7 @@ const getEventRegion = (event: ExtremeEvent) => {
 const lastBbox = ref<LatLngBounds | null>(null)
 
 watch(
-	() => [timeStore.selectedTime, eventStore.selectedEventId],
+	() => [timeStore.selectedTime, eventStore.selectedEventId, store.viewMode],
 	() => {
 		if (eventPixelsRef.value && eventPixelsRef.value.leafletObject) {
 			eventPixelsRef.value.leafletObject.redraw()
@@ -733,7 +733,6 @@ const addEventPanes = () => {
 		}
 	}
 	&.timemachine {
-
 		:deep(.leaflet-event-pane) {
 			opacity: 0;
 		}

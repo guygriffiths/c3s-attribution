@@ -117,11 +117,12 @@ export const eventTileKey = (
 	coords: { x: number; y: number; z: number },
 	t: number,
 	id: string,
+	viewMode: ViewMode,
 ): EventTileKey => ({
 	coords,
 	t,
 	id,
-	key: `${coords.x}-${coords.y}-${coords.z}-${t}-${id}`,
+	key: `${coords.x}-${coords.y}-${coords.z}-${t}-${id}-${viewMode}`,
 })
 
 const tileImageCache = new Map<string, HTMLCanvasElement>()
@@ -157,8 +158,15 @@ export const getCanvasFromCache = (
 	let latLonValues: number[][] = []
 	let dataValues: number[] = []
 	if (viewMode === 'timemachine') {
-		const selectedIndex =
-			differenceInDays(selectedTime, selectedEvent?.times[0]!) || 0
+		const selectedIndex = selectedEvent
+			? differenceInDays(selectedTime, selectedEvent.times[0]!)
+			: -1
+		if (
+			selectedIndex < 0 ||
+			selectedIndex >= (selectedEvent?.times.length || 0)
+		) {
+			return canvas
+		}
 		latLonValues = selectedEvent?.slices[selectedIndex] || []
 		dataValues =
 			selectedEvent?.values[selectedIndex].map(intensityForValue) || []
@@ -202,8 +210,9 @@ export const drawEventTile =
 			props.coords,
 			selectedEvent
 				? differenceInDays(selectedTime, selectedEvent.times[0])
-				: 0,
+				: -1,
 			selectedEvent?.id || '0',
+			viewMode,
 		)
 
 		const canvas = document.createElement('canvas')

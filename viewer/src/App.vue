@@ -67,6 +67,7 @@ onMounted(() => {
 		// padding: 1rem;
 		height: 100vh;
 		max-height: 100vh;
+		overflow: hidden;
 	}
 
 	#footer {

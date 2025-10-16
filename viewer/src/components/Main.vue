@@ -41,6 +41,7 @@ import {
 import { differenceInDays } from 'date-fns'
 import { glob } from 'fs'
 import { difference } from 'd3'
+import { propsBinder } from '@vue-leaflet/vue-leaflet/dist/src/utils'
 
 const $l = useLabels()
 const store = useStore()
@@ -211,7 +212,11 @@ const mode = computed((): TimeReelMode => {
 				/>
 			</button>
 			<button
-				v-if="store.viewMode === 'timemachine' && !timeStore.timePanelExpanded"
+				v-if="
+					store.viewMode === 'timemachine' &&
+					!timeStore.timePanelExpanded &&
+					eventStore.selectedEvent === null
+				"
 				:draggable="false"
 				class="show-bars"
 				:class="{ active: timeStore.showBars }"
@@ -224,7 +229,7 @@ const mode = computed((): TimeReelMode => {
 		<Panel
 			id="event-info-panel"
 			class="bottom"
-			:active="eventStore.selectedEvent"
+			:active="eventStore.selectedEvent !== null"
 		>
 			<EventInfo :selected-event="eventStore.selectedEvent" />
 		</Panel>

@@ -17,7 +17,14 @@ import {
 	faPlay,
 } from '@fortawesome/free-solid-svg-icons'
 import * as d3 from 'd3'
-import { addHours, differenceInDays, getDayOfYear, lastDayOfDecade, subHours } from 'date-fns'
+import {
+	addHours,
+	differenceInDays,
+	getDayOfYear,
+	lastDayOfDecade,
+	setDayOfYear,
+	subHours,
+} from 'date-fns'
 import {
 	computed,
 	defineModel,
@@ -193,8 +200,8 @@ let startY = 0
 let startDate: Date = new Date(model.value)
 let startMs = 0
 
+const localNeedleOffset = ref(null as number | null)
 const startDrag = (event: MouseEvent) => {
-	
 	dragMode.value = null
 
 	startX = event.clientX
@@ -203,29 +210,70 @@ const startDrag = (event: MouseEvent) => {
 	startDate = model.value
 	window.addEventListener('mousemove', handleDrag)
 	window.addEventListener('mouseup', endDrag)
+
+	if (props.mode === 'eventzoom') {
+		localNeedleOffset.value = 0
+	} else {
+		localNeedleOffset.value = null
+	}
 }
 
 const endDrag = (event: MouseEvent) => {
 	isDragging.value = false
 	dragMode.value = null
+	localNeedleOffset.value = null
 	const time = performance.now() - startMs
 	if (time < 200 && Math.abs(event.clientX - startX) < 5) {
 		// This was a click, not a drag
 		console.log('click detected')
+
 		const container = containerRef.value
 		const xOffset =
 			event.clientX - (container?.getBoundingClientRect().left || 0)
 		const percentage = xOffset / (container?.clientWidth || 1)
-		const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
-		const dayFromStart = Math.floor(
-			1 + Math.max(0, Math.min(1, percentage)) * totalDays,
-		)
-		const newDate = new Date(Date.UTC(selectedYear.value, 0, dayFromStart))
-		setDate(
-			new Date(
-				Date.UTC(newDate.getFullYear(), newDate.getMonth(), newDate.getDate()),
-			),
-		)
+		if (props.mode === 'eventzoom') {
+			if (!props.selectedEvent) return
+			const eventStart = getDayOfYear(props.selectedEvent.times[0])
+			const eventEnd = getDayOfYear(
+				props.selectedEvent.times[props.selectedEvent.times.length - 1],
+			)
+			const totalZoomedDays = (eventEnd - eventStart) * xScaleFactor.value
+
+			const dayFromStart = Math.floor(
+				1 + Math.max(0, Math.min(1, percentage)) * totalZoomedDays,
+			)
+			const newDate = setDayOfYear(
+				new Date(Date.UTC(selectedYear.value, 0, 1)),
+				dayFromStart + eventStart - 1,
+			)
+			// Only set the date if it has changed, otherwise it slows things down unnecessarily
+			if (differenceInDays(newDate, model.value) !== 0) {
+				setDate(
+					new Date(
+						Date.UTC(
+							newDate.getFullYear(),
+							newDate.getMonth(),
+							newDate.getDate(),
+						),
+					),
+				)
+			}
+		} else {
+			const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
+			const dayFromStart = Math.floor(
+				1 + Math.max(0, Math.min(1, percentage)) * totalDays,
+			)
+			const newDate = new Date(Date.UTC(selectedYear.value, 0, dayFromStart))
+			setDate(
+				new Date(
+					Date.UTC(
+						newDate.getFullYear(),
+						newDate.getMonth(),
+						newDate.getDate(),
+					),
+				),
+			)
+		}
 	}
 
 	window.removeEventListener('mousemove', handleDrag)
@@ -246,15 +294,12 @@ const handleDrag = (event: MouseEvent) => {
 	if (dragMode.value === 'horizontal') {
 		const container = containerRef.value
 		if (container) {
-			const rect = container.getBoundingClientRect()
-			// const offsetX = event.clientX - rect.left
-			// const percentage = offsetX / rect.width
-			const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
+			if(props.mode !== 'eventzoom') {
+				const rect = container.getBoundingClientRect()
+				const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
+				const pixelsPerDay = rect.width / totalDays
+				const daysMoved = Math.round(dx / pixelsPerDay)
 
-			const pixelsPerDay = rect.width / totalDays
-			const daysMoved = Math.round(dx / pixelsPerDay)
-
-			if (!props.selectedEvent) {
 				// addHours will respect DST, addDays won't
 				const newDate = addHours(startDate, 24 * daysMoved)
 				if (newDate.getFullYear() === selectedYear.value) {
@@ -265,30 +310,30 @@ const handleDrag = (event: MouseEvent) => {
 					setDate(new Date(Date.UTC(selectedYear.value, 11, 31)))
 				}
 			} else {
-				console.log('dragging does not work with selected event yet')
-				// const eventStart = getDayOfYear(props.selectedEvent.times[0])
-				// const eventEnd = getDayOfYear(
-				// 	props.selectedEvent.times[props.selectedEvent.times.length - 1],
-				// )
-				// const dragDays = eventEnd - eventStart + 2
+				const rect = container.getBoundingClientRect()
+				const totalDays = props.selectedEvent
+					? differenceInDays(
+							props.selectedEvent.times[
+								props.selectedEvent.times.length - 1
+							],
+							props.selectedEvent.times[0],
+					  ) * xScaleFactor.value
+					: 365
+				const pixelsPerDay = rect.width / totalDays
+				const daysMoved = Math.round(dx / pixelsPerDay)
+				localNeedleOffset.value = (dx / pixelsPerDay) - daysMoved
 
-				// const dayFromStart = Math.floor(
-				// 	1 + Math.max(0, Math.min(1, percentage)) * dragDays,
-				// )
-				// const tempDate = setDayOfYear(
-				// 	new Date(Date.UTC(selectedYear.value, 0, 1)),
-				// 	dayFromStart + eventStart - 1,
-				// )
-
-				// setDate(
-				// 	new Date(
-				// 		Date.UTC(
-				// 			tempDate.getFullYear(),
-				// 			tempDate.getMonth(),
-				// 			tempDate.getDate(),
-				// 		),
-				// 	),
-				// )
+				// No need to set anything and trigger a re-render if we haven't actually changed the day
+				if(daysMoved === 0) return
+				// addHours will respect DST, addDays won't
+				const newDate = addHours(startDate, 24 * daysMoved)
+				if (newDate.getFullYear() === selectedYear.value) {
+					setDate(newDate)
+				} else if (newDate.getFullYear() < selectedYear.value) {
+					setDate(new Date(Date.UTC(selectedYear.value, 0, 1)))
+				} else if (newDate.getFullYear() > selectedYear.value) {
+					setDate(new Date(Date.UTC(selectedYear.value, 11, 31)))
+				}
 			}
 		}
 	} else if (dragMode.value === 'vertical') {
@@ -309,25 +354,30 @@ const eventClicked = (id: string) => {
 
 const needleOffset = computed(() => {
 	if (props.mode === 'default' || props.mode === 'overview') {
-		const offset = (selectedDay.value / TOTAL_DAYS) * 100
+		const offset = (selectedDay.value / TOTAL_DAYS) * 100 - 0.5
 		return Math.max(Math.min(offset, 100), 0)
 	} else if (props.mode === 'timeline') {
 		const totalDays = differenceInDays(props.end, props.start) + 1
+		const daysFromStart = differenceInDays(model.value, props.start) + 1
+		const offset = (daysFromStart / totalDays) * 100 - 0.5
+		return Math.max(Math.min(offset, 100), 0)
 	} else if (props.mode === 'eventzoom') {
-		// In zoom mode, we want to center the needle on the selected event
 		if (props.selectedEvent) {
 			const eventStart = getDayOfYear(props.selectedEvent.times[0])
 			const selectedDay = getDayOfYear(model.value)
 			const eventEnd = getDayOfYear(
 				props.selectedEvent.times[props.selectedEvent.times.length - 1],
 			)
-			const totalZoomedDays = eventEnd - eventStart + 2
+			const totalZoomedDays = (eventEnd - eventStart) * xScaleFactor.value
 			const offset = selectedDay - eventStart + 1
+			if(localNeedleOffset.value !== null) {
+				return Math.max(Math.min(((offset + localNeedleOffset.value) / totalZoomedDays) * 100, 100), 0)
+			}
 			return (offset / totalZoomedDays) * 100
 		}
 	} else {
 		// Fallback, shouldn't get here
-		return ((selectedDay.value / TOTAL_DAYS) * 100).toFixed(2)
+		return (selectedDay.value / TOTAL_DAYS) * 100
 	}
 })
 
@@ -442,11 +492,14 @@ const getAreaString = () => {
 
 		const startIdx = Math.max(
 			0,
-			Math.floor((startOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)) - 1,
+			Math.floor(
+				(startOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24),
+			) - 1,
 		)
 		const endIdx = Math.min(
 			data.length,
-			Math.floor((endOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+			Math.floor((endOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)) +
+				1,
 		)
 
 		// We add 2 invisible moves to ensure that the centre of the object's bounding box is always at y=0
@@ -537,10 +590,15 @@ watch(
 	(newVal, oldVal) => {
 		// When the selected event changes, ensure the year is in view
 		// In timeline mode, this happens instantly, at the same time as the line transition,
-		// so that we don't see any movement, but we are in the right place to transition back to defualt mode,
+		// so that we don't see any movement, but we are in the right place to transition back to default mode,
+		console.log(
+			'selected event changed, scrolling to',
+			selectedYear.value,
+			rowsToShow.value,
+		)
 		if (newVal !== oldVal && container.value) {
 			const yearsOffset = selectedYear.value - startYear.value
-			const scrollOffset = 0.5 * (yearsOffset * 2 - 1)
+			const scrollOffset = 0.5 * (yearsOffset * 2)
 			container.value.scrollTo({
 				top: scrollOffset * rowHeight.value,
 				behavior: props.mode === 'timeline' ? 'auto' : 'smooth',
@@ -560,16 +618,20 @@ watch(
 	},
 )
 
+const xScaleFactor = ref(3)
 const viewportTransform = computed(() => {
 	if (props.selectedEvent && props.mode === 'eventzoom') {
 		const eventStart = getDayOfYear(props.selectedEvent.times[0])
 		const eventEnd = getDayOfYear(
 			props.selectedEvent.times[props.selectedEvent.times.length - 1],
 		)
-		const nDays = eventEnd - eventStart + 2
-		const scale = 366 / nDays
+		// TODO Get the event window and check its size relative to the time reel panel
+		// Then scale and offset accordingly
+		const nDays = (eventEnd - eventStart) * xScaleFactor.value
+		const scale = Math.max(1, 366 / nDays)
 
-		return `scale(${scale}, 1) `
+		// return 'translate(0, 0)'
+		return `scale(${scale}, 1) translate(${-(eventStart - 1)}, 0)`
 	} else {
 		return 'translate(0, 0)'
 	}
@@ -714,7 +776,11 @@ const yearPadding = computed(() => {
 									:transform="lineTransform(year)"
 									:opacity="lineOpacity(year)"
 								/>
-								<transition-group tag="g" name="daily-event-fx" v-if="showBars">
+								<transition-group
+									tag="g"
+									name="daily-event-fx"
+									v-if="showBars"
+								>
 									<rect
 										v-if="year === selectedYear"
 										v-for="box in eventBoxesForYear[year]"
@@ -722,10 +788,11 @@ const yearPadding = computed(() => {
 										:data-id="`${box.startX}-${box.endX}`"
 										:class="{
 											[box.event.event_type]: true,
+											selected: box.event.id === props.selectedEvent?.id,
 										}"
 										:fill="colorForEvent(box.event) || scssVars.c3sred"
 										:x="-0.5 + box.startX - year * TOTAL_DAYS"
-										:width="box.endX - box.startX"
+										:width="box.endX - box.startX + 1"
 										:y="positionY(box.y, box.event.event_type)"
 										:height="
 											props.hot && props.cold ? 0.5 * eventHeight : eventHeight
@@ -795,7 +862,11 @@ const yearPadding = computed(() => {
 				<div
 					class="needle"
 					ref="needleRef"
-					v-if="props.mode === 'default' || props.mode === 'eventzoom'"
+					v-if="
+						props.mode === 'default' ||
+						props.mode === 'eventzoom' ||
+						selectedEvent
+					"
 					:style="`left: ${needleOffset}%; pointer-events: none;`"
 				>
 					<div class="line" />
@@ -951,6 +1022,7 @@ const yearPadding = computed(() => {
 					margin: 0;
 					padding: 0.5rem 0.5rem;
 					transition: opacity 0s linear;
+					user-select: none;
 				}
 			}
 		}
@@ -1218,6 +1290,14 @@ const yearPadding = computed(() => {
 			}
 			&.cold {
 				stroke: $c3sblue;
+			}
+			&.selected {
+				stroke: $lightbulb;
+				stroke-width: 2;
+				pointer-events: auto;
+				cursor: pointer;
+				fill: $lightbulb;
+				transform: scaleY(1);
 			}
 		}
 		.day-box {
