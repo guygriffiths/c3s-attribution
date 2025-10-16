@@ -254,6 +254,82 @@ class Eventlet:
         self.times.clear()
         self.slices.clear()
 
+    def remove_ocean(self, land_sea_mask):
+        if land_sea_mask is None:
+            return
+
+        lat_asc = np.all(np.diff(land_sea_mask.latitude) > 0)
+        lats = land_sea_mask.latitude.values
+        if not lat_asc:
+            lats = lats[::-1]  # ascending for searchsorted
+
+        for i in range(len(self.slices)):
+            if self.hull(i) is not None:
+                coords = np.array(self.slices[i])
+                # Latitude indices
+                lat_indices = np.searchsorted(lats, coords[:, 0])
+                lat_indices = np.clip(
+                    lat_indices, 0, land_sea_mask.latitude.size - 1
+                )
+                if not lat_asc:
+                    lat_indices = land_sea_mask.latitude.size - 1 - lat_indices
+
+                # Longitude indices
+                lon_indices = np.searchsorted(land_sea_mask.longitude, coords[:, 1])
+                lon_indices = np.clip(
+                    lon_indices, 0, land_sea_mask.longitude.size - 1
+                )
+
+                mask_values = land_sea_mask.values[0, lat_indices, lon_indices]
+                land_points = mask_values != 0
+
+                self.slices[i] = coords[land_points]
+                self.values[i] = np.array(self.values[i])[land_points]
+
+        # Remove any empty slices
+        non_empty_indices = [i for i in range(len(self.slices)) if len(self.slices[i]) > 0]
+        self.times = [self.times[i] for i in non_empty_indices]
+        self.slices = [self.slices[i] for i in non_empty_indices]
+        self.values = [self.values[i] for i in non_empty_indices]
+
+    def remove_land(self, land_sea_mask):
+        if land_sea_mask is None:
+            return
+
+        lat_asc = np.all(np.diff(land_sea_mask.latitude) > 0)
+        lats = land_sea_mask.latitude.values
+        if not lat_asc:
+            lats = lats[::-1]  # ascending for searchsorted
+
+        for i in range(len(self.slices)):
+            if self.hull(i) is not None:
+                coords = np.array(self.slices[i])
+                # Latitude indices
+                lat_indices = np.searchsorted(lats, coords[:, 0])
+                lat_indices = np.clip(
+                    lat_indices, 0, land_sea_mask.latitude.size - 1
+                )
+                if not lat_asc:
+                    lat_indices = land_sea_mask.latitude.size - 1 - lat_indices
+
+                # Longitude indices
+                lon_indices = np.searchsorted(land_sea_mask.longitude, coords[:, 1])
+                lon_indices = np.clip(
+                    lon_indices, 0, land_sea_mask.longitude.size - 1
+                )
+
+                mask_values = land_sea_mask.values[0, lat_indices, lon_indices]
+                ocean_points = mask_values != 1
+
+                self.slices[i] = coords[ocean_points]
+                self.values[i] = np.array(self.values[i])[ocean_points]
+
+        # Remove any empty slices
+        non_empty_indices = [i for i in range(len(self.slices)) if len(self.slices[i]) > 0]
+        self.times = [self.times[i] for i in non_empty_indices]
+        self.slices = [self.slices[i] for i in non_empty_indices]
+        self.values = [self.values[i] for i in non_empty_indices]
+
 
 class EventletFactory:
     def __init__(
@@ -270,6 +346,8 @@ class EventletFactory:
         use_dbscan=False,
         last_slice=None,
         eventtype='hot',
+        land_only=False,
+        ocean_only=False,
     ):
         self.data = data
         self.threshold = threshold
@@ -286,6 +364,8 @@ class EventletFactory:
         self.output_path = output_path
         self.use_dbscan = use_dbscan
         self.eventtype = eventtype
+        self.land_only = land_only
+        self.ocean_only = ocean_only
 
         # Store the full thresholded mask
         if self.over_threshold:
@@ -308,14 +388,7 @@ class EventletFactory:
         # If we have a last_slice, load it
         if last_slice:
             print(f"Resuming from last slice at {last_slice['time']}")
-            self.active = [
-                Eventlet(
-                    pd.to_datetime(ev["times"][0]),
-                    np.vstack(ev["slices"]),
-                    np.hstack(ev["values"]),
-                )
-                for ev in last_slice.get("active_events", [])
-            ]
+            self.active = last_slice.get("active_events", [])
             if self.active:
                 self.oldest_active_time = min(ev.earliest_time() for ev in self.active)
             else:
@@ -405,7 +478,7 @@ class EventletFactory:
         # Useful for interrupted runs and operation on rolling data.
         last_slice = {
             "time": formatTime(time),
-            "active_events": [ev.to_dict() for ev in self.active]
+            "active_events": self.active
         }
         with open("last_slice.pkl", "wb") as f:
             pickle.dump(last_slice, f)
@@ -474,6 +547,17 @@ class EventletFactory:
         centroids = []
 
         all_coords = []
+
+        if self.land_only:
+            ev.remove_ocean(self.land_sea_mask)
+            if not ev.is_valid(self.min_length):
+                print(f"Discarding event at {all_times[0]} for being land-only")
+                return
+        elif self.ocean_only:
+            ev.remove_land(self.land_sea_mask)
+            if ev.is_valid(self.min_length):
+                print(f"Discarding event at {all_times[0]} for not being ocean-only")
+                return
 
         for i, region in enumerate(ev.slices):
             latlons = [(float(lat), float(lon)) for lat, lon in region]
@@ -743,7 +827,7 @@ def main():
 
     data_var, ref_data, land_sea_mask = load_data(
         f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
-        f"/data/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
+        f"/data/climatology/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
         f"/data/era5_land_sea_mask.nc",
     )
     time_dim = data_var["valid_time"]
@@ -767,6 +851,7 @@ def main():
         use_dbscan=False,
         last_slice=last_slice,
         eventtype='hot' if heatwave else 'cold',
+        land_only=land_sea_mask is not None,
     )
 
     for i in range(time_dim.size):
