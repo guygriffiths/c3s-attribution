@@ -16,6 +16,7 @@ from shapely.ops import unary_union
 import json
 import alphashape
 import pickle
+from geopy.distance import great_circle
 
 
 def walk_scan(D_coo: coo_matrix, eps: float, min_samples: int = 1):
@@ -341,7 +342,7 @@ class EventletFactory:
         land_sea_mask=None,
         expiry_days=1,
         min_length=3,
-        neighbor_radius=4.5,
+        neighbor_radius=100,
         output_path="/data/output-debug/events",
         use_dbscan=False,
         last_slice=None,
@@ -385,9 +386,11 @@ class EventletFactory:
 
         self.times = self.data.valid_time.values  # in __init__
 
+        self.skipToTime = None
         # If we have a last_slice, load it
         if last_slice:
             print(f"Resuming from last slice at {last_slice['time']}")
+            self.skipToTime = last_slice['time']
             self.active = last_slice.get("active_events", [])
             if self.active:
                 self.oldest_active_time = min(ev.earliest_time() for ev in self.active)
@@ -397,6 +400,13 @@ class EventletFactory:
 
     def process_slice(self, time):
         # print(f"Processing slice at {time}")
+        if self.skipToTime:
+            if np.datetime_as_string(time) < np.datetime_as_string(self.skipToTime):
+                print(f"Skipping slice at {time}")
+                return
+            else:
+                print(f"Reached skip-to time at {time}, resuming processing")
+                self.skipToTime = None
 
         data_slice = self.data.sel(
             valid_time=time
@@ -418,7 +428,7 @@ class EventletFactory:
         )
 
         if not self.use_dbscan:
-            labels = walk_scan(D, eps=1.5, min_samples=1)
+            labels = walk_scan(D, eps=self.radius, min_samples=1)
         else:
             db = DBSCAN(
                 eps=1.5,
@@ -477,10 +487,10 @@ class EventletFactory:
         # Write out last_slice.json. This is used to resume processing from a point.
         # Useful for interrupted runs and operation on rolling data.
         last_slice = {
-            "time": formatTime(time),
-            "active_events": self.active
+            "time": time,
+            "active_events": self.active,
         }
-        with open("last_slice.pkl", "wb") as f:
+        with open(f"{self.output_path}/last_slice.pkl", "wb") as f:
             pickle.dump(last_slice, f)
 
     def flush(self):
@@ -492,8 +502,7 @@ class EventletFactory:
         while self.output_queue:
             yield self.output_queue.popleft()
 
-    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius=4.5):
-        lat_len = len(lat_arr)
+    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius_km=100):
         lon_len = len(lon_arr)
 
         metadata = []
@@ -514,29 +523,35 @@ class EventletFactory:
         p1idx = []
         p2idx = []
 
-        radius_ceiling = int(np.ceil(radius))
-        delta_list = np.arange(-radius_ceiling, radius_ceiling + 1, 1)
+        # 0.25 degrees per index step
+        res = 0.25
+        radius_km_per_deg = 111  # approximate
+        radius_deg = radius_km / radius_km_per_deg
+        # x2 to ensure we test a bigger area than we want
+        delta_coord = 2 * int(np.ceil(radius_deg / res))
+        delta_list = np.arange(-delta_coord, delta_coord + 1, 1)
 
+        dists = []
         for i_lat, i_lon in coords:
             i_idx = ensure_metadata(i_lat, i_lon)
             for dlat in delta_list:
                 for dlon in delta_list:
-                    if (
-                        dlat == 0
-                        and dlon == 0
-                        or dlat * dlat + dlon * dlon > radius * radius
-                    ):
+                    if (dlat == 0 and dlon == 0):
                         continue
                     j_lat = i_lat + dlat
                     j_lon = (i_lon + dlon) % lon_len
 
-                    if 0 <= j_lat < lat_len and (j_lat, j_lon) in coord_set:
-                        j_idx = metadata_index.get(get_uid(j_lat, j_lon))
-                        if j_idx is not None:
+                    if (j_lat, j_lon) in coord_set:
+                        d_km = great_circle(
+                            (lat_arr[i_lat], lon_arr[i_lon]),
+                            (lat_arr[j_lat], lon_arr[j_lon])
+                        ).km
+                        if d_km <= radius_km:
+                            j_idx = ensure_metadata(j_lat, j_lon)
                             p1idx.append(i_idx)
                             p2idx.append(j_idx)
+                            dists.append(d_km)
 
-        dists = [1] * len(p1idx)
         D = coo_matrix((dists, (p1idx, p2idx)), shape=(len(metadata), len(metadata)))
         D = D + D.T
         return D, metadata
@@ -822,7 +837,7 @@ def main():
     stat = "max"
     perc = "99.0"
     thresh = 28
-    nr = 9
+    nr = 100
     heatwave = True
 
     data_var, ref_data, land_sea_mask = load_data(
@@ -836,8 +851,8 @@ def main():
     os.makedirs(f"{out_path}/events", exist_ok=True)
 
     last_slice = None
-    if os.path.exists("last_slice.pkl"):
-        with open("last_slice.pkl", "rb") as f:
+    if os.path.exists(f"{out_path}/last_slice.pkl"):
+        with open(f"{out_path}/last_slice.pkl", "rb") as f:
             last_slice = pickle.load(f)
 
     factory = EventletFactory(
