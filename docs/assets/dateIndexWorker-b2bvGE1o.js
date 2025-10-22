@@ -1,1 +1,0 @@
-(function(){"use strict";self.onmessage=o=>{const n=o.data,t={};for(let e=0;e<n.length;e++){const i=n[e];for(let f of i.times){const s=f.toISOString().split("T")[0];t[s]||(t[s]=[]),t[s].push(e)}}self.postMessage(t)}})();
