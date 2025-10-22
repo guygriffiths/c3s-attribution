@@ -16,8 +16,17 @@ from shapely.ops import unary_union
 import json
 import alphashape
 import pickle
-from geopy.distance import great_circle
+import math
 
+R = 6371.0088
+def haversine_fast(lat1, lon1, lat2, lon2):
+    # Mean Earth radius in km
+    # Convert degrees → radians
+    lat1, lon1, lat2, lon2 = map(math.radians, (lat1, lon1, lat2, lon2))
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat * 0.5)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon * 0.5)**2
+    return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
 def walk_scan(D_coo: coo_matrix, eps: float, min_samples: int = 1):
     """
@@ -431,7 +440,7 @@ class EventletFactory:
             labels = walk_scan(D, eps=self.radius, min_samples=1)
         else:
             db = DBSCAN(
-                eps=1.5,
+                eps=self.radius,
                 min_samples=1,
                 metric="precomputed",
             )
@@ -542,10 +551,10 @@ class EventletFactory:
                     j_lon = (i_lon + dlon) % lon_len
 
                     if (j_lat, j_lon) in coord_set:
-                        d_km = great_circle(
+                        d_km = haversine_fast(
                             (lat_arr[i_lat], lon_arr[i_lon]),
                             (lat_arr[j_lat], lon_arr[j_lon])
-                        ).km
+                        )
                         if d_km <= radius_km:
                             j_idx = ensure_metadata(j_lat, j_lon)
                             p1idx.append(i_idx)
