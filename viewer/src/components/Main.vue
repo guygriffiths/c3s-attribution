@@ -435,7 +435,14 @@ const mode = computed((): TimeReelMode => {
 			</div>
 		</Panel>
 
-		<div id="multi-event-window" />
+		<div
+			id="event-window"
+			:class="{
+				eventPanelOn:
+					eventStore.selectedEvent !== null && store.viewMode === 'timemachine',
+				multiEventPanelOn: store.showMultiEventPanel,
+			}"
+		/>
 	</div>
 </template>
 
@@ -557,31 +564,52 @@ $smallTimePanelHeight: max(6rem, 10%);
 		}
 	}
 
-	#multi-event-window {
+	$eventPanelWidth: 33%;
+	$multiEventPanelWidth: 40%;
+	$smallMultiScale: 0.6;
+
+	#event-window {
 		position: absolute;
-		top: 0;
-		left: 0;
-		width: 60%;
-		height: 100%; //calc(100% - $panelMargin - $smallTimePanelHeight);
+		top: $panelMargin;
+		left: $panelMargin;
+		width: calc(100% - 2 * $panelMargin);
+		height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 		pointer-events: none;
-		background-color: rgba(34, 150, 200, 0);
+		// background-color: rgba(34, 150, 200, 0.5);
+		// border: 1px solid orange;
+		z-index: 10000;
+
+		&.eventPanelOn {
+			left: calc($panelMargin + $eventPanelWidth);
+			width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
+		}
+
+		&.multiEventPanelOn {
+			width: calc(100% - $multiEventPanelWidth - $panelMargin);
+			&.eventPanelOn {
+				width: calc(
+					100% - $eventPanelWidth - $smallMultiScale * $multiEventPanelWidth -
+						2 * $panelMargin
+				);
+			}
+		}
 	}
 
 	#multi-event-panel {
 		display: flex;
 		flex-direction: column;
 		// gap: 0.5rem;
-		width: calc(40% - $panelMargin);
+		width: calc($multiEventPanelWidth - $panelMargin);
 		height: calc(100% - 3 * $panelMargin - $smallTimePanelHeight);
 		right: $panelMargin;
 		bottom: calc(1 * $panelMargin + $smallTimePanelHeight);
 
 		&.small {
-			transform: scale(0.6) translateX(120%);
+			transform: scale($smallMultiScale) translateX(120%);
 			transform-origin: bottom right;
 
 			&.active {
-				transform: scale(0.6);
+				transform: scale($smallMultiScale);
 			}
 		}
 

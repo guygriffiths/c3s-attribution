@@ -104,7 +104,7 @@ def safe_alphashape(
     
     longitude_span = points[:, 1].max() - points[:, 1].min()
     if longitude_span > 180:
-        print("Handling longitude wrap for hull calculation",longitude_span)
+        # print("Handling longitude wrap for hull calculation",longitude_span)
         points = points.copy()
         points[:, 1] = np.where(
             points[:, 1] < 0, points[:, 1] + 360, points[:, 1]
@@ -117,7 +117,7 @@ def safe_alphashape(
             if shape and not shape.is_empty:
                 return shape
         except Exception:
-            print(f"Alphashape failed on attempt {i+1} with alpha={alpha}")
+            # print(f"Alphashape failed on attempt {i+1} with alpha={alpha}")
             pass
         alpha *= growth  # grow alpha each retry
 
@@ -125,7 +125,7 @@ def safe_alphashape(
     n = len(points)
     if n == 1:
         x, y = points[0]
-        print("Alphashape failed, falling back to buffered point")
+        # print("Alphashape failed, falling back to buffered point")
         return Polygon(
             [
                 (x - fallback_buffer, y - fallback_buffer),
@@ -135,10 +135,10 @@ def safe_alphashape(
             ]
         )
     elif n == 2:
-        print("Alphashape failed, falling back to buffered line")
+        # print("Alphashape failed, falling back to buffered line")
         return MultiPoint(points).buffer(fallback_buffer)
     else:
-        print("Alphashape failed, falling back to buffered convex hull")
+        # print("Alphashape failed, falling back to buffered convex hull")
         mp = MultiPoint(points)
         convex = mp.convex_hull
         if convex.is_empty:
@@ -477,7 +477,7 @@ class EventletFactory:
                 self.active.remove(ev)
 
         # Sort active events largest-first (for later matching)
-        self.active.sort(key=lambda ev: len(ev.values), reverse=True)
+        self.active.sort(key=lambda ev: len(ev.values[-1]), reverse=True)
 
         # Update oldest time
         self.oldest_active_time = min(
@@ -502,7 +502,7 @@ class EventletFactory:
         while self.output_queue:
             yield self.output_queue.popleft()
 
-    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius_km=100):
+    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius_km=500):
         lon_len = len(lon_arr)
 
         metadata = []
@@ -566,12 +566,12 @@ class EventletFactory:
         if self.land_only:
             ev.remove_ocean(self.land_sea_mask)
             if not ev.is_valid(self.min_length):
-                print(f"Discarding event at {all_times[0]} for being land-only")
+                print(f"Discarding event at {all_times[0]} for too small over land")
                 return
         elif self.ocean_only:
             ev.remove_land(self.land_sea_mask)
             if ev.is_valid(self.min_length):
-                print(f"Discarding event at {all_times[0]} for not being ocean-only")
+                print(f"Discarding event at {all_times[0]} for being too small over ocean")
                 return
 
         for i, region in enumerate(ev.slices):
@@ -584,7 +584,7 @@ class EventletFactory:
         lats, lons = zip(*all_coords)
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
-        event_id = get_id(self.eventtype, all_times[0], centroids[0])
+        event_id = get_id(self.eventtype, all_times[0], centroids[0], self.threshold, self.radius)
         max_values = to_serialisable(
             [
                 np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
@@ -783,7 +783,7 @@ def stable_cluster_hash(time, centroid):
     return int.from_bytes(hash_bytes[:4], byteorder="big")  # 32 bits
 
 
-def get_id(eventtype, time, centroid):
+def get_id(eventtype, time, centroid, threshold, radius):
     """
     Generate a stable ID for an event based on time and centroid.
     This is a simple hash function that combines the time and centroid coordinates.
@@ -796,7 +796,12 @@ def get_id(eventtype, time, centroid):
     lat_code = int(round((lat + 90) * 1000))  # 0 → 180000 range
     lon_code = int(round((lon + 180) * 1000))  # 0 → 360000 range
 
-    return f"{eventtype}{time.strftime('%Y%m%d')}{lat_code:06d}{lon_code:06d}"
+    thresh = int(round(threshold - 273.15)*10)
+    if thresh < 0:
+        thresh = 900-thresh
+    radius = int(round(radius))
+
+    return f"{eventtype}{time.strftime('%Y%m%d')}{thresh:03d}{radius:05d}{lat_code:06d}{lon_code:06d}"
 
 
 def downstream_worker(q, clusterer):

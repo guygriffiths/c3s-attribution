@@ -124,18 +124,12 @@ export const useStore = defineStore('main', {
 				},
 			)
 
-			const respH = await fetch(`${DATA_ROOT}events-hw.jsonl`)
-			if (!respH.ok) {
-				throw new Error('Network response was not ok')
-			}
-			const textH = await respH.text()
-			const linesH = textH.trim().split('\n')
-			const objectsH = linesH.map((line) => JSON.parse(line))
-			const data = objectsH
-
 			let firstEventTime = new Date(9999, 0, 1)
 			let lastEventTime = new Date(0)
-			const massageData = (data: any[], type: 'hot' | 'cold' | 'wet' | 'windy' | 'dry') => {
+			const massageData = (
+				data: any[],
+				type: 'hot' | 'cold' | 'wet' | 'windy' | 'dry',
+			) => {
 				data.forEach((event: any) => {
 					// console.log('Processing event:', event)
 					event.times = event.times.map((time: string) => new Date(time))
@@ -161,28 +155,46 @@ export const useStore = defineStore('main', {
 					event.event_type = type
 				})
 			}
-			massageData(data, 'hot')
+
+			const data = []
+			const respH = await fetch(`${DATA_ROOT}events-hw.jsonl`)
+			if (!respH.ok) {
+				throw new Error('Network response was not ok')
+			}
+			try {
+				const textH = await respH.text()
+				const linesH = textH.trim().split('\n')
+				const objectsH = linesH.map((line) => JSON.parse(line))
+				data.push(...objectsH)
+
+				massageData(data, 'hot')
+			} catch (e) {
+				console.error('Error processing hot events:', e)
+			}
 
 			const respC = await fetch(`${DATA_ROOT}events-cw.jsonl`)
 			if (!respC.ok) {
 				throw new Error('Network response was not ok')
 			}
-			const textC = await respC.text()
-			const linesC = textC.trim().split('\n')
-			const objectsC = linesC.map((line) => JSON.parse(line))
-			massageData(objectsC, 'cold')
-			data.push(...objectsC)
+			try {
+				const textC = await respC.text()
+				const linesC = textC.trim().split('\n')
+				const objectsC = linesC.map((line) => JSON.parse(line))
+				massageData(objectsC, 'cold')
+				data.push(...objectsC)
 
-			const timeStore = useTimeStore()
-			timeStore.startTime = new Date(
-				Date.UTC(firstEventTime.getUTCFullYear(), 0, 1),
-			)
-			timeStore.endTime = new Date(
-				Date.UTC(lastEventTime.getUTCFullYear(), 11, 31),
-			)
+				const timeStore = useTimeStore()
+				timeStore.startTime = new Date(
+					Date.UTC(firstEventTime.getUTCFullYear(), 0, 1),
+				)
+				timeStore.endTime = new Date(
+					Date.UTC(lastEventTime.getUTCFullYear(), 11, 31),
+				)
+			} catch (e) {
+				console.error('Error processing cold events:', e)
+			}
 			eventStore.setEvents(data as ExtremeEvent[])
 			this.setLoadingDone()
-
 		},
 	},
 })

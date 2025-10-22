@@ -10,9 +10,12 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
 	faBackward,
+	faBackwardStep,
+	faF,
 	faFastBackward,
 	faFastForward,
 	faForward,
+	faForwardStep,
 	faPause,
 	faPlay,
 } from '@fortawesome/free-solid-svg-icons'
@@ -123,6 +126,12 @@ const prevDay = () => {
 		}
 		model.value = newVal
 	}
+}
+const startOfYear = () => {
+	setDate(new Date(Date.UTC(selectedYear.value, 0, 1)))
+}
+const endOfYear = () => {
+	setDate(new Date(Date.UTC(selectedYear.value, 11, 31)))
 }
 const nextYear = () => {
 	scrollToYear(selectedYear.value + 1)
@@ -294,7 +303,7 @@ const handleDrag = (event: MouseEvent) => {
 	if (dragMode.value === 'horizontal') {
 		const container = containerRef.value
 		if (container) {
-			if(props.mode !== 'eventzoom') {
+			if (props.mode !== 'eventzoom') {
 				const rect = container.getBoundingClientRect()
 				const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
 				const pixelsPerDay = rect.width / totalDays
@@ -313,18 +322,16 @@ const handleDrag = (event: MouseEvent) => {
 				const rect = container.getBoundingClientRect()
 				const totalDays = props.selectedEvent
 					? differenceInDays(
-							props.selectedEvent.times[
-								props.selectedEvent.times.length - 1
-							],
+							props.selectedEvent.times[props.selectedEvent.times.length - 1],
 							props.selectedEvent.times[0],
-					  ) * xScaleFactor.value
+						) * xScaleFactor.value
 					: 365
 				const pixelsPerDay = rect.width / totalDays
 				const daysMoved = Math.round(dx / pixelsPerDay)
-				localNeedleOffset.value = (dx / pixelsPerDay) - daysMoved
+				localNeedleOffset.value = dx / pixelsPerDay - daysMoved
 
 				// No need to set anything and trigger a re-render if we haven't actually changed the day
-				if(daysMoved === 0) return
+				if (daysMoved === 0) return
 				// addHours will respect DST, addDays won't
 				const newDate = addHours(startDate, 24 * daysMoved)
 				if (newDate.getFullYear() === selectedYear.value) {
@@ -370,8 +377,14 @@ const needleOffset = computed(() => {
 			)
 			const totalZoomedDays = (eventEnd - eventStart) * xScaleFactor.value
 			const offset = selectedDay - eventStart + 1
-			if(localNeedleOffset.value !== null) {
-				return Math.max(Math.min(((offset + localNeedleOffset.value) / totalZoomedDays) * 100, 100), 0)
+			if (localNeedleOffset.value !== null) {
+				return Math.max(
+					Math.min(
+						((offset + localNeedleOffset.value) / totalZoomedDays) * 100,
+						100,
+					),
+					0,
+				)
 			}
 			return (offset / totalZoomedDays) * 100
 		}
@@ -684,31 +697,55 @@ const yearPadding = computed(() => {
 			}"
 		>
 			<div class="buttons">
-				<button @click="prevYear" :disabled="selectedYear <= startYear">
+				<button
+					@click="prevYear"
+					:disabled="selectedYear <= startYear"
+					:title="$l.prevYear"
+				>
 					<span class="sr-only">{{ $l.prevYear }}</span>
+					<font-awesome-icon
+						:icon="faBackwardStep"
+						style="transform: rotate(90deg)"
+					/>
+				</button>
+				<button @click="startOfYear" :title="$l.startOfYear">
+					<span class="sr-only">{{ $l.startOfYear }}</span>
 					<font-awesome-icon :icon="faFastBackward" />
 				</button>
 				<button
 					@click.stop="prevDay"
 					:disabled="selectedYear <= startYear && selectedDay <= 1"
+					:title="$l.prevDay"
 				>
 					<span class="sr-only">{{ $l.prevDay }}</span>
-					<font-awesome-icon :icon="faBackward" />
+					<font-awesome-icon :icon="faBackwardStep" />
 				</button>
-				<button @click="togglePlay">
+				<button @click="togglePlay" :title="$l.play">
 					<span class="sr-only">{{ $l.play }}</span>
 					<font-awesome-icon :icon="playing ? faPause : faPlay" />
 				</button>
 				<button
 					@click="nextDay"
 					:disabled="selectedYear >= endYear && selectedDay >= 365"
+					:title="$l.nextDay"
 				>
 					<span class="sr-only">{{ $l.nextDay }}</span>
-					<font-awesome-icon :icon="faForward" />
+					<font-awesome-icon :icon="faForwardStep" />
 				</button>
-				<button @click="nextYear" :disabled="selectedYear >= endYear">
-					<span class="sr-only">{{ $l.nextYear }}</span>
+				<button @click="endOfYear" :title="$l.endOfYear">
+					<span class="sr-only">{{ $l.endOfYear }}</span>
 					<font-awesome-icon :icon="faFastForward" />
+				</button>
+				<button
+					@click="nextYear"
+					:disabled="selectedYear >= endYear"
+					:title="$l.nextYear"
+				>
+					<span class="sr-only">{{ $l.nextYear }}</span>
+					<font-awesome-icon
+						:icon="faForwardStep"
+						style="transform: rotate(90deg)"
+					/>
 				</button>
 			</div>
 		</div>
@@ -779,7 +816,10 @@ const yearPadding = computed(() => {
 								<transition-group
 									tag="g"
 									name="daily-event-fx"
-									v-if="showBars"
+									v-if="
+										(showBars && props.mode !== 'overview') ||
+										props.mode === 'eventzoom'
+									"
 								>
 									<rect
 										v-if="year === selectedYear"
@@ -799,6 +839,7 @@ const yearPadding = computed(() => {
 										"
 										:key="box.event.id"
 										vector-effect="non-scaling-stroke"
+										@click="$emit('eventSelected', box.event.id)"
 									></rect>
 								</transition-group>
 								<rect
@@ -1293,11 +1334,12 @@ const yearPadding = computed(() => {
 			}
 			&.selected {
 				stroke: $lightbulb;
-				stroke-width: 2;
+				// stroke-width: 2;
 				pointer-events: auto;
 				cursor: pointer;
 				fill: $lightbulb;
-				transform: scaleY(1);
+				filter: drop-shadow(0 0 2px $lightbulb) drop-shadow(0 0 4px $lightbulb);
+				// transform: scaleY(1);
 			}
 		}
 		.day-box {

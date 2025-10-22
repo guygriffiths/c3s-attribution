@@ -206,6 +206,14 @@ export const drawEventTile =
 		intensityForValue: (v: number) => number,
 	) =>
 	() => {
+		if(!selectedEvent) {
+			return
+		}
+		const tIndex = selectedEvent?.times.findIndex((t) => t.getTime() === selectedTime.getTime())
+		if(tIndex < 0) {
+			return
+		}
+
 		const key = eventTileKey(
 			props.coords,
 			selectedEvent

@@ -23,7 +23,12 @@ import 'leaflet/dist/leaflet.css'
 import { computed, nextTick, ref, watch } from 'vue'
 
 import scssVars from '@/assets/styles/scssVars.module.scss'
-import { centreMapOnDiv, fitBoundsToDiv, markerIcon } from '@/lib/map-utils'
+import {
+	centreMapOnDiv,
+	fitBoundsToDiv,
+	markerIcon,
+	getEventRegion,
+} from '@/lib/map-utils'
 import { drawEventTile, TILE_SIZE } from '@/lib/renderer'
 import { faClose, faFilter } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -71,11 +76,20 @@ const mapOptions = {
 const zoom = ref(2)
 
 const bgLayer = {
-	name: 'Stadia OSM Bright',
-	url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
+	name: 'C3S Light',
+	url: 'https://extreme-events.climate.copernicus.eu/maps/styles/light/{z}/{x}/{y}{r}.png',
+	labelsUrl: 'https://extreme-events.climate.copernicus.eu/maps/styles/light-labels/{z}/{x}/{y}{r}.png',
 	attribution:
-		'&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
+		'&copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
 }
+// const bgLayer = {
+// 	name: 'C3S Dark',
+// 	url: 'https://extreme-events.climate.copernicus.eu/maps/styles/dark/{z}/{x}/{y}{r}.png',
+// 	labelsUrl: 'https://extreme-events.climate.copernicus.eu/maps/styles/dark-labels/{z}/{x}/{y}{r}.png',
+// 	attribution:
+// 		'&copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
+// }
+const labelsOn = ref(false)
 
 const wmtsUrl = ref(
 	`https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${timeStore.isoDatetime}`,
@@ -224,25 +238,9 @@ const pointSelectorSettled = (event: any) => {
 	}
 }
 
-// Extract the region for a given event at the currently selected time
-// This is for the timemachine mode, updates the "current" events as we drag/animate the time slider
-const getEventRegion = (event: ExtremeEvent) => {
-	const selected = timeStore.selectedTime.getTime()
-	const idx = event.times
-		.map((t: Date) => t.getTime())
-		.findIndex((t) => t === selected)
+const lastBbox = ref<[number, number, number, number] | null>(null)
 
-	if (idx < 0) {
-		console.warn(
-			`No region found for event ${event.id} at time ${timeStore.selectedTime.toISOString()}`,
-		)
-		return event.regions[0] || [] // Fallback to first region if no matching time found
-	}
-	return event.regions[idx] || [] // Fallback to empty array if no region found
-}
-
-const lastBbox = ref<LatLngBounds | null>(null)
-
+// Watch for changes that require a redraw of the event pixels
 watch(
 	() => [timeStore.selectedTime, eventStore.selectedEventId, store.viewMode],
 	() => {
@@ -252,6 +250,8 @@ watch(
 	},
 )
 
+// When the time changes, update the list of current events to draw on the map
+// They will only be draw in timemachine mode, but get updated in heatmap ready for the switch back
 watch(
 	() => timeStore.selectedTime,
 	(newVal) => {
@@ -262,11 +262,13 @@ watch(
 	},
 )
 
+// If we change what kind of events are being shown, update the heatmap and filtered events
 watch(
 	() => [eventStore.coldEventsOn, eventStore.hotEventsOn],
 	() => {
+		globalHeatmapEvents.value = getGlobalFilteredEvents()
+		currentEvents.value = getCurrentEvents(timeStore.selectedTime)
 		if (store.viewMode === 'heatmap') {
-			globalHeatmapEvents.value = getGlobalFilteredEvents()
 			try {
 				// @ts-ignore
 				heatmapRenderer._update()
@@ -288,33 +290,42 @@ watch(
 )
 
 watch(
-	() => store.viewMode,
+	() => store.showMultiEventPanel,
 	(newVal) => {
-		if (newVal === 'heatmap') {
-			wmtsUrl.value = ''
-			globalHeatmapEvents.value = getGlobalFilteredEvents()
-			// @ts-ignore
-			heatmapRenderer._update()
-			if (store.filteringByPoint || store.filteringByRegion) {
-				regionFilteredEvents = getFilteredEvents()
-				// @ts-ignore
-				fastRenderer._update()
-			}
-		} else {
-			wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${timeStore.isoDatetime}`
-		}
+		if (!mapRef.value) return
+		const el = document.getElementById('event-window')
+		if (!el) return
+		centreMapOnDiv(mapRef.value.leafletObject as L.Map, el, !newVal)
 	},
+	{ immediate: true },
 )
 
 watch(
-	() => store.showMultiEventPanel,
-	(newVal) => {
-		centreMapOnDiv(
+	() => [eventStore.selectedEvent, store.viewMode, store.showMultiEventPanel],
+	(oldVal, newVal) => {
+		// Check if the event has changed from null, in which case set lastBbox
+		if (oldVal[0] === null && newVal[0] !== null) {
+			lastBbox.value = (newVal[0] as ExtremeEventFull).bbox
+		}
+
+		const el = document.getElementById('event-window')
+		if (!el) {
+			console.log(
+				'No event window element to fit to',
+				el,
+				document.getElementById('event-window'),
+			)
+			return
+		}
+		fitBoundsToDiv(
 			mapRef.value!.leafletObject as L.Map,
-			document.getElementById('multi-event-window')!,
-			!newVal,
+			el,
+			eventStore.selectedEvent
+				? eventStore.selectedEvent.bbox
+				: lastBbox.value || [-85, -180, 85, 180],
 		)
 	},
+	{ immediate: false },
 )
 
 const lastCentreZoom = ref<{ centre: L.LatLng; zoom: number } | null>(null)
@@ -344,8 +355,8 @@ watch(
 	},
 )
 
-const renderTile = (props: any) => {
-	const cScale = d3
+const cScale = computed(() =>
+	d3
 		.scaleLinear()
 		.domain([
 			intensityForValue(
@@ -357,7 +368,31 @@ const renderTile = (props: any) => {
 				eventStore.selectedEvent?.event_type === 'hot',
 			),
 		])
-		.range([0, 1])
+		.range([0, 1]),
+)
+// watch(
+// 	() => eventStore.selectedEvent,
+// 	() => {
+// 		cScale.value = d3
+// 			.scaleLinear()
+// 			.domain([
+// 				intensityForValue(
+// 					eventStore.selectedEvent?.min_value!,
+// 					eventStore.selectedEvent?.event_type === 'hot',
+// 				),
+// 				intensityForValue(
+// 					eventStore.selectedEvent?.max_value!,
+// 					eventStore.selectedEvent?.event_type === 'hot',
+// 				),
+// 			])
+// 			.range([0, 1])
+// 		if (eventPixelsRef.value && eventPixelsRef.value.leafletObject) {
+// 			eventPixelsRef.value.leafletObject.redraw()
+// 		}
+// 	},
+// )
+
+const renderTile = (props: any) => {
 	return drawEventTile(
 		props,
 		eventStore.selectedEvent,
@@ -368,10 +403,14 @@ const renderTile = (props: any) => {
 			: eventStore.coldIntensityRange,
 		eventPixelsRef.value,
 		(v: number) =>
-			colorForValue(v, eventStore.selectedEvent?.event_type === 'hot', cScale),
+			colorForValue(
+				v,
+				eventStore.selectedEvent?.event_type === 'hot',
+				cScale.value,
+			),
 		(v: number) =>
 			intensityForValue(v, eventStore.selectedEvent?.event_type === 'hot'),
-	)
+	) as any
 }
 
 const addEventPanes = () => {
@@ -529,12 +568,18 @@ const addEventPanes = () => {
 				:zIndex="1"
 			></LTileLayer>
 			<LTileLayer
+				:url="bgLayer.labelsUrl"
+				layer-type="base"
+				:zIndex="3"
+				v-if="labelsOn"
+			></LTileLayer>
+			<!-- <LTileLayer
 				class="bg-map"
 				:url="wmtsUrl"
-				:zIndex="2"
+				:zIndex="5"
 				:opacity="0.75"
 				v-if="store.viewMode === 'timemachine'"
-			></LTileLayer>
+			></LTileLayer> -->
 
 			<!-- Events -->
 			<!-- Current events as polygons -->
@@ -542,10 +587,10 @@ const addEventPanes = () => {
 				v-if="store.viewMode === 'timemachine'"
 				v-for="event in currentEvents"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
-				:lat-lngs="getEventRegion(event)"
+				:lat-lngs="getEventRegion(event, timeStore.selectedTime)"
 				:weight="event.id === eventStore.selectedEventId ? 0.5 : 1"
 				:fill="true"
-				:fill-opacity="event.id === eventStore.selectedEventId ? 0.0 : 0.9"
+				:fill-opacity="event.id === eventStore.selectedEventId ? 0.0 : 0.5"
 				:color="event.event_type == 'hot' ? scssVars.c3sred : scssVars.c3sblue"
 				:fill-color="eventStore.colorForEvent(event)"
 				@click="eventStore.selectEvent(event.id)"

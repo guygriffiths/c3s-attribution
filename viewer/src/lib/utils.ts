@@ -50,12 +50,12 @@ export function interpolateColor(baseColor: string = 'rgb(151, 24, 65)') {
 	return (t: number) => d3.hsl(hsl.h, hsl.s, (1 - t) * 0.7 + 0.2).toString()
 }
 
-export function binGradient(
+export const binGradient = (
 	startPct: number,
 	endPct: number,
 	startColor: string,
 	endColor: string,
-) {
+) => {
 	// Interpolate between red and blue based on startPct
 	// startPct=1 => red, startPct=0 => blue
 	const mix = d3.interpolateRgb(
@@ -64,6 +64,5 @@ export function binGradient(
 	)(endPct) // or 1-startPct
 
 	return mix
-
 	// return `linear-gradient(135deg, ${startColor} ${startPct * 100}%, ${mix} 50%, ${endColor} ${endPct * 100}%)`
 }

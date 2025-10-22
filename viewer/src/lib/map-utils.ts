@@ -108,3 +108,20 @@ export const markerIcon = L.icon({
 	tooltipAnchor: [16, -28],
 	shadowSize: [41, 41],
 })
+
+// Extract the region for a given event at the currently selected time
+// This is for the timemachine mode, updates the "current" events as we drag/animate the time slider
+export const getEventRegion = (event: ExtremeEvent, time: Date) => {
+	const selected = time.getTime()
+	const idx = event.times
+		.map((t: Date) => t.getTime())
+		.findIndex((t) => t === selected)
+
+	if (idx < 0) {
+		console.warn(
+			`No region found for event ${event.id} at time ${time.toISOString()}`,
+		)
+		return event.regions[0] || [] // Fallback to first region if no matching time found
+	}
+	return event.regions[idx] || [] // Fallback to empty array if no region found
+}

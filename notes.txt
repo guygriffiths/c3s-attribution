@@ -84,3 +84,17 @@ When an event is selected, we show summary info in two ways:
 * the context of other events - PDFs of duration, size, intensity, with a "you are here" highlighter. These will be global, unless we are in heatmap mode, in which case the will be whatever they already were
 
 TODO - Scatter plots vs time (actual time) - to tell if events are getting more intense/longer/bigger. And also vs. global mean temperature (yearly, Mark to find the dataset to use)
+
+Event land + sea as separate options. Same with precip. Do in phase 2.
+Generate land-only set before next demo
+
+Load events sequentially to stop load delay
+
+Upload user regions. Storing in cookies possibly phase 2/
+
+Time overview for regional/point data
+
+Gamification help. Help button. Tip of the day
+
+Download button
+

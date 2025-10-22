@@ -14,6 +14,8 @@ const labelsEn = {
 	selectByRegion: 'Select by region',
 	nextDay: 'Next day',
 	prevDay: 'Previous day',
+	endOfYear: 'End of year',
+	startOfYear: 'Start of year',
 	nextYear: 'Next year',
 	prevYear: 'Previous year',
 	play: 'Play',
