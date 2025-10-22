@@ -433,7 +433,7 @@ class EventletFactory:
         lon_vals = data_slice.longitude.values  # shape (X,)
 
         D, metadata = self.get_distance_matrix(
-            hot_indices, lat_vals, lon_vals, radius=self.radius
+            hot_indices, lat_vals, lon_vals, radius_km=self.radius
         )
 
         if not self.use_dbscan:
