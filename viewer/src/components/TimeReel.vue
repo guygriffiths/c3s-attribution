@@ -160,6 +160,23 @@ const frameInterval = computed(() => {
 
 const togglePlay = () => {
 	if (!props.selectedEvent && props.mode === 'eventzoom') return
+
+	if (
+		!playing.value &&
+		(model.value.getTime() === props.end.getTime() ||
+			(props.mode === 'eventzoom' &&
+				model.value.getTime() ===
+					props.selectedEvent!.times[
+						props.selectedEvent!.times.length - 1
+					].getTime()))
+	) {
+		// Restart from beginning
+		if (props.mode === 'eventzoom' && props.selectedEvent) {
+			setDate(props.selectedEvent.times[0])
+		} else {
+			setDate(new Date(Date.UTC(selectedYear.value, 0, 1)))
+		}
+	}
 	playing.value = !playing.value
 	if (playing.value) {
 		let last = performance.now()
@@ -205,10 +222,7 @@ const updateRowHeight = () => {
 	rowHeight.value = parentHeight > 0 ? parentHeight / rowsToShow.value : 128
 }
 
-const oneRow = ref(false)
-watch(oneRow, () => updateRowHeight())
 const rowsToShow = computed(() => {
-	if (oneRow.value) return 1
 	switch (props.mode) {
 		case 'timeline':
 		case 'eventzoom':
@@ -240,6 +254,7 @@ let startMs = 0
 
 const localNeedleOffset = ref(null as number | null)
 const startDrag = (event: MouseEvent) => {
+	if (props.mode === 'timeline') return
 	isDragging.value = true
 	setTimeout(() => {
 		if (isDragging.value) {
@@ -474,6 +489,15 @@ onMounted(() => {
 		timeReelRef.value.focus()
 	}
 
+	if (container.value) {
+		const yearsOffset = selectedYear.value - startYear.value
+		const scrollOffset = 0.5 * (yearsOffset * 2 - 1)
+		container.value.scrollTo({
+			top: scrollOffset * rowHeight.value,
+		})
+		console.log('and scrolled to', selectedYear.value)
+	}
+
 	onBeforeUnmount(() => {
 		window.removeEventListener('keydown', handleKey)
 	})
@@ -561,7 +585,7 @@ const getAreaString = () => {
 		// We add 2 invisible moves to ensure that the centre of the object's bounding box is always at y=0
 		// That way when we apply a vertical gradient, it is always centered
 		ret[year] =
-			areaStr(data.slice(startIdx, endIdx)) + ` M0,${-2} L0,0 M0,${2} L0,0` ||
+			areaStr(data.slice(startIdx, endIdx)) + ` M0,${-2} l0,0 M0,${2} l0,0` ||
 			''
 	}
 	return ret
@@ -625,18 +649,18 @@ watch(
 		for (const year of years.value) {
 			d3.select(`#events-line-${year}`)
 				.transition()
-				.duration(500)
+				.duration(0) //intervalToMs(scssVars.animTime))
 				.attr('d', newD[year])
 		}
 
-		if (container.value) {
-			const yearsOffset = selectedYear.value - startYear.value
-			const scrollOffset = 0.5 * (yearsOffset * 2 - 1)
-			container.value.scrollTo({
-				top: scrollOffset * rowHeight.value,
-			})
-			console.log('and scrolled to', selectedYear.value)
-		}
+		// if (container.value) {
+		// 	const yearsOffset = selectedYear.value - startYear.value
+		// 	const scrollOffset = 0.5 * (yearsOffset * 2 - 1)
+		// 	container.value.scrollTo({
+		// 		top: scrollOffset * rowHeight.value,
+		// 	})
+		// 	console.log('and scrolled to', selectedYear.value)
+		// }
 	},
 	{ immediate: true, deep: false },
 )
@@ -793,13 +817,11 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					@click="togglePlay"
 					:title="$l.play"
 					:disabled="
-						model === end ||
-						(props.mode === 'eventzoom' &&
-							model.getTime() < props.selectedEvent!.times[0].getTime()) ||
-						model.getTime() >=
-							props.selectedEvent!.times[
-								props.selectedEvent!.times.length - 1
-							].getTime()
+						props.mode === 'eventzoom' &&
+						(!props.selectedEvent ||
+							props.selectedEvent.times[0] > model ||
+							props.selectedEvent.times[props.selectedEvent.times.length - 1] <
+								model)
 					"
 				>
 					<span class="sr-only">{{ $l.play }}</span>
@@ -1083,7 +1105,12 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 		font-size: 0.875rem;
 		user-select: none;
 		display: flex;
-		transform: all $animTime linear;
+		transition: all $animTime linear;
+		&.zoom {
+			left: 17%;
+			top: 85%;
+			// top: auto;
+		}
 
 		.buttons {
 			display: flex;
@@ -1122,13 +1149,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 		}
 
 		&.hidden {
-			// display: none;
-		}
-
-		&.zoom {
-			left: 17%;
-			bottom: 0;
-			top: auto;
+			display: none;
 		}
 	}
 

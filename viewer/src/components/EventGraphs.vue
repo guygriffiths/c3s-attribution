@@ -51,11 +51,9 @@ const intensityScale = computed(() =>
 const selectedIndex = computed(() => {
 	if (!props.selectedEvent) return -1
 	const selectedTime = timeStore.selectedTime
-	const ret = props.selectedEvent.times.findIndex(
+	return props.selectedEvent.times.findIndex(
 		(d) => d.getTime() === selectedTime.getTime(),
 	)
-	console.log(ret)
-	return ret
 })
 
 onMounted(() => {

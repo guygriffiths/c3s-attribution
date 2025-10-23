@@ -33,7 +33,9 @@ const toggle = async () => {
 	width: 80px;
 	height: 36px;
 	background-color: #ddd;
-	border-radius: 9999px;
+	border-radius: 1.5rem;
+	border-bottom-right-radius: 0;
+	border-bottom-left-radius: 0;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;

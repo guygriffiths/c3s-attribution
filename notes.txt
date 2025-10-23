@@ -98,3 +98,4 @@ Gamification help. Help button. Tip of the day
 
 Download button - done
 Add to cart button - phase 2
+password protect - simplest

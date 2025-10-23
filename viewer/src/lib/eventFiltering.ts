@@ -33,6 +33,7 @@ export function onRegionEventsReady(cb: () => void) {
 	}
 }
 export function onGlobalEventsReady(cb: () => void) {
+	console.log('Registering global events ready callback', cb)
 	globalEventsReadyTriggers.push(cb)
 	if (globalEventsReady) {
 		cb()
@@ -51,39 +52,61 @@ export function onFilterBuilt(cb: () => void) {
 	}
 }
 
+const pixelWorker = new PixelWorker()
+pixelWorker.onmessage = (e: MessageEvent<Record<number, number[]>>) => {
+	for (const [key, val] of Object.entries(e.data)) {
+		if (pixelIndex[Number(key)]) {
+			pixelIndex[Number(key)] = pixelIndex[Number(key)].concat(val)
+		} else {
+			pixelIndex[Number(key)] = val
+		}
+	}
+	pixelIndexReady = true
+	for (const cb of indexBuiltTriggers) {
+		cb()
+	}
+	console.log('Event filters built')
+}
+
+const dateWorker = new DateWorker()
+dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
+	for (const [key, val] of Object.entries(e.data)) {
+		if (dateIndex[key]) {
+			dateIndex[key] = dateIndex[key].concat(val)
+		} else {
+			dateIndex[key] = val
+		}
+	}
+	dateIndexReady = true
+	for (const cb of currentEventTriggers) {
+		cb()
+	}
+	console.log('Date filters built')
+}
+
 /**
  * Initialise global store
  */
 export function buildEventFilters(events: ExtremeEvent[]) {
 	pixelIndexReady = false
-	_events = events
-	_filteredEvents = events
-	_filteredIds = new Set(events.map((e) => e.id))
+
+	const startI = _events.length
+	_events.push(...events)
+	_filteredEvents = _events
+	_filteredIds = new Set(_events.map((e) => e.id))
 	globalEventsReady = true
+
+	pixelIndexReady = false
+	pixelWorker.postMessage({ events, startI })
+
+	dateIndexReady = false
+	dateWorker.postMessage({ events, startI })
+}
+
+export function manualGlobalTrigger() {
 	for (const cb of globalEventsReadyTriggers) {
 		cb()
 	}
-	const pixelWorker = new PixelWorker()
-	pixelWorker.onmessage = (e: MessageEvent<Record<number, number[]>>) => {
-		pixelIndex = e.data
-		pixelIndexReady = true
-		for (const cb of indexBuiltTriggers) {
-			cb()
-		}
-		console.log('Event filters built')
-	}
-	pixelWorker.postMessage(events)
-
-	const dateWorker = new DateWorker()
-	dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
-		dateIndex = e.data
-		dateIndexReady = true
-		for (const cb of currentEventTriggers) {
-			cb()
-		}
-		console.log('Date filters built')
-	}
-	dateWorker.postMessage(events)
 }
 
 export function getEventCount(): number {
@@ -103,11 +126,11 @@ export function setFilterToPoint(lat: number, lon: number): ExtremeEvent[] {
 	resultReady = true
 	regionEventsReadyTriggers.forEach((cb) => cb())
 
-	if(coldOnly) {
-		return lastResult.filter(e => e.event_type === 'cold')
+	if (coldOnly) {
+		return lastResult.filter((e) => e.event_type === 'cold')
 	}
-	if(hotOnly) {
-		return lastResult.filter(e => e.event_type === 'hot')
+	if (hotOnly) {
+		return lastResult.filter((e) => e.event_type === 'hot')
 	}
 	return lastResult
 }
@@ -150,11 +173,11 @@ export function setFilterToRegion(
 	resultReady = true
 	regionEventsReadyTriggers.forEach((cb) => cb())
 
-	if(coldOnly) {
-		return lastResult.filter(e => e.event_type === 'cold')
+	if (coldOnly) {
+		return lastResult.filter((e) => e.event_type === 'cold')
 	}
-	if(hotOnly) {
-		return lastResult.filter(e => e.event_type === 'hot')
+	if (hotOnly) {
+		return lastResult.filter((e) => e.event_type === 'hot')
 	}
 	return lastResult
 }
@@ -222,21 +245,25 @@ export function clearFilter() {
 }
 
 export function getFilteredEvents(): ExtremeEvent[] {
-	if(coldOnly) {
-		return lastResult.filter(e => e.event_type === 'cold')
+	if (coldOnly) {
+		return lastResult.filter((e) => e.event_type === 'cold')
 	}
-	if(hotOnly) {
-		return lastResult.filter(e => e.event_type === 'hot')
+	if (hotOnly) {
+		return lastResult.filter((e) => e.event_type === 'hot')
 	}
 	return lastResult
 }
 
 export function getFilteredIds(): Set<string> {
-	if(coldOnly) {
-		return new Set(lastResult.filter(e => e.event_type === 'cold').map(e => e.id))
+	if (coldOnly) {
+		return new Set(
+			lastResult.filter((e) => e.event_type === 'cold').map((e) => e.id),
+		)
 	}
-	if(hotOnly) {
-		return new Set(lastResult.filter(e => e.event_type === 'hot').map(e => e.id))
+	if (hotOnly) {
+		return new Set(
+			lastResult.filter((e) => e.event_type === 'hot').map((e) => e.id),
+		)
 	}
 	return lastIds
 }
@@ -254,11 +281,11 @@ export function getCurrentEvents(time: Date): ExtremeEvent[] {
 		if (_filteredIds.has(ev.id)) result.push(ev)
 	}
 
-	if(coldOnly) {
-		return result.filter(e => e.event_type === 'cold')
+	if (coldOnly) {
+		return result.filter((e) => e.event_type === 'cold')
 	}
-	if(hotOnly) {
-		return result.filter(e => e.event_type === 'hot')
+	if (hotOnly) {
+		return result.filter((e) => e.event_type === 'hot')
 	}
 	return result
 }
@@ -268,11 +295,11 @@ export function getCurrentDayCounts(): Map<number, Array<number>> {
 }
 
 export function getGlobalFilteredEvents(): ExtremeEvent[] {
-	if(coldOnly) {
-		return _filteredEvents.filter(e => e.event_type === 'cold')
+	if (coldOnly) {
+		return _filteredEvents.filter((e) => e.event_type === 'cold')
 	}
-	if(hotOnly) {
-		return _filteredEvents.filter(e => e.event_type === 'hot')
+	if (hotOnly) {
+		return _filteredEvents.filter((e) => e.event_type === 'hot')
 	}
 	return _filteredEvents
 }

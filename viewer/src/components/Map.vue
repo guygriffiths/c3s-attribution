@@ -78,7 +78,8 @@ const zoom = ref(2)
 const bgLayer = {
 	name: 'C3S Light',
 	url: 'https://extreme-events.climate.copernicus.eu/maps/styles/light/{z}/{x}/{y}{r}.png',
-	labelsUrl: 'https://extreme-events.climate.copernicus.eu/maps/styles/light-labels/{z}/{x}/{y}{r}.png',
+	labelsUrl:
+		'https://extreme-events.climate.copernicus.eu/maps/styles/light-labels/{z}/{x}/{y}{r}.png',
 	attribution:
 		'&copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
 }
@@ -591,7 +592,13 @@ const addEventPanes = () => {
 				:weight="event.id === eventStore.selectedEventId ? 2 : 1"
 				:fill="true"
 				:fill-opacity="event.id === eventStore.selectedEventId ? 0.0 : 0.5"
-				:color="event.id === eventStore.selectedEventId ? scssVars.lightbulb : event.event_type == 'hot' ? scssVars.c3sred : scssVars.c3sblue"
+				:color="
+					event.id === eventStore.selectedEventId
+						? scssVars.lightbulb
+						: event.event_type == 'hot'
+							? scssVars.c3sred
+							: scssVars.c3sblue
+				"
 				:fill-color="eventStore.colorForEvent(event)"
 				@click="eventStore.selectEvent(event.id)"
 			>
@@ -821,6 +828,12 @@ const addEventPanes = () => {
 	:deep(.leaflet-tile) {
 		image-rendering: pixelated; /* or auto/smooth depending on your preference */
 		transform-origin: center center;
+	}
+
+	&.focussed {
+		:deep(.leaflet-marker-pane canvas) {
+			background-color: rgba(255, 255, 255, 0.5);
+		}
 	}
 }
 </style>

@@ -1,21 +1,23 @@
 export { }
 
-
 self.onmessage = (e: MessageEvent) => {
-	const events = e.data as {
-		times: Date[]
-	}[]
+	const { events, startI } = e.data as {
+		events: {
+			times: Date[]
+		}[]
+		startI: number
+	}
 
 	const dateIndex: Record<string, number[]> = {}
 
-	for (let idx =0; idx < events.length; idx++) {
+	for (let idx = 0; idx < events.length; idx++) {
 		const event = events[idx]
 		for (let time of event.times) {
 			const dateStr = time.toISOString().split('T')[0]
 			if (!dateIndex[dateStr]) {
 				dateIndex[dateStr] = []
 			}
-			dateIndex[dateStr].push(idx)
+			dateIndex[dateStr].push(idx + startI)
 		}
 	}
 	self.postMessage(dateIndex)

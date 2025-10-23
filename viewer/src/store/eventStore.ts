@@ -1,5 +1,9 @@
 import scssVars from '@/assets/styles/scssVars.module.scss'
-import { buildEventFilters, setPostFilters } from '@/lib/eventFiltering'
+import {
+	buildEventFilters,
+	manualGlobalTrigger,
+	setPostFilters,
+} from '@/lib/eventFiltering'
 import { interpolateColor } from '@/lib/utils'
 import * as d3 from 'd3'
 import { differenceInDays } from 'date-fns'
@@ -28,9 +32,12 @@ interface State {
 	hotEventsOn: boolean
 	coldEventsOn: boolean
 	sizeRange: [number, number]
+
+	eventSetsLoaded: number
 }
 
 export const intensityForValue = (v: number, hot: boolean) => {
+	if (v == null || isNaN(v)) return 0
 	if (hot) {
 		let baseline = 301.15
 		return v - baseline
@@ -69,15 +76,16 @@ export const useStore = defineStore('events', {
 		return {
 			selectedEvent: null,
 			selectedEventId: null,
-			startYear: 1979,
-			endYear: new Date().getUTCFullYear(),
+			startYear: 2024,
+			endYear: 2024,
 			hoveringEventId: null,
 			durationRange: [3, 14],
-			heatIntensityRange: [305, 320],
-			coldIntensityRange: [270, 250],
+			heatIntensityRange: [0, 0],
+			coldIntensityRange: [0, 0],
 			hotEventsOn: true,
 			coldEventsOn: false,
 			sizeRange: [0, 100],
+			eventSetsLoaded: 0,
 		}
 	},
 	getters: {
@@ -164,9 +172,7 @@ export const useStore = defineStore('events', {
 		intensitiesForEventStep: (state: State) => {
 			return (event: ExtremeEventFull | null, time: Date) => {
 				if (!event) return []
-				const idx = event.times.findIndex(
-					(t) => t.getTime() === time.getTime(),
-				)
+				const idx = event.times.findIndex((t) => t.getTime() === time.getTime())
 				if (idx === -1) return []
 				if (event.event_type === 'hot') {
 					return event.values[idx].map((v) => intensityForValue(v, true))
@@ -183,7 +189,7 @@ export const useStore = defineStore('events', {
 					encodeURIComponent(JSON.stringify(event))
 				return dataStr
 			}
-		}
+		},
 	},
 	actions: {
 		async selectEvent(id: string | null) {
@@ -239,17 +245,16 @@ export const useStore = defineStore('events', {
 			// This needs to get set by the leaflet layers
 			mainStore.setLoadingDone()
 		},
-		setEvents(data: ExtremeEvent[]) {
+		async addEvents(data: ExtremeEvent[]) {
 			console.log(
 				'Setting events, count:',
 				data.length,
 				data.filter((e) => e.event_type === 'hot').length,
 				data.filter((e) => e.event_type === 'cold').length,
 			)
-			const mainStore = useMainStore()
 			// Throw away the top x% of values for setting the range on colour scales, histograms etc
-			const N = Math.ceil(data.length * 0.025)
-			mainStore.setLoading()
+			// const N = Math.ceil(data.length * 0.025)
+
 			// Preprocess events a bit
 			const durations = data
 				.map((e) => this.durationForEvent(e))
@@ -272,40 +277,48 @@ export const useStore = defineStore('events', {
 				.sort((a, b) => b - a)
 
 			this.durationRange = [
-				Math.max(3, durations[durations.length - 1]),
-				durations[Math.min(Math.floor(0.1 * N), durations.length - 1)],
+				Math.min(durations[durations.length - 1], this.durationRange[0]),
+				Math.max(durations[0], this.durationRange[1]),
 			]
 			this.heatIntensityRange = [
-				heatIntensities[heatIntensities.length - 1],
-				heatIntensities[
-					Math.min(Math.floor(0.1 * N), heatIntensities.length - 1)
-				],
+				Math.min(
+					heatIntensities[heatIntensities.length - 1],
+					this.heatIntensityRange[0],
+				),
+				Math.max(heatIntensities[0], this.heatIntensityRange[1]),
 			]
-			console.log('heat intensity range', this.heatIntensityRange)
-			// This is if we want to reverse the cold scale so that "more extreme" is always lower
-			// this.coldIntensityRange = [
-			// 	coldIntensities[Math.min(N, coldIntensities.length - 1)],
-			// 	coldIntensities[coldIntensities.length - 1],
-			// ]
 			this.coldIntensityRange = [
-				coldIntensities[coldIntensities.length - 1],
-				coldIntensities[
-					Math.min(Math.floor(0.1 * N), coldIntensities.length - 1)
-				],
+				Math.min(
+					coldIntensities[coldIntensities.length - 1],
+					this.coldIntensityRange[0],
+				),
+				Math.max(coldIntensities[0], this.coldIntensityRange[1]),
 			]
+			this.coldIntensityRange = this.heatIntensityRange
 			console.log('cold intensity range', this.coldIntensityRange)
 
-			this.sizeRange = [
-				0,//sizes[sizes.length - 1],
-				sizes[Math.min(N, sizes.length - 1)],
-			]
+			this.sizeRange = [0, Math.max(sizes[sizes.length - 1], this.sizeRange[1])]
 
 			buildEventFilters(data) // Kick off building the pixel index
+			this.eventSetsLoaded += 1
+			if (
+				this.eventSetsLoaded <= 3 ||
+				this.eventSetsLoaded === 5 ||
+				this.eventSetsLoaded % 10 === 0
+			) {
+				// Trigger a global events ready callback at various points during loading
+				// This allows a good balance between early rendering and processing speed
+				// (rendering after every year is slow, particularly compared with data loads from cache)
+				manualGlobalTrigger()
+			}
 
-			this.startYear = data[0].times[0].getUTCFullYear()
-			this.endYear = data[0].times[data[0].times.length - 1].getUTCFullYear()
-
-			mainStore.setLoadingDone()
+			this.startYear = Math.min(
+				data[0].times[0].getUTCFullYear(),
+				this.startYear,
+			)
+			this.endYear = Math.max(
+				data[0].times[data[0].times.length - 1].getUTCFullYear(),
+			)
 		},
 	},
 })

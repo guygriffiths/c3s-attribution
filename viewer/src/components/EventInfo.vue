@@ -83,7 +83,7 @@ const area = computed(
 	display: flex;
 	flex-direction: row;
 	flex-wrap: wrap;
-	gap: 0.25rem 2rem;
+	gap: 0.125rem 2rem;
 	padding: 0 0.25rem;
 	background: #f9f9f9;
 	border-radius: 0.75rem;

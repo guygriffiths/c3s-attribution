@@ -149,6 +149,17 @@ const mode = computed((): TimeReelMode => {
 	if (timeStore.timePanelExpanded) return 'overview'
 	return 'default'
 })
+
+const funnelPoints = computed(() => {
+	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent)
+	const selectedDay = differenceInDays(
+		timeStore.selectedTime,
+		new Date(eventStore.selectedEvent?.times[0] || 0),
+	)
+	const start = (100 * selectedDay) / totalDays
+	const end = (100 * (selectedDay + 1)) / totalDays
+	return `0,0 100,0 ${start},100 ${end},100`
+})
 </script>
 
 <template>
@@ -240,20 +251,17 @@ const mode = computed((): TimeReelMode => {
 		<Panel
 			id="multi-event-panel"
 			class="right"
-			:class="{ small: store.viewMode === 'timemachine' }"
-			:active="
-				store.showMultiEventPanel &&
-				(store.viewMode !== 'timemachine')
-			"
+			:class="{ small: false && store.viewMode === 'timemachine' }"
+			:active="store.showMultiEventPanel && store.viewMode !== 'timemachine'"
 		>
-			<button
+			<!-- <button
 				class="panel-toggle"
 				@click="store.showMultiEventPanel = !store.showMultiEventPanel"
 			>
 				<font-awesome-icon
 					:icon="!store.showMultiEventPanel ? faRankingStar : faClose"
 				/>
-			</button>
+			</button> -->
 			<div class="title-panel">
 				<h1>
 					<FontAwesomeIcon :icon="faClock" />
@@ -438,22 +446,40 @@ const mode = computed((): TimeReelMode => {
 			</div>
 		</Panel>
 
-		<Panel id="event-panel" class="left"
+		<Panel
+			id="event-panel"
+			class="left"
 			:class="{ small: store.viewMode === 'heatmap' }"
-			:active="
-				(store.viewMode === 'timemachine' && eventStore.eventSelected)
-			"  >
+			:active="store.viewMode === 'timemachine' && eventStore.eventSelected"
+		>
 			<Histogram
 				v-if="eventStore.selectedEvent"
-				:data="eventStore.intensitiesForEventStep(eventStore.selectedEvent, timeStore.selectedTime)"
+				:data="
+					eventStore.intensitiesForEventStep(
+						eventStore.selectedEvent,
+						timeStore.selectedTime,
+					)
+				"
 				:nbins="10"
 				:xmin="0"
 				:xmax="eventStore.intensityRange[1]"
 				:labelFunc="(v: number) => v.toFixed(1)"
 				:units="'°C'"
-				:types="eventStore.intensitiesForEventStep(eventStore.selectedEvent, timeStore.selectedTime).map(() => eventStore.selectedEvent?.event_type || 'hot')"
+				:types="
+					eventStore
+						.intensitiesForEventStep(
+							eventStore.selectedEvent,
+							timeStore.selectedTime,
+						)
+						.map(() => eventStore.selectedEvent?.event_type || 'hot')
+				"
 			/>
-			<div class="funnel"></div>
+			<svg width="100%" class="funnel" viewBox="0 0 100 100" preserveAspectRatio="none">
+				<polygon
+					:points="funnelPoints"
+					:style="`fill: ${eventStore.selectedEvent ? eventStore.colorForEvent(eventStore.selectedEvent) : 'red'}; stroke: none; opacity: 0.075;`"
+				/>
+			</svg>
 			<EventGraphs
 				:selected-event="eventStore.selectedEvent"
 				:event-store="eventStore"
@@ -715,7 +741,7 @@ $smallTimePanelHeight: max(6rem, 20%);
 		}
 
 		.funnel {
-			flex: 1 1 10%;
+			flex: 0 0 50px;
 		}
 
 		svg.graph-container {
