@@ -1,4 +1,3 @@
-import { differenceInDays } from 'date-fns'
 import { defineStore } from 'pinia'
 
 interface TimeState {
@@ -31,10 +30,6 @@ export const useStore = defineStore('time', {
 		isoDatetime: (state) => {
 			// This always returns the datetime in UTC, which is what we need
 			return state.selectedTime.toISOString()
-		},
-		selectedTimeIndex: (state) => {
-			// Find the index of the selected time in the times array
-			return differenceInDays(state.selectedTime, state.startTime)
 		},
 	},
 	actions: {

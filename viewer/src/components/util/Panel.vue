@@ -28,7 +28,7 @@ const classes = computed(() => ['panel', { active: props.active }])
 	z-index: 10;
 }
 .panel.left {
-	transform: translateX(-105%);
+	transform: translateX(-110%);
 }
 .panel.right {
 	transform: translateX(105%);

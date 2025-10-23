@@ -228,10 +228,13 @@ const mode = computed((): TimeReelMode => {
 
 		<Panel
 			id="event-info-panel"
-			class="bottom"
+			class="top"
 			:active="eventStore.selectedEvent !== null"
 		>
-			<EventInfo :selected-event="eventStore.selectedEvent" />
+			<EventInfo
+				:selected-event="eventStore.selectedEvent"
+				:event-store="eventStore"
+			/>
 		</Panel>
 
 		<Panel
@@ -240,7 +243,7 @@ const mode = computed((): TimeReelMode => {
 			:class="{ small: store.viewMode === 'timemachine' }"
 			:active="
 				store.showMultiEventPanel &&
-				(store.viewMode !== 'timemachine' || eventStore.eventSelected)
+				(store.viewMode !== 'timemachine')
 			"
 		>
 			<button
@@ -435,6 +438,28 @@ const mode = computed((): TimeReelMode => {
 			</div>
 		</Panel>
 
+		<Panel id="event-panel" class="left"
+			:class="{ small: store.viewMode === 'heatmap' }"
+			:active="
+				(store.viewMode === 'timemachine' && eventStore.eventSelected)
+			"  >
+			<Histogram
+				v-if="eventStore.selectedEvent"
+				:data="eventStore.intensitiesForEventStep(eventStore.selectedEvent, timeStore.selectedTime)"
+				:nbins="10"
+				:xmin="0"
+				:xmax="eventStore.intensityRange[1]"
+				:labelFunc="(v: number) => v.toFixed(1)"
+				:units="'°C'"
+				:types="eventStore.intensitiesForEventStep(eventStore.selectedEvent, timeStore.selectedTime).map(() => eventStore.selectedEvent?.event_type || 'hot')"
+			/>
+			<div class="funnel"></div>
+			<EventGraphs
+				:selected-event="eventStore.selectedEvent"
+				:event-store="eventStore"
+			/>
+		</Panel>
+
 		<div
 			id="event-window"
 			:class="{
@@ -449,7 +474,7 @@ const mode = computed((): TimeReelMode => {
 <style lang="scss" scoped>
 @use '@/assets/styles/scssVars.module.scss' as *;
 
-$smallTimePanelHeight: max(6rem, 10%);
+$smallTimePanelHeight: max(6rem, 20%);
 
 .main {
 	display: flex;
@@ -564,7 +589,7 @@ $smallTimePanelHeight: max(6rem, 10%);
 		}
 	}
 
-	$eventPanelWidth: 33%;
+	$eventPanelWidth: min(400px, 33%);
 	$multiEventPanelWidth: 40%;
 	$smallMultiScale: 0.6;
 
@@ -587,10 +612,7 @@ $smallTimePanelHeight: max(6rem, 10%);
 		&.multiEventPanelOn {
 			width: calc(100% - $multiEventPanelWidth - $panelMargin);
 			&.eventPanelOn {
-				width: calc(
-					100% - $eventPanelWidth - $smallMultiScale * $multiEventPanelWidth -
-						2 * $panelMargin
-				);
+				width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
 			}
 		}
 	}
@@ -680,16 +702,47 @@ $smallTimePanelHeight: max(6rem, 10%);
 		}
 	}
 
+	#event-panel {
+		width: $eventPanelWidth;
+		left: $panelMargin;
+		height: calc(80% - $smallTimePanelHeight - 2 * $panelMargin);
+		bottom: calc($panelMargin + $smallTimePanelHeight);
+		display: flex;
+		flex-direction: column;
+
+		.histogram-root {
+			flex: 1 1 50%;
+		}
+
+		.funnel {
+			flex: 1 1 10%;
+		}
+
+		svg.graph-container {
+			width: 100% !important;
+			flex: 1 1 50%;
+		}
+	}
+
 	#event-info-panel {
-		display: none;
+		// display: none;
 		box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;
-		width: calc(20% - 2 * $panelMargin);
+		// width: calc(20% - 2 * $panelMargin);
 		right: 50%;
-		// transform: translateX(50%);
-		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+		transform: translate(50%, -110%);
+		// bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+		top: 0;
 		height: auto;
-		z-index: 20;
+		z-index: 250;
 		transition: all $animTime ease-in-out;
+		border-top-left-radius: 0;
+		border-top-right-radius: 0;
+		border: 0.25rem solid $c3sred;
+		border-top: none;
+
+		&.active {
+			transform: translate(50%, 0);
+		}
 	}
 }
 </style>

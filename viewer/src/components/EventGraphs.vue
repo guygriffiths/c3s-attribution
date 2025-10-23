@@ -1,49 +1,29 @@
 <script setup lang="ts">
-import { computed, ComputedRef, ref } from 'vue'
+import { computed, ComputedRef, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as d3 from 'd3'
 
+import { useStore as useEventStore } from '@/store/eventStore'
+import { useStore as useTimeStore } from '@/store/timeStore'
+import scssVars from '@/assets/styles/scssVars.module.scss'
+
+const eventStore = useEventStore()
+const timeStore = useTimeStore()
 const props = defineProps<{ selectedEvent: ExtremeEventFull | null }>()
 const emits = defineEmits<{
 	(event: 'dateSelected', date: Date): void
 }>()
 
 const days = computed(() => props.selectedEvent?.times || [])
-const areaData = computed(
-	() => props.selectedEvent?.slices.map((s) => s.length) || [],
+const areaData = computed(() => eventStore.sizesForEvent(props.selectedEvent))
+const intensityData = computed(() =>
+	eventStore.intensitiesForEvent(props.selectedEvent),
 )
-const maxData = computed(() => props.selectedEvent?.max_values || [])
-const meanData = computed(() => props.selectedEvent?.mean_values || [])
-const minData = computed(() => props.selectedEvent?.min_values || [])
-
-const distData = computed(() => {
-	const centroids = props.selectedEvent?.centroids || []
-	if (centroids.length < 2) return []
-    // @ts-ignore
-	const [startX, startY] = centroids[0]
-	return centroids.map(([x, y]) =>
-		Math.sqrt((x - startX) ** 2 + (y - startY) ** 2),
-	)
-})
 
 const chartTopMargin = 20
 
 const svgRef = ref<SVGSVGElement | null>(null)
-const width = computed(() => {
-	const container = svgRef.value
-	if (container) {
-		const rect = container.getBoundingClientRect()
-		return rect.width || 800
-	}
-	return 800
-})
-const height = computed(() => {
-	const container = svgRef.value
-	if (container) {
-		const rect = container.getBoundingClientRect()
-		return rect.height / 3 || 400
-	}
-	return 400
-})
+const width = ref(800)
+const height = ref(400)
 
 // Scales
 const xScale = computed(() => {
@@ -55,113 +35,94 @@ const xScale = computed(() => {
 		.padding(0)
 })
 
-const areaScale = computed(() =>
+const sizeScale = computed(() =>
 	d3
 		.scaleLinear()
 		.domain([0, d3.max(areaData.value) || 1])
 		.range([height.value, chartTopMargin]),
 )
-const valueScale = computed(() =>
+const intensityScale = computed(() =>
 	d3
 		.scaleLinear()
-		.domain([303.15, d3.max(maxData.value) || 1])
-		.range([height.value, chartTopMargin]),
-)
-const latScale = computed(() =>
-	d3
-		.scaleLinear()
-		.domain([d3.min(distData.value) || 0, d3.max(distData.value) || 1])
+		.domain([0, d3.max(intensityData.value) || 1])
 		.range([height.value, chartTopMargin]),
 )
 
+const selectedIndex = computed(() => {
+	if (!props.selectedEvent) return -1
+	const selectedTime = timeStore.selectedTime
+	const ret = props.selectedEvent.times.findIndex(
+		(d) => d.getTime() === selectedTime.getTime(),
+	)
+	console.log(ret)
+	return ret
+})
+
+onMounted(() => {
+	if (!svgRef.value) return
+
+	const observer = new ResizeObserver((entries) => {
+		for (const entry of entries) {
+			width.value = entry.contentRect.width
+			height.value = entry.contentRect.height
+		}
+	})
+	observer.observe(svgRef.value)
+
+	onBeforeUnmount(() => observer.disconnect())
+})
 </script>
 
 <template>
 	<svg class="graph-container" ref="svgRef">
-		<transition-group
+		<!-- <transition-group
 			name="graph-bg-transition"
 			tag="g"
 			:style="{ transform: 'scaleY(-1) translateY(-100%)' }"
-		>
-			<template v-for="(day, i) in days" :key="day">
-				<rect
-					:x="xScale(i.toString())"
-					:y="0"
-					:width="xScale.bandwidth()"
-					:height="height * 3"
-					:opacity="i % 2 === 0 ? 0.075 : 0.05"
-					:fill="props.selectedEvent?.color || '#f0f0f0'"
-					@click="emits('dateSelected', day)"
-				/>
-			</template>
-		</transition-group>
+		> -->
+		<template v-for="(day, i) in days" :key="day">
+			<rect
+				:x="xScale(i.toString())"
+				:y="0"
+				:width="xScale.bandwidth()"
+				:height="height * 3"
+				:opacity="i % 2 === 0 ? 0.075 : 0.05"
+				:fill="eventStore.colorForEvent(props.selectedEvent!) || '#f0f0f0'"
+				@click="emits('dateSelected', day)"
+			/>
+		</template>
+		<!-- </transition-group> -->
 
-		<g :transform="`translate(0, ${height * 2})`">
-			<text x="10" y="15">Area</text>
+		<g>
 			<template v-for="(value, i) in areaData" :key="i">
 				<rect
 					:x="xScale(i.toString())"
-					:y="areaScale(value)"
+					:y="sizeScale(value)"
 					:width="xScale.bandwidth()"
-					:height="height - areaScale(value)"
-					:fill="props.selectedEvent?.color || '#f0f0f0'"
+					:height="height - sizeScale(value)"
+					:fill="eventStore.colorForEvent(props.selectedEvent!) || scssVars.c3sred"
+				:class="{selected: i === selectedIndex}"
 					stroke="white"
-					:stroke-width="2"
+					:stroke-width="0.5"
 					vector-effect="non-scaling-stroke"
 				/>
 			</template>
 		</g>
 
 		<!-- Peak and Mean Value Line Chart -->
-		<g :transform="`translate(0, ${height})`">
-			<text x="10" y="15">Peak & Mean</text>
-			<template v-if="maxData.length">
-				<polyline
+		<g>
+			<template v-if="intensityData.length">
 				<polyline
 					fill="none"
 					stroke="#e15759"
 					stroke-width="2"
 					:points="
-						maxData
+						intensityData
 							.map(
-								(v, i) =>
-									`${xScale(i.toString())! + xScale.bandwidth() / 2},${valueScale(v)}`,
-							)
-							.join(' ')
-					"
-				/>
-			</template>
-			<template v-if="meanData.length">
-				<polyline
-					fill="none"
-					stroke="#f28e2b"
-					stroke-width="2"
-					stroke-dasharray="4"
-					:points="
-						meanData
-							.map(
-								(v, i) =>
-									`${xScale(i.toString())! + xScale.bandwidth() / 2},${valueScale(v)}`,
-							)
-							.join(' ')
-					"
-				/>
-			</template>
-		</g>
-
-		<!-- dist Chart -->
-		<g :transform="`translate(0, ${0})`">
-			<text x="10" y="15">dist from start</text>
-			<template v-if="distData.length">
-				<polyline
-					fill="none"
-					stroke="#76b7b2"
-					stroke-width="2"
-					:points="
-						distData
-							.map(
-								(v, i) =>
-									`${xScale(i.toString())! + xScale.bandwidth() / 2},${latScale(v)}`,
+								(value, i) =>
+									`${xScale(i.toString())! + xScale.bandwidth() / 2},${intensityScale(
+										value,
+									)}`,
 							)
 							.join(' ')
 					"
@@ -180,6 +141,11 @@ svg {
 	user-select: none;
 	width: 100%;
 	height: 100%;
+
+	rect.selected {
+		fill: $lightbulb !important;
+	}
+
 
 	.graph-bg-transition-enter-active {
 		transition: all $animTime ease-in-out calc($animTime + $settleTime);

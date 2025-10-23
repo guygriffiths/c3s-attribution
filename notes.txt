@@ -96,5 +96,5 @@ Time overview for regional/point data
 
 Gamification help. Help button. Tip of the day
 
-Download button
-
+Download button - done
+Add to cart button - phase 2

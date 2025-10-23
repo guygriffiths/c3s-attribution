@@ -41,7 +41,7 @@ interface State {
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
 export const T2M_LAYER = 'era5/t2m'
-export const DATA_ROOT = import.meta.env.X_PUBLIC_PATH || ''
+export const DATA_ROOT = `${import.meta.env.X_PUBLIC_PATH || ''}data/`
 
 export const useStore = defineStore('main', {
 	state: (): State => {
@@ -81,7 +81,7 @@ export const useStore = defineStore('main', {
 			regionFilterReady: false, // Whether we are currently drawing a region on the map
 			filteringByPoint: false, // Whether we are currently filtering by a point
 
-			showMultiEventPanel: false,
+			showMultiEventPanel: true,
 		}
 	},
 	getters: {

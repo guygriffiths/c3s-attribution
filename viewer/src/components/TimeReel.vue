@@ -6,6 +6,7 @@ import {
 	dayStr,
 	monthsForYear,
 	TOTAL_DAYS,
+	intervalToMs,
 } from '@/lib/time-utils'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
@@ -25,6 +26,7 @@ import {
 	differenceInDays,
 	getDayOfYear,
 	lastDayOfDecade,
+	set,
 	setDayOfYear,
 	subHours,
 } from 'date-fns'
@@ -101,8 +103,9 @@ const setDate = (date: Date) => {
 const scrollToYear = (year: number) => {
 	if (container.value) {
 		// Snap to top of specified year
-		const yearsOffset = year - startYear.value - 1
+		const yearsOffset = year - startYear.value
 		const scrollOffset = (yearsOffset + 0.5) * rowHeight.value
+		console.log('scrolling to year', year, 'at offset', scrollOffset)
 		container.value.scrollTo({
 			top: scrollOffset,
 			behavior: 'smooth',
@@ -128,23 +131,35 @@ const prevDay = () => {
 	}
 }
 const startOfYear = () => {
+	if (props.mode === 'eventzoom' && props.selectedEvent) {
+		setDate(props.selectedEvent.times[0])
+		return
+	}
 	setDate(new Date(Date.UTC(selectedYear.value, 0, 1)))
 }
 const endOfYear = () => {
+	if (props.mode === 'eventzoom' && props.selectedEvent) {
+		setDate(props.selectedEvent.times[props.selectedEvent.times.length - 1])
+		return
+	}
 	setDate(new Date(Date.UTC(selectedYear.value, 11, 31)))
 }
-const nextYear = () => {
-	scrollToYear(selectedYear.value + 1)
-}
-const prevYear = () => {
-	scrollToYear(selectedYear.value - 1)
-}
+// const nextYear = () => {
+// 	scrollToYear(selectedYear.value + 1)
+// }
+// const prevYear = () => {
+// 	scrollToYear(selectedYear.value - 1)
+// }
 
 const playing = ref(false)
-const FPS = 15
-const frameInterval = 1000 / FPS
+const frameInterval = computed(() => {
+	let FPS = 10
+	if (props.mode === 'eventzoom') FPS = 5
+	return 1000 / FPS
+})
 
 const togglePlay = () => {
+	if (!props.selectedEvent && props.mode === 'eventzoom') return
 	playing.value = !playing.value
 	if (playing.value) {
 		let last = performance.now()
@@ -152,8 +167,21 @@ const togglePlay = () => {
 		const step = (ts: number) => {
 			if (!playing.value) return
 
-			if (ts - last >= frameInterval) {
-				nextDay()
+			if (ts - last >= frameInterval.value) {
+				if (
+					model.value.getTime() === props.end.getTime() ||
+					(props.mode === 'eventzoom' &&
+						model.value.getTime() ===
+							props.selectedEvent!.times[
+								props.selectedEvent!.times.length - 1
+							].getTime())
+				) {
+					// Reached end of event
+					playing.value = false
+					return
+				} else {
+					nextDay()
+				}
 				last = ts
 			}
 
@@ -203,6 +231,7 @@ const eventIsSelected = (event: { id: string }) =>
 const eventHeight = computed(() => 1.0 / maxSimultaneousEvents.value)
 
 const isDragging = ref(false)
+const hasMoved = ref(false)
 const dragMode = ref<'horizontal' | 'vertical' | null>(null)
 let startX = 0
 let startY = 0
@@ -211,6 +240,12 @@ let startMs = 0
 
 const localNeedleOffset = ref(null as number | null)
 const startDrag = (event: MouseEvent) => {
+	isDragging.value = true
+	setTimeout(() => {
+		if (isDragging.value) {
+			hasMoved.value = true
+		}
+	}, intervalToMs(scssVars.animTime))
 	dragMode.value = null
 
 	startX = event.clientX
@@ -229,6 +264,7 @@ const startDrag = (event: MouseEvent) => {
 
 const endDrag = (event: MouseEvent) => {
 	isDragging.value = false
+	hasMoved.value = false
 	dragMode.value = null
 	localNeedleOffset.value = null
 	const time = performance.now() - startMs
@@ -246,10 +282,10 @@ const endDrag = (event: MouseEvent) => {
 			const eventEnd = getDayOfYear(
 				props.selectedEvent.times[props.selectedEvent.times.length - 1],
 			)
-			const totalZoomedDays = (eventEnd - eventStart) * xScaleFactor.value
+			const totalZoomedDays = (eventEnd - eventStart + 2) * xScaleFactor.value
 
 			const dayFromStart = Math.floor(
-				1 + Math.max(0, Math.min(1, percentage)) * totalZoomedDays,
+				Math.max(0, Math.min(1, percentage)) * totalZoomedDays,
 			)
 			const newDate = setDayOfYear(
 				new Date(Date.UTC(selectedYear.value, 0, 1)),
@@ -290,7 +326,6 @@ const endDrag = (event: MouseEvent) => {
 }
 
 const handleDrag = (event: MouseEvent) => {
-	isDragging.value = true
 	const dx = event.clientX - startX
 	const dy = event.clientY - startY
 
@@ -375,7 +410,7 @@ const needleOffset = computed(() => {
 			const eventEnd = getDayOfYear(
 				props.selectedEvent.times[props.selectedEvent.times.length - 1],
 			)
-			const totalZoomedDays = (eventEnd - eventStart) * xScaleFactor.value
+			const totalZoomedDays = (eventEnd - eventStart + 2) * xScaleFactor.value
 			const offset = selectedDay - eventStart + 1
 			if (localNeedleOffset.value !== null) {
 				return Math.max(
@@ -414,10 +449,10 @@ onMounted(() => {
 	}
 	const handleKey = (e: KeyboardEvent) => {
 		// TODO Should all of this go in a global key handler? Perhaps not, since people use arrow keys on maps?
-		if (e.key === 'PageUp') prevYear()
-		else if (e.key === 'PageDown') nextYear()
-		else if (e.key === 'ArrowLeft') prevDay()
+		if (e.key === 'ArrowLeft') prevDay()
 		else if (e.key === 'ArrowRight') nextDay()
+		// else if (e.key === 'PageUp') prevYear()
+		// else if (e.key === 'PageDown') nextYear()
 		// else if (e.key === 'ArrowUp') prevYear()
 		// else if (e.key === 'ArrowDown') nextYear()
 		// else if (e.key === 'R') nextYear()
@@ -482,19 +517,27 @@ const getAreaString = () => {
 				y1: d,
 			}))
 
-	const yScale = d3
-		.scaleLinear()
-		// .domain([0, 1.05 * maxSimultaneousEvents.value])
-		.domain([
-			Math.min(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 0,
-			Math.max(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 1,
-		])
-		.range([0, 0.5])
+	const yScale = computed(() => {
+		let yData
+		if (props.mode === 'eventzoom') {
+			yData = data
+		} else {
+			yData = data
+		}
+		return d3
+			.scaleLinear()
+			.domain([
+				Math.min(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 0,
+				Math.max(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 1,
+			])
+			.range([0, 0.5])
+	})
+
 	const areaStr = d3
 		.area<{ x: number; y0: number; y1: number }>()
 		.x((d) => d.x)
-		.y0((d) => yScale(d.y0))
-		.y1((d) => -yScale(d.y1))
+		.y0((d) => yScale.value(d.y0))
+		.y1((d) => -yScale.value(d.y1))
 		.defined((d) => d.x >= 0 && d.x < hwDayCounts.value.length)
 		.curve(d3.curveMonotoneX)
 
@@ -631,7 +674,19 @@ watch(
 	},
 )
 
-const xScaleFactor = ref(3)
+const xScaleFactor = computed(() => {
+	const panelWidth = document.getElementById('event-panel')?.clientWidth
+	const totalWidth = timeReelRef.value?.clientWidth
+	console.log(
+		'panelWidth',
+		panelWidth,
+		'totalWidth',
+		totalWidth,
+		'factor',
+		totalWidth && panelWidth ? totalWidth / panelWidth : 1.0,
+	)
+	return panelWidth && totalWidth ? totalWidth / panelWidth : 1.0
+})
 const viewportTransform = computed(() => {
 	if (props.selectedEvent && props.mode === 'eventzoom') {
 		const eventStart = getDayOfYear(props.selectedEvent.times[0])
@@ -640,7 +695,7 @@ const viewportTransform = computed(() => {
 		)
 		// TODO Get the event window and check its size relative to the time reel panel
 		// Then scale and offset accordingly
-		const nDays = (eventEnd - eventStart) * xScaleFactor.value
+		const nDays = (eventEnd - eventStart + 2) * xScaleFactor.value
 		const scale = Math.max(1, 366 / nDays)
 
 		// return 'translate(0, 0)'
@@ -678,26 +733,40 @@ const yearPadding = computed(() => {
 	if (props.mode === 'overview') return 0
 	return (rowsToShow.value - 1) * 0.5 * rowHeight.value
 })
+
+const dayBoxes = (boxes: EventBox[]): EventBox[] => {
+	const ret = []
+	for (let box of boxes) {
+		for (let day = box.startX; day <= box.endX; day++) {
+			ret.push({
+				...box,
+				startX: day,
+				endX: day,
+			})
+		}
+	}
+	return ret
+}
 </script>
 
 <template>
 	<div class="time-reel" ref="timeReelRef">
 		<div
 			class="date-info"
-			:class="{ dragging: isDragging }"
-			:style="`left: ${isDragging ? needleOffset : 50}%; top: ${isDragging ? '25%' : '-10%'};`"
+			:class="{ dragging: hasMoved }"
+			:style="`left: ${isDragging ? needleOffset : 50}%; bottom: ${isDragging ? '70%' : '100%'};`"
 		>
 			{{ dayStr(selectedDay, selectedYear, props.mode === 'timeline') }}
 		</div>
 		<div
 			class="controls"
 			:class="{
-				hidden: !(props.mode === 'default' || props.mode === 'eventzoom'),
+				hidden: props.mode === 'timeline' || props.mode === 'overview',
 				zoom: props.mode === 'eventzoom',
 			}"
 		>
 			<div class="buttons">
-				<button
+				<!-- <button
 					@click="prevYear"
 					:disabled="selectedYear <= startYear"
 					:title="$l.prevYear"
@@ -707,7 +776,7 @@ const yearPadding = computed(() => {
 						:icon="faBackwardStep"
 						style="transform: rotate(90deg)"
 					/>
-				</button>
+				</button> -->
 				<button @click="startOfYear" :title="$l.startOfYear">
 					<span class="sr-only">{{ $l.startOfYear }}</span>
 					<font-awesome-icon :icon="faFastBackward" />
@@ -720,7 +789,19 @@ const yearPadding = computed(() => {
 					<span class="sr-only">{{ $l.prevDay }}</span>
 					<font-awesome-icon :icon="faBackwardStep" />
 				</button>
-				<button @click="togglePlay" :title="$l.play">
+				<button
+					@click="togglePlay"
+					:title="$l.play"
+					:disabled="
+						model === end ||
+						(props.mode === 'eventzoom' &&
+							model.getTime() < props.selectedEvent!.times[0].getTime()) ||
+						model.getTime() >=
+							props.selectedEvent!.times[
+								props.selectedEvent!.times.length - 1
+							].getTime()
+					"
+				>
 					<span class="sr-only">{{ $l.play }}</span>
 					<font-awesome-icon :icon="playing ? faPause : faPlay" />
 				</button>
@@ -736,7 +817,7 @@ const yearPadding = computed(() => {
 					<span class="sr-only">{{ $l.endOfYear }}</span>
 					<font-awesome-icon :icon="faFastForward" />
 				</button>
-				<button
+				<!-- <button
 					@click="nextYear"
 					:disabled="selectedYear >= endYear"
 					:title="$l.nextYear"
@@ -746,7 +827,7 @@ const yearPadding = computed(() => {
 						:icon="faForwardStep"
 						style="transform: rotate(90deg)"
 					/>
-				</button>
+				</button> -->
 			</div>
 		</div>
 		<div
@@ -828,7 +909,6 @@ const yearPadding = computed(() => {
 										:data-id="`${box.startX}-${box.endX}`"
 										:class="{
 											[box.event.event_type]: true,
-											selected: box.event.id === props.selectedEvent?.id,
 										}"
 										:fill="colorForEvent(box.event) || scssVars.c3sred"
 										:x="-0.5 + box.startX - year * TOTAL_DAYS"
@@ -840,6 +920,30 @@ const yearPadding = computed(() => {
 										:key="box.event.id"
 										vector-effect="non-scaling-stroke"
 										@click="$emit('eventSelected', box.event.id)"
+									></rect>
+									<!-- Draw selected event on top. This ensures it is always visible even if overlapping other events -->
+									<rect
+										v-if="props.selectedEvent !== null && year === selectedYear"
+										v-for="(box, i) in dayBoxes(
+											eventBoxesForYear[year].filter(
+												(b) => b.event.id === props.selectedEvent?.id,
+											),
+										)"
+										class="event-bar selected"
+										:data-id="`${box.startX}-${box.endX}`"
+										:class="{
+											[box.event.event_type]: true,
+										}"
+										:fill="colorForEvent(box.event) || scssVars.c3sred"
+										:x="-0.5 + box.startX - year * TOTAL_DAYS"
+										:width="box.endX - box.startX + 1"
+										:y="positionY(box.y, box.event.event_type)"
+										:height="
+											props.hot && props.cold ? 0.5 * eventHeight : eventHeight
+										"
+										:key="`${box.event.id}-${i}`"
+										vector-effect="non-scaling-stroke"
+										@click="model = props.selectedEvent.times[i]"
 									></rect>
 								</transition-group>
 								<rect
@@ -950,7 +1054,6 @@ const yearPadding = computed(() => {
 
 	.date-info {
 		position: absolute;
-		top: -10%;
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 30;
@@ -962,37 +1065,70 @@ const yearPadding = computed(() => {
 		transition: all $animTime linear;
 
 		&.dragging {
-			transition: left 0s linear;
-			transition: top $animTime linear;
+			transition: left 0 linear;
+			transition: bottom $animTime linear;
 			transform: translateX(-50%) translateY(-100%);
 		}
 	}
 
 	.controls {
-		height: 2rem;
+		// height: 2rem;
 		position: absolute;
-		top: -1rem;
+		top: 0;
 		left: 50%;
-		transform: translateX(-50%);
+		transform: translate(-50%, 0%);
 		z-index: 3;
 		background-color: rgba(255, 255, 255, 0.8);
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.25rem;
+		padding: 0;
 		font-size: 0.875rem;
 		user-select: none;
+		display: flex;
+		transform: all $animTime linear;
 
-		button {
-			color: white;
-			width: 3rem;
+		.buttons {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			justify-content: center;
+			gap: 0;
+			button {
+				color: white;
+				width: 2.5rem;
+				border-radius: 0;
+				border-left: 0.5px solid color.adjust($c3sblue, $lightness: -10%);
+				border-right: 0.5px solid color.adjust($c3sblue, $lightness: -10%);
+				margin: 0;
+				height: 1.5rem;
+				display: flex;
+				align-items: center;
+				font-size: 0.85rem;
+				padding: 0;
+				justify-content: center;
+
+				&:disabled {
+					opacity: 0.5;
+					cursor: not-allowed;
+				}
+
+				&:first-child {
+					border-top-left-radius: 0.25rem;
+					border-bottom-left-radius: 0.25rem;
+				}
+				&:last-child {
+					border-top-right-radius: 0.25rem;
+					border-bottom-right-radius: 0.25rem;
+				}
+			}
 		}
 
 		&.hidden {
-			display: none;
+			// display: none;
 		}
 
 		&.zoom {
-			opacity: 0.5;
-			display: none;
+			left: 17%;
+			bottom: 0;
+			top: auto;
 		}
 	}
 
@@ -1004,6 +1140,7 @@ const yearPadding = computed(() => {
 		scroll-snap-type: y mandatory;
 		display: block;
 
+		&.eventzoom,
 		&.timeline {
 			overflow-y: hidden;
 		}
@@ -1333,13 +1470,13 @@ const yearPadding = computed(() => {
 				stroke: $c3sblue;
 			}
 			&.selected {
+				stroke: black;
 				stroke: $lightbulb;
-				// stroke-width: 2;
+				stroke-width: 2;
 				pointer-events: auto;
 				cursor: pointer;
-				fill: $lightbulb;
-				filter: drop-shadow(0 0 2px $lightbulb) drop-shadow(0 0 4px $lightbulb);
-				// transform: scaleY(1);
+				// fill: black;
+				// transform: scaleY(-3);
 			}
 		}
 		.day-box {

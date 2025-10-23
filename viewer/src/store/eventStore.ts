@@ -57,8 +57,10 @@ export const colorForEvent = (
 	event: ExtremeEvent,
 	scale: d3.ScaleLinear<number, number>,
 ) => {
-	
-	const value = intensityForValue(event.event_type === 'hot' ? event.max_value : event.mean_value, event.event_type === 'hot')
+	const value = intensityForValue(
+		event.event_type === 'hot' ? event.max_value : event.mean_value,
+		event.event_type === 'hot',
+	)
 	return colorForValue(value, event.event_type === 'hot', scale)
 }
 
@@ -127,16 +129,61 @@ export const useStore = defineStore('events', {
 			}
 		},
 		durationForEvent: (state: State) => {
-			return (event: ExtremeEvent | ExtremeEventFull) => event.duration
+			return (event: ExtremeEvent | ExtremeEventFull | null) =>
+				event?.duration || 0
 		},
 		sizeForEvent: (state: State) => {
-			return (event: ExtremeEvent | ExtremeEventFull) => event.total_area || 0
+			return (event: ExtremeEvent | ExtremeEventFull | null) =>
+				event?.total_area || 0
 		},
 		intensityForEvent: (state: State) => {
-			return (event: ExtremeEvent | ExtremeEventFull) => {
-				return intensityForValue(event.event_type === 'hot' ? event.max_value : event.mean_value, event.event_type === 'hot')
+			return (event: ExtremeEvent | ExtremeEventFull | null) => {
+				if (!event) return 0
+				return intensityForValue(
+					event.event_type === 'hot' ? event.max_value : event.mean_value,
+					event.event_type === 'hot',
+				)
 			}
 		},
+		sizesForEvent: (state: State) => {
+			return (event: ExtremeEventFull | null) => {
+				if (!event) return []
+				return event.areas
+			}
+		},
+		intensitiesForEvent: (state: State) => {
+			return (event: ExtremeEventFull | null) => {
+				if (!event) return []
+				if (event.event_type === 'hot') {
+					return event.max_values.map((v) => intensityForValue(v, true))
+				} else {
+					return event.mean_values.map((v) => intensityForValue(v, false))
+				}
+			}
+		},
+		intensitiesForEventStep: (state: State) => {
+			return (event: ExtremeEventFull | null, time: Date) => {
+				if (!event) return []
+				const idx = event.times.findIndex(
+					(t) => t.getTime() === time.getTime(),
+				)
+				if (idx === -1) return []
+				if (event.event_type === 'hot') {
+					return event.values[idx].map((v) => intensityForValue(v, true))
+				} else {
+					return event.values[idx].map((v) => intensityForValue(v, false))
+				}
+			}
+		},
+		downloadLinkForEvent: (state: State) => {
+			return (event: ExtremeEventFull | null) => {
+				if (!event) return ''
+				const dataStr =
+					'data:text/json;charset=utf-8,' +
+					encodeURIComponent(JSON.stringify(event))
+				return dataStr
+			}
+		}
 	},
 	actions: {
 		async selectEvent(id: string | null) {
@@ -249,7 +296,7 @@ export const useStore = defineStore('events', {
 			console.log('cold intensity range', this.coldIntensityRange)
 
 			this.sizeRange = [
-				sizes[sizes.length - 1],
+				0,//sizes[sizes.length - 1],
 				sizes[Math.min(N, sizes.length - 1)],
 			]
 

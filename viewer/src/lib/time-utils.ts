@@ -97,7 +97,9 @@ export function getEventBoxes(
 		const hotRows: number[] = [] // row[y] = lastEndX
 		const coldRows: number[] = [] // row[y] = lastEndX
 
-		for (let e of eventBars.filter(ev => ev.event.event_type === 'hot').sort((a, b) => a.startX - b.startX)) {
+		for (let e of eventBars
+			.filter((ev) => ev.event.event_type === 'hot')
+			.sort((a, b) => a.startX - b.startX)) {
 			let y = 0
 			for (; y < hotRows.length; y++) {
 				if (hotRows[y] < e.startX) break
@@ -106,7 +108,9 @@ export function getEventBoxes(
 			hotRows[y] = e.endX
 			if (y > maxY) maxY = y
 		}
-		for (let e of eventBars.filter(ev => ev.event.event_type === 'cold').sort((a, b) => a.startX - b.startX)) {
+		for (let e of eventBars
+			.filter((ev) => ev.event.event_type === 'cold')
+			.sort((a, b) => a.startX - b.startX)) {
 			let y = 0
 			for (; y < coldRows.length; y++) {
 				if (coldRows[y] < e.startX) break
@@ -119,4 +123,19 @@ export function getEventBoxes(
 	}
 
 	return { events: eventBars, maxEvents: maxY }
+}
+
+export const intervalToMs = (interval: string): number => {
+	const match = interval.match(/^(\d+(?:\.\d+)?)(ms|s|m|h|d)$/)
+	if (!match) throw new Error(`Invalid interval: ${interval}`)
+	const [, valueStr, unit] = match
+	const value = parseFloat(valueStr)
+	const multipliers: Record<string, number> = {
+		ms: 1,
+		s: 1000,
+		m: 60_000,
+		h: 3_600_000,
+		d: 86_400_000,
+	}
+	return value * multipliers[unit]
 }

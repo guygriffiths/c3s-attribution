@@ -340,7 +340,7 @@ watch(
 				}
 				fitBoundsToDiv(
 					mapRef.value!.leafletObject as L.Map,
-					document.getElementById(newVal ? 'multi-event-window' : 'map')!,
+					document.getElementById(newVal ? 'event-window' : 'map')!,
 					newVal ? newVal.bbox : [-85, -180, 85, 180],
 				)
 			} else if (lastCentreZoom.value) {
@@ -588,10 +588,10 @@ const addEventPanes = () => {
 				v-for="event in currentEvents"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event, timeStore.selectedTime)"
-				:weight="event.id === eventStore.selectedEventId ? 0.5 : 1"
+				:weight="event.id === eventStore.selectedEventId ? 2 : 1"
 				:fill="true"
 				:fill-opacity="event.id === eventStore.selectedEventId ? 0.0 : 0.5"
-				:color="event.event_type == 'hot' ? scssVars.c3sred : scssVars.c3sblue"
+				:color="event.id === eventStore.selectedEventId ? scssVars.lightbulb : event.event_type == 'hot' ? scssVars.c3sred : scssVars.c3sblue"
 				:fill-color="eventStore.colorForEvent(event)"
 				@click="eventStore.selectEvent(event.id)"
 			>
@@ -609,7 +609,7 @@ const addEventPanes = () => {
 				:options="{
 					fadeAnimation: false,
 				}"
-				pane="overlayPane"
+				pane="markerPane"
 			>
 			</LGridLayer>
 
