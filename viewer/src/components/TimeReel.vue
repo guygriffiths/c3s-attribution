@@ -701,14 +701,7 @@ watch(
 const xScaleFactor = computed(() => {
 	const panelWidth = document.getElementById('event-panel')?.clientWidth
 	const totalWidth = timeReelRef.value?.clientWidth
-	console.log(
-		'panelWidth',
-		panelWidth,
-		'totalWidth',
-		totalWidth,
-		'factor',
-		totalWidth && panelWidth ? totalWidth / panelWidth : 1.0,
-	)
+
 	return panelWidth && totalWidth ? totalWidth / panelWidth : 1.0
 })
 const viewportTransform = computed(() => {
@@ -1028,6 +1021,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			>
 				<div
 					class="needle"
+					:class="{ highlight: selectedEvent }"
 					ref="needleRef"
 					v-if="
 						props.mode === 'default' ||
@@ -1073,6 +1067,8 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 	// position: relative;
 	// overflow-y: scroll;
 	height: 100%;
+
+	background-color: rgba(0,0,0,0);
 
 	.date-info {
 		position: absolute;
@@ -1366,13 +1362,13 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					margin-left: -2px;
 					background-color: transparent;
 					transform-origin: left center;
-					width: 1px;
+					width: 3px;
 					height: 100%;
 					box-sizing: border-box;
 					cursor: ew-resize;
-					border-top: 7px solid $c3sred;
-					border-right: 7px solid transparent;
-					border-left: 7px solid transparent;
+					border-top: 0.75rem solid $c3sred;
+					border-right: 0.75rem solid transparent;
+					border-left: 0.75rem solid transparent;
 					border-bottom: none;
 					transform: translateX(-50%);
 

@@ -150,15 +150,22 @@ const mode = computed((): TimeReelMode => {
 	return 'default'
 })
 
-const funnelPoints = computed(() => {
+const selectedDayIdx = computed((): number | null => {
+	if (!eventStore.selectedEvent) return null
 	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent)
 	const selectedDay = differenceInDays(
 		timeStore.selectedTime,
 		new Date(eventStore.selectedEvent?.times[0] || 0),
 	)
-	const start = (100 * selectedDay) / totalDays
-	const end = (100 * (selectedDay + 1)) / totalDays
-	return `0,0 100,0 ${start},100 ${end},100`
+	if (selectedDay < 0 || selectedDay >= totalDays) return null
+	return selectedDay
+})
+const funnelPoints = computed(() => {
+	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent) + 1
+	if (!selectedDayIdx.value) return ''
+	const start = (100 * (selectedDayIdx.value + 0.5)) / totalDays
+	const end = (100 * (selectedDayIdx.value + 1.5)) / totalDays
+	return `0,0 100,0 ${end},100 ${start},100`
 })
 </script>
 
@@ -474,10 +481,15 @@ const funnelPoints = computed(() => {
 						.map(() => eventStore.selectedEvent?.event_type || 'hot')
 				"
 			/>
-			<svg width="100%" class="funnel" viewBox="0 0 100 100" preserveAspectRatio="none">
+			<svg
+				width="100%"
+				class="funnel"
+				viewBox="0 0 100 100"
+				preserveAspectRatio="none"
+			>
 				<polygon
 					:points="funnelPoints"
-					:style="`fill: ${eventStore.selectedEvent ? eventStore.colorForEvent(eventStore.selectedEvent) : 'red'}; stroke: none; opacity: 0.075;`"
+					:style="`fill: ${eventStore.selectedEvent ? eventStore.colorForEvent(eventStore.selectedEvent) : 'red'}; stroke: none; opacity: ${selectedDayIdx! % 2 ? 0.05 : 0.075};`"
 				/>
 			</svg>
 			<EventGraphs
@@ -546,6 +558,7 @@ $smallTimePanelHeight: max(6rem, 20%);
 		height: 40%;
 		z-index: 20;
 		transition: all $animTime ease-in-out;
+		background-color: rgba(255,0,0,0.2);
 
 		&.expanded {
 			height: calc(100% - 4 * $panelMargin);

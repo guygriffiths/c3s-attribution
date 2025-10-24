@@ -37,12 +37,6 @@ const timeRange = computed(() => {
   return `${format(start, 'dd MMM')} → ${format(end, 'dd MMM')}`
 	// return `${start.toLocaleDateString()} → ${end.toLocaleDateString()}`
 })
-
-const mean = computed(() => props.selectedEvent?.mean_value?.toFixed(2) ?? '—')
-const peak = computed(() => props.selectedEvent?.peak_value?.toFixed(2) ?? '—')
-const area = computed(
-	() => props.selectedEvent?.total_area?.toFixed(1) + ' km²' ?? '—',
-)
 </script>
 
 <template>

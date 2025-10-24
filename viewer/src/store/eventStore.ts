@@ -246,12 +246,12 @@ export const useStore = defineStore('events', {
 			mainStore.setLoadingDone()
 		},
 		async addEvents(data: ExtremeEvent[]) {
-			console.log(
-				'Setting events, count:',
-				data.length,
-				data.filter((e) => e.event_type === 'hot').length,
-				data.filter((e) => e.event_type === 'cold').length,
-			)
+			// console.log(
+			// 	'Setting events, count:',
+			// 	data.length,
+			// 	data.filter((e) => e.event_type === 'hot').length,
+			// 	data.filter((e) => e.event_type === 'cold').length,
+			// )
 			// Throw away the top x% of values for setting the range on colour scales, histograms etc
 			// const N = Math.ceil(data.length * 0.025)
 
@@ -265,37 +265,43 @@ export const useStore = defineStore('events', {
 				.filter((d) => d != null && d.event_type === 'hot')
 				.map((e) => this.intensityForEvent(e))
 				.sort((a, b) => b - a)
+			// console.log('heat intensities', heatIntensities)
 
 			const coldIntensities = data
 				.filter((d) => d != null && d.event_type === 'cold')
 				.map((e) => this.intensityForEvent(e))
 				.sort((a, b) => b - a)
+			// console.log('cold intensities', coldIntensities)
 
 			const sizes = data
 				.map((e) => this.sizeForEvent(e))
 				.filter((v) => v != null)
 				.sort((a, b) => b - a)
 
-			this.durationRange = [
-				Math.min(durations[durations.length - 1], this.durationRange[0]),
-				Math.max(durations[0], this.durationRange[1]),
-			]
-			this.heatIntensityRange = [
-				Math.min(
-					heatIntensities[heatIntensities.length - 1],
-					this.heatIntensityRange[0],
-				),
-				Math.max(heatIntensities[0], this.heatIntensityRange[1]),
-			]
-			this.coldIntensityRange = [
-				Math.min(
-					coldIntensities[coldIntensities.length - 1],
-					this.coldIntensityRange[0],
-				),
-				Math.max(coldIntensities[0], this.coldIntensityRange[1]),
-			]
-			this.coldIntensityRange = this.heatIntensityRange
-			console.log('cold intensity range', this.coldIntensityRange)
+			if (durations.length > 0) {
+				this.durationRange = [
+					Math.min(durations[durations.length - 1], this.durationRange[0]),
+					Math.max(durations[0], this.durationRange[1]),
+				]
+			}
+			if (heatIntensities.length > 0) {
+				this.heatIntensityRange = [
+					Math.min(
+						heatIntensities[heatIntensities.length - 1],
+						this.heatIntensityRange[0],
+					),
+					Math.max(heatIntensities[0], this.heatIntensityRange[1]),
+				]
+			}
+			if (coldIntensities.length > 0) {
+				this.coldIntensityRange = [
+					Math.min(
+						coldIntensities[coldIntensities.length - 1],
+						this.coldIntensityRange[0],
+					),
+					Math.max(coldIntensities[0], this.coldIntensityRange[1]),
+				]
+			}
 
 			this.sizeRange = [0, Math.max(sizes[sizes.length - 1], this.sizeRange[1])]
 

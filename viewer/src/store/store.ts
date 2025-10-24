@@ -1,11 +1,11 @@
-import { manualGlobalTrigger } from '@/lib/eventFiltering';
-import * as d3 from 'd3';
-import { addHours, differenceInDays } from 'date-fns';
-import { LatLng, Point } from 'leaflet';
-import { defineStore } from 'pinia';
-import { watch } from 'vue';
-import { useStore as useEventStore } from './eventStore';
-import { useStore as useTimeStore } from './timeStore';
+import { manualGlobalTrigger } from '@/lib/eventFiltering'
+import * as d3 from 'd3'
+import { addHours, differenceInDays } from 'date-fns'
+import { LatLng, Point } from 'leaflet'
+import { defineStore } from 'pinia'
+import { watch } from 'vue'
+import { useStore as useEventStore } from './eventStore'
+import { useStore as useTimeStore } from './timeStore'
 
 type LayerDetails = any
 
@@ -162,18 +162,14 @@ export const useStore = defineStore('main', {
 			// TODO Unhard-code this
 			const from = 1979
 			const to = 2024
-			timeStore.startTime = new Date(
-				Date.UTC(from, 0, 1),
-				)
-			timeStore.endTime = new Date(
-				Date.UTC(to, 11, 31),
-			)
-			for(let year = to; year >= from; year--) {
-				const respH = await fetch(`${DATA_ROOT}events-hw-${year}.jsonl`)
-				if (!respH.ok) {
-					throw new Error('Network response was not ok')
-				}
+			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
+			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
+			for (let year = to; year >= from; year--) {
+				const respH = await fetch(`${DATA_ROOT}events-hot-${year}.jsonl`)
 				try {
+					if (!respH.ok) {
+						throw new Error('Network response was not ok')
+					}
 					const textH = await respH.text()
 					const linesH = textH.trim().split('\n')
 					const objectsH = linesH.map((line) => JSON.parse(line))
@@ -184,21 +180,20 @@ export const useStore = defineStore('main', {
 					console.error('Error processing hot events:', e)
 				}
 
-				const respC = await fetch(`${DATA_ROOT}events-cw-${year}.jsonl`)
-				if (!respC.ok) {
-					throw new Error('Network response was not ok')
-				}
+				const respC = await fetch(`${DATA_ROOT}events-cold-${year}.jsonl`)
 				try {
+					if (!respC.ok) {
+						throw new Error('Network response was not ok')
+					}
 					const textC = await respC.text()
 					const linesC = textC.trim().split('\n')
 					const objectsC = linesC.map((line) => JSON.parse(line))
-					
+
 					massageData(objectsC, 'cold')
 					eventStore.addEvents(objectsC as ExtremeEvent[])
 				} catch (e) {
 					console.error('Error processing cold events:', e)
 				}
-				
 			}
 			manualGlobalTrigger()
 
@@ -223,10 +218,8 @@ export const useStore = defineStore('main', {
 			// } catch (e) {
 			// 	console.error('Error processing cold events:', e)
 			// }
-			
 		},
 	},
 })
-
 
 export type MainStore = ReturnType<typeof useStore>
