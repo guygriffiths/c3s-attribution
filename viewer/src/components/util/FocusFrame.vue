@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useStore } from '@/store/eventStore'
 import { faClose } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { IconX } from '@tabler/icons-vue'
 
 const eventStore = useStore()
 const props = defineProps<{
@@ -10,26 +11,55 @@ const props = defineProps<{
 }>()
 const emit = defineEmits(['close'])
 
-const eventType = computed(() => eventStore.selectedEvent?.event_type || 'unknown')
+const eventType = computed(
+	() => eventStore.selectedEvent?.event_type || 'unknown',
+)
 </script>
 
 <template>
 	<div class="focus-frame" :class="{ active: props.active, [eventType]: true }">
-		<div class="top">
-			<button @click="emit('close')">
-				<FontAwesomeIcon :icon="faClose" />
-			</button>
+	<button @click="emit('close')">
+		<IconX size="16" aria-hidden="true" />
+	</button>
+		<!-- <div class="top-left"></div>
+		<div class="top-right">
 		</div>
 		<div class="left"></div>
 		<div class="right"></div>
-		<div class="bottom"></div>
+		<div class="bottom"></div> -->
 	</div>
 </template>
 
 <style lang="scss" scoped>
 @use '@/assets/styles/scssVars.module.scss' as *;
-.focus-frame {
+button {
+	margin: 0;
+	padding: 0;
+	top: 0%;
+	right: 0%;
 	position: absolute;
+	border: none;
+	background-color: var(--primary-glass);
+	backdrop-filter: $frosty;
+	color: var(--text-on-primary);
+	font-size: 1.2rem;
+	border-radius: 0 0 0 0.5rem;
+	cursor: pointer;
+	svg {
+		margin: 0;
+		height: 100%;
+		width: 100%;
+	}
+	&:hover {
+		background-color: var(--primary-hover);
+	}
+	width: 2rem;
+	height: 2rem;
+	box-shadow: var(--shadow-sm), var(--shadow-md);
+	pointer-events: auto;
+}
+.focus-frame {
+	position: relative;
 	// border: 2px dashed $c3sred;
 	// pointer-events: none;
 	width: 100%;
@@ -37,109 +67,28 @@ const eventType = computed(() => eventStore.selectedEvent?.event_type || 'unknow
 	z-index: 200;
 	pointer-events: none; /* make parent not catch clicks */
 
+	border: $panelMargin solid var(--primary-glass);
+	box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.5);
+	clip-path: polygon(
+		0 0,
+		calc(50% - $modeButtonWidth) 0,
+		calc(50% - $modeButtonWidth) 3 * $panelMargin,
+		calc(50% + $modeButtonWidth) 3 * $panelMargin,
+		calc(50% + $modeButtonWidth) 0,
+		100% 0,
+		100% 100%,
+		0 100%
+	);
+
 	> div {
 		pointer-events: auto; /* children catch clicks */
 		transition: all $animTime ease-in-out;
-		box-shadow: calc(0.25 * $panelMargin) calc(0.25 * $panelMargin) calc(0.25 * $panelMargin)
-			rgba(0, 0, 0, 0.5), 
-            calc(0.5 * $panelMargin) calc(0.5 * $panelMargin) calc(0.5 * $panelMargin)
-                rgba(0, 0, 0, 0.2);
+		box-shadow: var(--shadow-sm), var(--shadow-md);
 	}
 
-	.top,
-	.bottom,
-	.left,
-	.right {
-		position: absolute;
-		background-color: rgba(100,100,100,0.5);
-		background-color: $c3sred;
-	}
-	
-	.hot {
-		.top,
-		.bottom,
-		.left,
-		.right {
-			background-color: $c3sred;
-		}
-	}
-	.cold {
-		.top,
-		.bottom,
-		.left,
-		.right {
-			background-color: $c3sblue;
-		}
-	}
-
-	.top,
-	.bottom {
-		left: $panelMargin;
-		width: calc(100% - $panelMargin);
-		height: $panelMargin;
-		z-index: 1;
-	}
-
-	.top {
-		transform: translateY(calc(-3 * $panelMargin));
-		top: 0;
-		display: flex;
-		justify-content: flex-end;
-		button {
-			margin: 0;
-			padding: 0;
-			border: none;
-			background-color: $c3sred;
-			color: white;
-			font-size: 1.2rem;
-			border-radius: 0 0 0 0.5rem;
-			cursor: pointer;
-			svg {
-				margin: 0;
-				height: 100%;
-				width: 100%;
-			}
-			&:hover {
-				background-color: $c3sred;
-			}
-			width: calc(2 * $panelMargin);
-			height: calc(2 * $panelMargin);
-					box-shadow: calc(0.25 * $panelMargin) calc(0.25 * $panelMargin) calc(0.25 * $panelMargin)
-			rgba(0, 0, 0, 0.5), 
-            calc(0.5 * $panelMargin) calc(0.5 * $panelMargin) calc(0.5 * $panelMargin)
-                rgba(0, 0, 0, 0.2);
-		}
-	}
-
-	.bottom {
-		transform: translateY(calc(2 * $panelMargin));
-		bottom: 0;
-	}
-
-	.left,
-	.right {
-		top: 0;
-		width: $panelMargin;
-		height: 100%;
-		z-index: 0;
-	}
-
-	.left {
-		transform: translateX(calc(-2 * $panelMargin));
-		left: 0;
-	}
-
-	.right {
-		transform: translateX(calc(2 * $panelMargin));
-		top: calc(2 * $panelMargin);
-		right: 0;
-		z-index: 10;
-	}
-
+	transform: scale(1.5);
 	&.active {
-		div {
-			transform: none;
-		}
+		transform: none;
 	}
 }
 </style>

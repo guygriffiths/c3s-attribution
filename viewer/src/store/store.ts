@@ -38,6 +38,9 @@ interface State {
 	draggingFilter: boolean
 
 	showMultiEventPanel: boolean // Whether to show the multi-event summary panel
+	showAnalytics: boolean // Whether to show the analytics view in the ME panel
+
+	hamburgerMenuOpen: boolean // Whether the side hamburger menu is open
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -83,6 +86,9 @@ export const useStore = defineStore('main', {
 			filteringByPoint: false, // Whether we are currently filtering by a point
 
 			showMultiEventPanel: true,
+			showAnalytics: false,
+
+			hamburgerMenuOpen: false,
 		}
 	},
 	getters: {
@@ -192,7 +198,7 @@ export const useStore = defineStore('main', {
 					massageData(objectsC, 'cold')
 					eventStore.addEvents(objectsC as ExtremeEvent[])
 				} catch (e) {
-					console.error('Error processing cold events:', e)
+					// console.error('Error processing cold events:', e)
 				}
 			}
 			manualGlobalTrigger()

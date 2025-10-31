@@ -44,10 +44,17 @@ export const toPx = (value: string): number => {
 	return parseFloat(value) // fallback
 }
 
-export function interpolateColor(baseColor: string = 'rgb(151, 24, 65)') {
-	const hsl = d3.hsl(baseColor)
-	// lock hue/sat, vary lightness 0→1
-	return (t: number) => d3.hsl(hsl.h, hsl.s, (1 - t) * 0.7 + 0.2).toString()
+// export function interpolateColor(baseColor: string = 'rgb(151, 24, 65)') {
+// 	const hsl = d3.hsl(baseColor)
+// 	// lock hue/sat, vary lightness 0→1
+// 	return (t: number) => d3.hsl(hsl.h, hsl.s, (1 - t) * 0.7 + 0.2).toString()
+// }
+
+export const interpolateColor = (baseColor: string = 'rgb(151, 24, 65)') => {
+	const hcl = d3.hcl(baseColor)
+	const L0 = 98
+	const L1 = 2
+	return (t: number) => d3.hcl(hcl.h, hcl.c, L0 * (1 - t) + L1 * t).formatRgb()
 }
 
 export const binGradient = (

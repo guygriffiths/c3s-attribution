@@ -1,86 +1,82 @@
 <script setup lang="ts">
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { faGauge, faCalendarDays } from '@fortawesome/free-solid-svg-icons'
-import { nextTick, watch } from 'vue'
+import {
+	IconChartAreaLine,
+	IconLayersIntersect,
+	IconStack3,
+	IconStopwatch,
+} from '@tabler/icons-vue'
 import { useStore } from '@/store/store'
+import { computed } from 'vue'
 
 const mode = defineModel<ViewMode>({ required: true })
-
 const store = useStore()
 
-const toggle = async () => {
-	store.setLoading() // start loading immediately
-	// Wait for the DOM update and rendering to complete
-	await new Promise((resolve) => setTimeout(resolve, 0))
-	mode.value = mode.value === 'timemachine' ? 'heatmap' : 'timemachine'
-	store.setLoadingDone() // end loading after DOM updates
-}
+const ariaLabel = computed(() =>
+	mode.value === 'heatmap'
+		? 'Switch to timeline mode'
+		: 'Switch to heatmap mode',
+)
 </script>
 
 <template>
-	<div class="switch" :class="mode" @click="toggle">
-		<FontAwesomeIcon :icon="faGauge" class="icon left" />
-		<div class="thumb"></div>
-		<FontAwesomeIcon :icon="faCalendarDays" class="icon right" />
+	<div class="mode-toggle-root">
+		<button
+			class="mode-button glassy"
+			:class="{ [mode]: true, selected: mode === 'timemachine' }"
+			@click="mode = 'timemachine'"
+			:aria-label="ariaLabel"
+			:aria-pressed="mode === 'timemachine'"
+			role="switch"
+		>
+			<IconStopwatch
+				class="icon timeline-icon"
+				:class="{ active: mode === 'timemachine' }"
+				size="32"
+				aria-hidden="true"
+			/>
+		</button>
+		<button
+			class="mode-button glassy"
+			:class="{ [mode]: true, selected: mode === 'heatmap' }"
+			@click="mode = 'heatmap'"
+			:aria-label="ariaLabel"
+			:aria-pressed="mode === 'timemachine'"
+			role="switch"
+		>
+			<IconLayersIntersect
+				class="icon heatmap-icon"
+				:class="{ active: mode === 'heatmap' }"
+				size="32"
+				aria-hidden="true"
+			/>
+		</button>
 	</div>
 </template>
 
 <style scoped lang="scss">
 @use '@/assets/styles/scssVars.module.scss' as *;
+@use 'sass:color';
 
-.switch {
-	position: relative;
-	width: 80px;
-	height: 36px;
-	background-color: #ddd;
-	border-radius: 1.5rem;
-	border-bottom-right-radius: 0;
-	border-bottom-left-radius: 0;
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 0 10px;
+
+
+.mode-button {
+	// Reset button styles
+	border: none;
+	padding: 0;
 	cursor: pointer;
-	transition: background-color 0.3s ease;
 
-	&.timemachine {
-		background-color: $c3sblue;
+	width: $modeButtonWidth;
+	height: 4rem;
+
+	border-radius: 0;
+	padding: 1.5rem 1rem 0.25rem 1rem;
+
+	&:first-child {
+		border-bottom-left-radius: 2.5 * $borderRadius;
 	}
 
-	&.heatmap {
-		background-color: $c3sred;
-	}
-
-	.icon {
-		color: white;
-		font-size: 1rem;
-		z-index: 2;
-
-		&.left {
-			margin-right: auto;
-		}
-
-		&.right {
-			margin-left: auto;
-		}
-	}
-
-	.thumb {
-		position: absolute;
-		top: 4px;
-		width: 28px;
-		height: 28px;
-		border-radius: 50%;
-		background: white;
-		transition: left 0.3s ease;
-	}
-
-	&.explore .thumb {
-		left: 4px;
-	}
-
-	&.heatmap .thumb {
-		left: calc(100% - 32px);
+	&:last-child {
+		border-bottom-right-radius: 2.5 * $borderRadius;
 	}
 }
 </style>

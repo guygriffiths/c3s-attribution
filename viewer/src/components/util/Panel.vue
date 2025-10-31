@@ -28,16 +28,16 @@ const classes = computed(() => ['panel', { active: props.active }])
 	z-index: 10;
 }
 .panel.left {
-	transform: translateX(-110%);
+	transform: translateX(-150%);
 }
 .panel.right {
-	transform: translateX(105%);
+	transform: translateX(150%);
 }
 .panel.bottom {
-	transform: translateY(105%);
+	transform: translateY(150%);
 }
 .panel.top {
-	transform: translateY(-105%);
+	transform: translateY(-150%);
 }
 
 .panel.left.peek {

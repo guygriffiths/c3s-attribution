@@ -13,6 +13,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as d3 from 'd3'
 import { binGradient } from '@/lib/utils'
 import scssVars from '@/assets/styles/scssVars.module.scss'
+import { IconDimensions, IconHourglassHigh, IconTemperature } from '@tabler/icons-vue'
 
 type Props = {
 	data: number[]
@@ -24,6 +25,7 @@ type Props = {
 	yMaxPct?: number | null
 	highlightValue?: number | null
 	types?: ('hot' | 'cold')[]
+	variable?: 'duration' | 'size' | 'intensity'
 }
 
 const props = defineProps<Props>()
@@ -146,7 +148,7 @@ const yPctMax = computed(() => {
 })
 
 // margins + inner dims
-const margin = { top: 0, right: 0, bottom: 16, left: 0 }
+const margin = { top: 0, right: 0, bottom: 0, left: 0 }
 const innerHeight = computed(() =>
 	Math.max(40, height.value - margin.top - margin.bottom),
 )
@@ -197,7 +199,12 @@ const bars = computed(() => {
 			count: counts.value[idx],
 			bin0: b.x0,
 			bin1: b.x1,
-			color: binGradient(b.hotPct, b.coldPct, scssVars.c3sred, scssVars.c3sblue), // red→blue
+			color: b.hotPct === 0 && b.coldPct === 0 ? 'var(--primary)' : binGradient(
+				b.hotPct,
+				b.coldPct,
+				scssVars.c3sred,
+				scssVars.c3sblue,
+			), // red→blue
 		}
 	})
 	return ret
@@ -218,11 +225,14 @@ watch(
 
 <template>
 	<div ref="containerRef" class="histogram-root">
+		<IconHourglassHigh v-if="props.variable === 'duration'" />
+		<IconDimensions v-else-if="props.variable === 'size'" />
+		<IconTemperature v-else-if="props.variable === 'intensity'" />
 		<svg class="histogram-svg" role="img">
 			<!-- group for plotting area -->
 			<g :transform="`translate(${margin.left},${margin.top})`">
 				<!-- X axis ticks -->
-				<g
+				<!-- <g
 					class="x-axis"
 					:transform="`translate(0, ${innerHeight})`"
 					v-if="xmin != null && xmax != null"
@@ -234,7 +244,7 @@ watch(
 					<text :x="innerWidth - 2" y="12" text-anchor="end">
 						{{ labelFunc(bins[bins.length - 1].x0) }}+
 					</text>
-				</g>
+				</g> -->
 
 				<!-- Bars (main loop you can customize) -->
 				<g class="bars">
@@ -279,8 +289,24 @@ watch(
 .histogram-root {
 	width: 100%;
 	height: 100%;
+	position: relative;
+
+	.tabler-icon {
+		width: min(50%, 3rem);
+		height: auto;
+		color: white;
+		opacity: 0.8;
+		position: absolute;
+		top: 8px;
+		right: 4px;
+		pointer-events: none;
+		user-select: none;
+		z-index: 10;
+	}
+
 	/* the container controls svg width via ResizeObserver */
 	.histogram-svg {
+		z-index: 0;
 		width: 100%;
 		height: 100%;
 		display: block;
@@ -315,10 +341,10 @@ $rate: 0.5 * $animTime;
 	// fill: $c3sred;
 	rx: 2;
 	transition: all $rate ease-in-out;
-	
+
 	&.highlight {
 		fill: $lightbulb;
-		stroke: color.adjust($lightbulb, $lightness: 20%);
+		stroke: var(--highlight-hover);
 		stroke-width: 1;
 		filter: drop-shadow(0 0 2px $lightbulb) drop-shadow(0 0 4px $lightbulb);
 	}

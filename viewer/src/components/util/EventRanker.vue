@@ -104,10 +104,17 @@ watch(
 )
 
 const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
+
+const selectedIndex = computed(() => {
+	if (!eventStore.selectedEvent) return -1
+	return (
+		props.events.findIndex((e) => e.id === eventStore.selectedEventId) + 1
+	)
+})
 </script>
 
 <template>
-	<div class="event-ranker">
+	<div class="event-ranker-root">
 		<div class="scroller" ref="scrollerRef">
 			<div class="scrollee">
 				<div
@@ -195,7 +202,7 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 						{{ idx + 1 }}
 					</text>
 					<text
-						v-if="eventsInRanker < props.events.length"
+						v-if="selectedIndex > props.events.length"
 						class="ranked-event"
 						:class="eventStore.selectedEvent?.event_type || 'mixed'"
 						x="0"
@@ -203,7 +210,7 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 						:transform="`translate(${eventStore.selectedEvent ? widthScale(eventStore.durationForEvent(eventStore.selectedEvent)) + 4 : 10}, ${eventsInRanker * ROW_SIZE + 14})`"
 						font-size="14"
 					>
-						{{ topN + 1 }} - {{ props.events.length }}
+						{{ selectedIndex }}
 					</text>
 				</svg>
 			</div>
@@ -235,28 +242,28 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 		.rank {
 			flex: 0 0 $rankedEventHeight;
 			min-height: $rankedEventHeight;
-			background-color: $panelBg;
 			display: flex;
 			flex-direction: row;
 			align-items: center;
 			justify-content: flex-end;
 			width: 100%;
 			cursor: pointer;
+			background-color: var(--panel-bg);
 
 			&.odd {
-				background-color: color.adjust($panelBg, $lightness: -5%);
+				background-color: var(--panel-bg-alt);
 			}
 
 			&.hovering,
 			&:hover {
-				background-color: color.adjust($panelBg, $lightness: -10%);
-				box-shadow: 0 0 10px rgba($c3sred, 0.5);
+				background-color: var(--panel-bg-hover);
+				box-shadow: 0 0 10px rgba(var(--primary), 0.5);
 			}
 
 			&.selected {
-				border-top: 2px solid $c3sred;
-				border-bottom: 2px solid $c3sred;
-				box-shadow: 0 0 10px rgba($c3sred, 0.5);
+				border-top: 2px solid var(--highlight);
+				border-bottom: 2px solid var(--highlight);
+				box-shadow: 0 0 10px rgba(var(--primary), 0.5);
 			}
 
 			p {

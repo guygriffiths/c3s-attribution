@@ -762,6 +762,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tabler/icons-vue@npm:^3.35.0":
+  version: 3.35.0
+  resolution: "@tabler/icons-vue@npm:3.35.0"
+  dependencies:
+    "@tabler/icons": "npm:3.35.0"
+  peerDependencies:
+    vue: ">=3.0.1"
+  checksum: 10c0/2585c8b745c17636d91e145fa08ffd04ae1a2e4ab556f73910dbb91891d3ad22f16049d37cb0ab4f09b2a401a7bffa7f24cfaf8f8ad062340f475c2c4228cbbb
+  languageName: node
+  linkType: hard
+
+"@tabler/icons@npm:3.35.0":
+  version: 3.35.0
+  resolution: "@tabler/icons@npm:3.35.0"
+  checksum: 10c0/93098828128ffed2cf412b39bd78992f93f25b22349a4e04523d2a018b7fe376ddeff105babcc3efedd707aa00b705425c7d9f598d6987552a563c62125795a2
+  languageName: node
+  linkType: hard
+
 "@turf/along@npm:^7.2.0":
   version: 7.2.0
   resolution: "@turf/along@npm:7.2.0"
@@ -6392,6 +6410,7 @@ __metadata:
     "@fortawesome/fontawesome-svg-core": "npm:^6.7.2"
     "@fortawesome/free-solid-svg-icons": "npm:^6.7.2"
     "@fortawesome/vue-fontawesome": "npm:^3.0.8"
+    "@tabler/icons-vue": "npm:^3.35.0"
     "@turf/turf": "npm:^7.2.0"
     "@types/d3": "npm:^7.4.3"
     "@types/js-cookie": "npm:^3.0.6"

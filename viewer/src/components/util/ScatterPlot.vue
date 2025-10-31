@@ -2,6 +2,12 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import * as d3 from 'd3'
+import {
+	IconClockHour4,
+	IconTemperature,
+	IconDimensions,
+	IconHourglassHigh,
+} from '@tabler/icons-vue'
 
 type Props = {
 	xdata: number[]
@@ -13,6 +19,8 @@ type Props = {
 	types?: ('hot' | 'cold')[]
 	ids?: string[]
 	highlightId?: string | null
+	xvar?: 'duration' | 'size' | 'intensity' | 'time'
+	yvar?: 'duration' | 'size' | 'intensity'
 }
 
 const props = defineProps<Props>()
@@ -123,7 +131,7 @@ const pointStates = new Map<
 const fadeDuration = 50 // ms
 
 const computeOpacity = (n: number, maxOpacity = 0.5) =>
-	Math.min(maxOpacity,  maxOpacity * Math.pow(n, -0.33))
+	Math.min(maxOpacity, maxOpacity * Math.pow(n, -0.2))
 
 watch(xyData, (newPts) => {
 	const now = performance.now()
@@ -236,6 +244,13 @@ onMounted(() => loop())
 
 <template>
 	<div ref="containerRef" class="scatter-root">
+		<IconHourglassHigh v-if="props.xvar === 'duration'" class="xicon" />
+		<IconDimensions v-else-if="props.xvar === 'size'" class="xicon" />
+		<IconTemperature v-else-if="props.xvar === 'intensity'" class="xicon" />
+		<IconClockHour4 v-else-if="props.xvar === 'time'" class="xicon" />
+		<IconHourglassHigh v-if="props.yvar === 'duration'" class="yicon" />
+		<IconDimensions v-else-if="props.yvar === 'size'" class="yicon" />
+		<IconTemperature v-else-if="props.yvar === 'intensity'" class="yicon" />
 		<canvas
 			ref="canvasRef"
 			class="scatter-canvas"
@@ -249,11 +264,37 @@ onMounted(() => loop())
 .scatter-root {
 	width: 100%;
 	height: 100%;
-}
-.scatter-canvas {
-	width: 100%;
-	height: 100%;
-	display: block;
-	border: 1px solid #e2e8f0;
+	position: relative;
+
+	.tabler-icon {
+		width: min(35%, 2.5rem);
+		height: auto;
+		color: white;
+		opacity: 0.8;
+		position: absolute;
+		pointer-events: none;
+		user-select: none;
+		z-index: 10;
+	}
+
+	.xicon {
+		bottom: 4px;
+		right: 4px;
+	}
+
+	.yicon {
+		top: 4px;
+		left: 0px;
+	}
+
+	.scatter-canvas {
+		width: 100%;
+		height: 100%;
+		position: absolute;
+		top: 0;
+		left: 0;
+		z-index: 0;
+		border-radius: 0;
+	}
 }
 </style>

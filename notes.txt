@@ -1,71 +1,14 @@
-General
-* Get docker working properly with UID/GID
-* Set up cron job to download latest data and extract events. Split events into historical.jsonl and current.jsonl?
-
-
-Event Generation
-* Run full generation on Bertha
-
-
-THE VARIABLES
-they define what graphs we show, and what we explore by similar. swhen we're looking at regions we want to rank events by variable - "this is the 4th hottest heatwave in the last 30 years"; "this is the 2nd largest one in the last 50" etc.
-
-I think we need 3 at least. but that 3 is fine.
-AREA
-MIN/MAX/PEAK (DAY/NIGHT for min/max?)
-
-everything will have
-DURATION
-
-is that 3 always enough to get 6, colour wheel style?
-
-Area plus duration could be magnitude.
-Area plus mini max peak could be intensity.
-MinMax Peak plus duration could be discomfort.
-
-Which means that for the time series we can always plot some kind of intensity.
-On the summary stats, we can always write down what the magnitude is.
-
-
-
-
-Web Explorer
-* EventGraphs:
-    - 
-* Colour events by chooser
-    - area
-    - intensity
-    - ?
-* TimeReel
-    - Get the TimeReel expanding nicely to full-screen.
-    - Nicer transitions
-* Event view - lock view, show all events within this region
-* Global view - show heatmap of global events. Click/move a marker - see all events at that pixel
-* Graph views - open the full explore view, with the selected variable highlighted. This will explore "similar" events, or rather all events in some 2d(?) space(s) perhaps centred/zoomed on the current event
-    
-
-Questions
-
-* It was really hot that day, for ages, why am I not a heatwave? Do it by saving all eventlets in a backup database, sorted by pixel id? It's a big filesystem, but probably not unmanageably so. Certainly not if stored by row OR column
-
-
-What info do we return for a selected location?
-What about background when exploring event? What is useful? Don't say "the mean over the period of the event". Also what about backgrounds in general.
-
 
 Unsorted TODO List:
 
 * Set zoom centre on buttons with: map.setZoomAround([lat, lng], map.getZoom() + 1);
-* proper color scale for excessive pixels
 * Probably gonna have to set up ncWMS or a TMS
 * Lock time reel when event selected - keys, mouse, track (all of which need dealing with separately anyway)
 * Colour-blindness friendly
 * Proper aria stuff for blindness
 
 Event Ranker:
-* Lock scrolling together button
-* When event clicked, scroll into view at the same place (if possible)
-* When event hovered, highlight in all rankers, draw on the map as an outline with a pretty transition
+* When event clicked, scroll into view at the same place (if possible). Kind of, but fix the bottom stuff
 * Make 1, 2, 3 look like medals
 * On hover, show event information (on popup on map?). Maybe on click, or 2-3s debounced (?) hover. On ranker on hover, but full event info on map on click?
 * Highlight on the timeline when an event is selected
@@ -98,7 +41,10 @@ Gamification help. Help button. Tip of the day
 
 Download button - done
 Add to cart button - phase 2
-password protect - simplest
+password protect - c3suser - unguessable
+replace icons with tabler
+
+
 
 
 Modern style notes from Claude:

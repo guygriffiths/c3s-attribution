@@ -4,6 +4,7 @@ import * as d3 from 'd3'
 
 import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useTimeStore } from '@/store/timeStore'
+import { IconDimensions, IconTemperature } from '@tabler/icons-vue'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 
 const eventStore = useEventStore()
@@ -39,7 +40,7 @@ const sizeScale = computed(() =>
 	d3
 		.scaleLinear()
 		.domain([0, d3.max(areaData.value) || 1])
-		.range([height.value, chartTopMargin]),
+		.range([height.value - 2, chartTopMargin]),
 )
 const intensityScale = computed(() =>
 	d3
@@ -69,69 +70,146 @@ onMounted(() => {
 
 	onBeforeUnmount(() => observer.disconnect())
 })
+
+const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 </script>
 
 <template>
-	<svg class="graph-container" ref="svgRef">
-		<!-- <transition-group
+	<div class="event-graphs-root">
+		<IconDimensions class="size-icon" :class="{ [eventType]: true }" />
+		<IconTemperature class="intensity-icon" :class="{ [eventType]: true }" />
+		<svg class="graph-container" ref="svgRef">
+			<!-- <transition-group
 			name="graph-bg-transition"
 			tag="g"
 			:style="{ transform: 'scaleY(-1) translateY(-100%)' }"
 		> -->
-		<template v-for="(day, i) in days" :key="day">
 			<rect
-				:x="xScale(i.toString())"
+				:x="xScale('0') - xScale.bandwidth()"
 				:y="0"
 				:width="xScale.bandwidth()"
 				:height="height * 3"
-				:opacity="i % 2 === 0 ? 0.075 : 0.05"
-				:fill="eventStore.colorForEvent(props.selectedEvent!) || '#f0f0f0'"
-				@click="emits('dateSelected', day)"
+				class="graph-bg"
 			/>
-		</template>
-		<!-- </transition-group> -->
-
-		<g>
-			<template v-for="(value, i) in areaData" :key="i">
+			<rect
+				:x="xScale.range()[1]"
+				:y="0"
+				:width="xScale.bandwidth()"
+				:height="height * 3"
+				class="graph-bg"
+			/>
+			<template v-for="(day, i) in days" :key="day">
 				<rect
 					:x="xScale(i.toString())"
-					:y="sizeScale(value)"
+					:y="0"
 					:width="xScale.bandwidth()"
-					:height="height - sizeScale(value)"
-					:fill="eventStore.colorForEvent(props.selectedEvent!) || scssVars.c3sred"
-				:class="{selected: i === selectedIndex}"
-					stroke="white"
-					:stroke-width="0.5"
-					vector-effect="non-scaling-stroke"
+					:height="height * 3"
+					class="graph-bg"
+					:class="{ odd: i % 2 === 1, selected: i === selectedIndex }"
+					@click="emits('dateSelected', day)"
 				/>
 			</template>
-		</g>
+			<!-- </transition-group> -->
 
-		<!-- Peak and Mean Value Line Chart -->
-		<g>
-			<template v-if="intensityData.length">
-				<polyline
-					fill="none"
-					stroke="#e15759"
-					stroke-width="2"
-					:points="
-						intensityData
-							.map(
-								(value, i) =>
-									`${xScale(i.toString())! + xScale.bandwidth() / 2},${intensityScale(
-										value,
-									)}`,
-							)
-							.join(' ')
-					"
-				/>
-			</template>
-		</g>
-	</svg>
+			<g>
+				<template v-for="(value, i) in areaData" :key="i">
+					<rect
+						:x="xScale(i.toString())"
+						:y="sizeScale(value)"
+						:width="xScale.bandwidth()"
+						:height="height - sizeScale(value)"
+						:class="{
+							selected: i === selectedIndex,
+							[eventType]: true,
+						}"
+						stroke="white"
+						:stroke-width="0.5"
+						vector-effect="non-scaling-stroke"
+						class="area-bar"
+					/>
+				</template>
+			</g>
+
+			<!-- Peak and Mean Value Line Chart -->
+			<g>
+				<template v-if="intensityData.length">
+					<polyline
+						class="intensity-line"
+						:class="{ [eventType]: true }"
+						fill="none"
+						stroke-width="2"
+						:points="
+							intensityData
+								.map(
+									(value, i) =>
+										`${xScale(i.toString())! + xScale.bandwidth() / 2},${intensityScale(
+											value,
+										)}`,
+								)
+								.join(' ')
+						"
+					/>
+				</template>
+			</g>
+		</svg>
+	</div>
 </template>
 
 <style scoped lang="scss">
 @use '@/assets/styles/scssVars.module.scss' as *;
+
+.event-graphs-root {
+	width: 100%;
+	height: 100%;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+
+	.size-icon {
+		width: min(25%, 2rem);
+		height: auto;
+		color: var(--primary-hover);
+		opacity: 1;
+		position: absolute;
+		top: 4px;
+		left: 8px;
+		pointer-events: none;
+		z-index: 10;
+
+		&.hot {
+			color: var(--theme-hot-primary-hover);
+		}
+		&.cold {
+			color: var(--theme-cold-primary-hover);
+		}
+	}
+
+	.intensity-icon {
+		width: min(25%, 2rem);
+		height: auto;
+		color: var(--primary-muted);
+		opacity: 1;
+		position: absolute;
+		top: 4px;
+		right: 4px;
+		pointer-events: none;
+		&.hot {
+			color: var(--theme-hot-primary-muted);
+		}
+		&.cold {
+			color: var(--theme-cold-primary-muted);
+		}
+	}
+
+	.graph-container {
+		width: 100%;
+		height: 100%;
+		z-index: 0;
+		flex: 0 0 100%;
+	}
+}
 
 svg {
 	font-family: sans-serif;
@@ -140,10 +218,37 @@ svg {
 	width: 100%;
 	height: 100%;
 
-	rect.selected {
-		fill: $lightbulb !important;
+	.area-bar {
+		&.hot {
+			fill: var(--theme-hot-primary-hover);
+		}
+		&.cold {
+			fill: var(--theme-cold-primary-hover);
+		}
 	}
 
+	.intensity-line {
+		&.hot {
+			stroke: var(--theme-hot-primary-muted);
+		}
+		&.cold {
+			stroke: var(--theme-cold-primary-muted);
+		}
+	}
+
+	rect.selected {
+		fill: var(--highlight);
+	}
+
+	.graph-bg {
+		cursor: pointer;
+		fill: none;
+		fill: var(--panel-bg);
+
+		&.selected {
+			fill: var(--panel-bg-alt);
+		}
+	}
 
 	.graph-bg-transition-enter-active {
 		transition: all $animTime ease-in-out calc($animTime + $settleTime);

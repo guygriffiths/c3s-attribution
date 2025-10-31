@@ -312,6 +312,7 @@ export const useStore = defineStore('events', {
 				this.eventSetsLoaded === 5 ||
 				this.eventSetsLoaded % 10 === 0
 			) {
+				console.log('Manually triggering global events ready callback after', this.eventSetsLoaded, 'sets loaded')
 				// Trigger a global events ready callback at various points during loading
 				// This allows a good balance between early rendering and processing speed
 				// (rendering after every year is slow, particularly compared with data loads from cache)

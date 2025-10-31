@@ -12,6 +12,13 @@ import {
 } from '@fortawesome/free-solid-svg-icons'
 import { nextTick, ref, watch } from 'vue'
 import { useStore } from '@/store/store'
+import {
+	IconSnowflake,
+	IconSun,
+	IconTemperature,
+	IconTemperatureSnow,
+	IconTemperatureSun,
+} from '@tabler/icons-vue'
 
 const props = defineProps<{
 	hot: boolean
@@ -55,28 +62,28 @@ const bothClickedfromMiddle = () => {
 <template>
 	<div class="toggle-container">
 		<button
-			class="left cold"
+			class="left cold glassy"
 			@click="coldClicked"
 			:class="{ selected: props.cold && !props.hot }"
 		>
-			<FontAwesomeIcon :icon="faSnowflake" class="icon" />
+			<IconTemperatureSnow class="icon left" />
 		</button>
 		<button
-			class="middle"
+			class="middle glassy"
 			@click="bothClickedfromMiddle"
 			:class="{ selected: props.hot && props.cold }"
 		>
-			<FontAwesomeIcon :icon="faSnowflake" class="icon leftmerge" />
-			<FontAwesomeIcon :icon="faBolt" class="icon thin" />
-			<FontAwesomeIcon :icon="faTemperatureHigh" class="icon rightmerge" />
+			<IconSnowflake class="icon leftmerge" />
+			<IconTemperature class="icon thin" />
+			<IconSun class="icon rightmerge" />
 			<!-- <FontAwesomeIcon :icon="faCertificate" class="icon right" /> -->
 		</button>
 		<button
-			class="right hot"
+			class="right hot glassy"
 			@click="hotClicked"
 			:class="{ selected: props.hot && !props.cold }"
 		>
-			<FontAwesomeIcon :icon="faTemperatureHigh" class="icon right" />
+			<IconTemperatureSun class="icon right" />
 		</button>
 	</div>
 </template>
@@ -92,83 +99,78 @@ const bothClickedfromMiddle = () => {
 	justify-content: space-between;
 	padding: 0;
 	cursor: pointer;
-	width: 8rem;
 	height: 2.5rem;
 	// gap: 2px;
 
 	button {
-		background: none;
 		border: none;
 		cursor: pointer;
 		padding: 0;
-		margin: 0;
-		// width: 33.33%;
-		// height: 100%;
 		flex: 1 1 100%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition:
-			background-color 0.3s ease,
-			color 0.3s ease;
-		border-radius: 0;
-		// width: 2rem;
 		height: 100%;
+		width: 2rem;
+		border-radius: 0;
 
 		&.left {
-			// border-top-left-radius: 0.5rem;
-			border-bottom-left-radius: 0.5rem;
-			border-right: 1px solid transparent;
+			border-top-left-radius: $borderRadius;
+			border-bottom-left-radius: $borderRadius;
 		}
 		&.right {
-			// border-top-right-radius: 0.5rem;
-			border-bottom-right-radius: 0.5rem;
-			border-left: 1px solid transparent;
+			border-top-right-radius: $borderRadius;
+			border-bottom-right-radius: $borderRadius;
 		}
 
 		&.hot {
-			background-color: $c3sred;
-			border-color: color.adjust($c3sred, $lightness: -10%);
+			background-color: var(--theme-hot-primary-glass);
+
+			&:hover {
+				background-color: var(--theme-hot-primary-glass-shine);
+			}
+			&.selected {
+				background-color: var(--theme-hot-primary-glass);
+			}
 		}
 		&.cold {
-			background-color: $c3sblue;
-			border-color: color.adjust($c3sblue, $lightness: -10%);
+			background-color: var(--theme-cold-primary-glass);
+			&:hover {
+				background-color: var(--theme-cold-primary-glass-shine);
+			}
+			&.selected {
+				background-color: var(--theme-cold-primary-glass);
+			}
 		}
 
 		&.middle {
+			width: 8rem;
 			background: linear-gradient(
 				to right,
-				$c3sblue,
-				$c3sblue 10%,
-				$c3sred 90%,
-				$c3sred
+				var(--theme-cold-primary-glass),
+				var(--theme-cold-primary-glass) 10%,
+				var(--theme-hot-primary-glass) 90%,
+				var(--theme-hot-primary-glass)
 			);
-			border-left: 1px solid color.adjust($c3sblue, $lightness: -10%);
-			border-right: 1px solid color.adjust($c3sred, $lightness: -10%);
-		}
 
-		&.selected {
-			color: white;
-			// transform: translate(1px,1px);
-			&.hot {
-				background-color: color.adjust($c3sred, $lightness: 10%);
-			}
-			&.cold {
-				background-color: color.adjust($c3sblue, $lightness: 10%);
-				border-right-color: color.adjust($c3sblue, $lightness: 20%);
-			}
-			&.middle {
+			&:hover {
 				background: linear-gradient(
 					to right,
-					color.adjust($c3sblue, $lightness: 10%),
-					color.adjust($c3sblue, $lightness: 10%) 10%,
-					color.adjust($c3sred, $lightness: 10%) 90%,
-					color.adjust($c3sred, $lightness: 10%)
+					var(--theme-cold-primary-glass-shine),
+					var(--theme-cold-primary-glass-shine) 10%,
+					var(--theme-hot-primary-glass-shine) 90%,
+					var(--theme-hot-primary-glass-shine)
 				);
-				border-left-color: color.adjust($c3sblue, $lightness: 20%);
-				border-right-color: color.adjust($c3sred, $lightness: 20%);
 			}
-			box-shadow: 0 0 6px rgba(0, 0, 0, 0.2);
+			&.selected {
+				background: linear-gradient(
+					to right,
+					var(--theme-cold-primary-glass),
+					var(--theme-cold-primary-glass) 10%,
+					var(--theme-hot-primary-glass) 90%,
+					var(--theme-hot-primary-glass)
+				);
+			}
 		}
 	}
 
@@ -178,14 +180,14 @@ const bothClickedfromMiddle = () => {
 		z-index: 2;
 
 		&.thin {
-			transform: scale(0.5,1.5);
+			margin: -4px;
 		}
 		&.leftmerge {
 			// clip-path: inset(0 20% 0 0); /* left half visible */
 			transform: scale(0.9);
 			transform: translateX(20%);
 		}
-		
+
 		&.rightmerge {
 			// clip-path: inset(0 0 0 20%); /* left half visible */
 			transform: scale(0.9);

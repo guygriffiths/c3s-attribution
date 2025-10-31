@@ -7,21 +7,17 @@ import { useStore as useEventStore } from '@/store/eventStore'
 import MapComponent from './Map.vue'
 import Panel from './util/Panel.vue'
 import Histogram from './util/Histogram.vue'
-import ScatterPlot from './util/ScatterPlot.vue'
+import EventTypeToggle from './util/EventTypeToggle.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
 import EventInfo from './EventInfo.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
-	faChevronUp,
-	faAnglesUp,
-	faWandMagicSparkles,
 	faClose,
 	faBarsStaggered,
 	faClock,
 	faExpand,
 	faTemperatureHigh,
-	faRankingStar,
 	faCalendarDays,
 } from '@fortawesome/free-solid-svg-icons'
 import FocusFrame from './util/FocusFrame.vue'
@@ -30,7 +26,6 @@ import ModeToggle from './util/ModeToggle.vue'
 import {
 	clearFilter,
 	getFilteredEvents,
-	getFilteredIds,
 	getGlobalFilteredEvents,
 	onGlobalEventsReady,
 	onRegionEventsReady,
@@ -39,9 +34,14 @@ import {
 	setHotOnly,
 } from '@/lib/eventFiltering'
 import { differenceInDays } from 'date-fns'
-import { glob } from 'fs'
-import { difference } from 'd3'
-import { propsBinder } from '@vue-leaflet/vue-leaflet/dist/src/utils'
+import MultiEventPanel from './MultiEventPanel.vue'
+import {
+	IconCalendar,
+	IconCalendarWeek,
+	IconMenu,
+	IconMenu2,
+	IconX,
+} from '@tabler/icons-vue'
 
 const $l = useLabels()
 const store = useStore()
@@ -49,20 +49,11 @@ const timeStore = useTimeStore()
 const eventStore = useEventStore()
 
 onMounted(async () => {})
-const toggleLabel = computed(() =>
-	timeStore.timePanelVisible ? $l.value.hideTimePanel : $l.value.showTimePanel,
-)
 const toggleTimePanelExpanded = () => {
 	timeStore.timePanelExpanded = !timeStore.timePanelExpanded
 	if (timeStore.timePanelExpanded) {
 		timeStore.timePanelVisible = true
 	}
-}
-const toggleTimePanelHidden = () => {
-	timeStore.timePanelVisible = !timeStore.timePanelVisible
-	// if (!timeStore.timePanelVisible) {
-	// 	timeStore.timePanelExpanded = false
-	// }
 }
 
 const exitFocus = () => {
@@ -90,6 +81,10 @@ onGlobalEventsReady(() => {
 })
 
 onRegionEventsReady(() => {
+	console.log(
+		'eventsOfInterest updated from filtered events',
+		eventsOfInterest.value,
+	)
 	eventsOfInterest.value = getFilteredEvents()
 })
 watch(
@@ -98,6 +93,10 @@ watch(
 		if (globalEventsOfInterest.value) {
 			eventsOfInterest.value = globalFilteredEvents.value
 		} else {
+			console.log(
+				'eventsOfInterest updated from filtered events',
+				eventsOfInterest.value,
+			)
 			eventsOfInterest.value = getFilteredEvents()
 		}
 	},
@@ -114,6 +113,10 @@ watch(
 		if (globalEventsOfInterest.value) {
 			eventsOfInterest.value = globalFilteredEvents.value
 		} else {
+			console.log(
+				'eventsOfInterest updated from filtered events',
+				eventsOfInterest.value,
+			)
 			eventsOfInterest.value = getFilteredEvents()
 		}
 	},
@@ -137,6 +140,10 @@ watch(
 			globalFilteredEvents.value = getGlobalFilteredEvents()
 			eventsOfInterest.value = globalFilteredEvents.value
 		} else {
+			console.log(
+				'eventsOfInterest updated from filtered events',
+				eventsOfInterest.value,
+			)
 			eventsOfInterest.value = getFilteredEvents()
 		}
 	},
@@ -160,13 +167,22 @@ const selectedDayIdx = computed((): number | null => {
 	if (selectedDay < 0 || selectedDay >= totalDays) return null
 	return selectedDay
 })
+const offset = computed(() => {
+	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent) + 1
+	if (!selectedDayIdx.value) return 0
+	return (10 * (selectedDayIdx.value + 0.5)) / totalDays
+})
 const funnelPoints = computed(() => {
 	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent) + 1
-	if (!selectedDayIdx.value) return ''
-	const start = (100 * (selectedDayIdx.value + 0.5)) / totalDays
-	const end = (100 * (selectedDayIdx.value + 1.5)) / totalDays
-	return `0,0 100,0 ${end},100 ${start},100`
+	if (selectedDayIdx.value === null || selectedDayIdx.value < 0) return ''
+	const start = (90 * (selectedDayIdx.value + 0.5)) / totalDays
+	const end = (90 * (selectedDayIdx.value + 1.5)) / totalDays
+	return `polygon(${offset.value}% 0%,${offset.value + 90}% 0%,${end + offset.value}% 100%,${start + offset.value}% 100%)`
 })
+
+const toggleMenu = () => {
+	store.hamburgerMenuOpen = !store.hamburgerMenuOpen
+}
 </script>
 
 <template>
@@ -176,8 +192,33 @@ const funnelPoints = computed(() => {
 			:active="store.isFocused"
 			@close="exitFocus"
 		/>
+		<button
+			id="hamburger-button"
+			class="glassy color"
+			:class="{ hidden: store.isFocused || timeStore.timePanelExpanded }"
+			@click="toggleMenu"
+		>
+			<IconMenu2 size="24" aria-hidden="true" v-if="!store.hamburgerMenuOpen" />
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+		<Panel id="hamburger-menu" class="right" :active="store.hamburgerMenuOpen">
+			<EventTypeToggle
+				v-model:cold="eventStore.coldEventsOn"
+				v-model:hot="eventStore.hotEventsOn"
+				@update:cold="eventStore.coldEventsOn = $event"
+				@update:hot="eventStore.hotEventsOn = $event"
+			/>
+			<!-- <h1>Filters</h1>
+			<h1>Animation speed</h1> -->
+		</Panel>
+
 		<MapComponent id="map"></MapComponent>
-		<ModeToggle v-model="store.viewMode" id="mode-toggle" />
+		<ModeToggle
+			v-model="store.viewMode"
+			id="mode-toggle"
+			:class="{ hidden: timeStore.timePanelExpanded }"
+		/>
+		<!-- Time Panel -->
 		<Panel
 			id="time-panel"
 			:active="timeStore.timePanelVisible || eventStore.eventSelected"
@@ -206,28 +247,21 @@ const funnelPoints = computed(() => {
 				:cold="eventStore.coldEventsOn"
 				:value-extractor="eventStore.intensityForEvent"
 			></TimeReel>
-			<!-- <button
-				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
-				class="panel-hide"
-				@click="toggleTimePanelHidden"
-			>
-				<font-awesome-icon
-					:icon="!timeStore.timePanelExpanded ? faChevronUp : faAnglesUp"
-					:class="{ 'fa-rotate-180': timeStore.timePanelVisible }"
-				/>
-			</button> -->
 			<button
 				v-if="
 					timeStore.timePanelVisible &&
 					!eventStore.eventSelected &&
 					store.viewMode !== 'heatmap'
 				"
-				class="panel-expand"
+				class="panel-expand glassy color"
 				@click="toggleTimePanelExpanded"
 			>
-				<font-awesome-icon
-					:icon="!timeStore.timePanelExpanded ? faCalendarDays : faClose"
+				<IconCalendarWeek
+					v-if="!timeStore.timePanelExpanded"
+					size="20"
+					aria-hidden="true"
 				/>
+				<IconX v-else size="16" aria-hidden="true" />
 			</button>
 			<button
 				v-if="
@@ -236,14 +270,16 @@ const funnelPoints = computed(() => {
 					eventStore.selectedEvent === null
 				"
 				:draggable="false"
-				class="show-bars"
-				:class="{ active: timeStore.showBars }"
+				class="show-bars glassy"
+				:class="{ selected: timeStore.showBars }"
 				@click="timeStore.showBars = !timeStore.showBars"
 			>
 				<font-awesome-icon :icon="faBarsStaggered" />
 			</button>
 		</Panel>
 
+		<!-- Event Info Panel -->
+		<!-- This is the event information at the top center of the screen -->
 		<Panel
 			id="event-info-panel"
 			class="top"
@@ -255,249 +291,59 @@ const funnelPoints = computed(() => {
 			/>
 		</Panel>
 
-		<Panel
+		<!-- Multi-Event Panel -->
+		<!-- This is the panel on the right with rankings and histograms -->
+		<MultiEventPanel
 			id="multi-event-panel"
+			:events-of-interest="eventsOfInterest"
 			class="right"
-			:class="{ small: false && store.viewMode === 'timemachine' }"
 			:active="store.showMultiEventPanel && store.viewMode !== 'timemachine'"
-		>
-			<!-- <button
-				class="panel-toggle"
-				@click="store.showMultiEventPanel = !store.showMultiEventPanel"
-			>
-				<font-awesome-icon
-					:icon="!store.showMultiEventPanel ? faRankingStar : faClose"
-				/>
-			</button> -->
-			<div class="title-panel">
-				<h1>
-					<FontAwesomeIcon :icon="faClock" />
-					Duration
-				</h1>
-				<h1>
-					<FontAwesomeIcon :icon="faExpand" />
-					Size
-				</h1>
-				<h1>
-					<FontAwesomeIcon :icon="faTemperatureHigh" />
-					Intensity
-				</h1>
-			</div>
-			<div class="medals-subpanel subpanel">
-				<EventRanker
-					:events="eventsOfInterest"
-					:sort-func="
-						(a, b) =>
-							eventStore.durationForEvent(b) - eventStore.durationForEvent(a)
-					"
-					:topN="200"
-				/>
-				<EventRanker
-					:events="eventsOfInterest"
-					:sort-func="
-						(a, b) => eventStore.sizeForEvent(b) - eventStore.sizeForEvent(a)
-					"
-					:topN="200"
-				/>
+		/>
 
-				<EventRanker
-					:events="eventsOfInterest"
-					:sort-func="
-						(a, b) =>
-							eventStore.intensityForEvent(b) - eventStore.intensityForEvent(a)
-					"
-					:topN="200"
-				/>
-			</div>
-			<div class="histogram-subpanel subpanel">
-				<Histogram
-					:data="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-					:nbins="10"
-					:xmin="eventStore.durationRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.durationRange[1],
-									eventStore.durationForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.durationRange[1]
-					"
-					:labelFunc="(v: number) => v.toFixed(0)"
-					:units="'days'"
-					:highlight-value="
-						eventStore.selectedEvent
-							? eventStore.durationForEvent(eventStore.selectedEvent)
-							: null
-					"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-				/>
-				<Histogram
-					:data="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-					:nbins="10"
-					:xmin="eventStore.sizeRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.sizeRange[1],
-									eventStore.sizeForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.sizeRange[1]
-					"
-					:labelFunc="(v: number) => (v / 1000).toFixed(1) + 'k'"
-					:units="'m²'"
-					:highlight-value="
-						eventStore.selectedEvent
-							? eventStore.sizeForEvent(eventStore.selectedEvent)
-							: null
-					"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-				/>
-				<Histogram
-					:data="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-					:nbins="10"
-					:xmin="eventStore.intensityRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.intensityRange[1],
-									eventStore.intensityForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.intensityRange[1]
-					"
-					:labelFunc="(v: number) => v.toFixed(0)"
-					:units="'°C'"
-					:highlight-value="
-						eventStore.selectedEvent
-							? eventStore.intensityForEvent(eventStore.selectedEvent)
-							: null
-					"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-				/>
-			</div>
-			<div class="scatter-subpanel subpanel">
-				<ScatterPlot
-					:xdata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-					:ydata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-					:xmin="eventStore.durationRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.durationRange[1],
-									eventStore.durationForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.durationRange[1]
-					"
-					:ymin="eventStore.intensityRange[0]"
-					:ymax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.intensityRange[1],
-									eventStore.intensityForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.intensityRange[1]
-					"
-					:ids="eventsOfInterest.map((e) => e.id)"
-					:highlightId="eventStore.selectedEventId"
-				/>
-				<ScatterPlot
-					:xdata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-					:ydata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-					:xmin="eventStore.sizeRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.sizeRange[1],
-									eventStore.sizeForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.sizeRange[1]
-					"
-					:ymin="eventStore.durationRange[0]"
-					:ymax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.durationRange[1],
-									eventStore.durationForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.durationRange[1]
-					"
-					:ids="eventsOfInterest.map((e) => e.id)"
-					:highlightId="eventStore.selectedEventId"
-				/>
-				<ScatterPlot
-					:xdata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-					:ydata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-					:xmin="eventStore.intensityRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.intensityRange[1],
-									eventStore.intensityForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.intensityRange[1]
-					"
-					:ymin="eventStore.sizeRange[0]"
-					:ymax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.sizeRange[1],
-									eventStore.sizeForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.sizeRange[1]
-					"
-					:ids="eventsOfInterest.map((e) => e.id)"
-					:highlightId="eventStore.selectedEventId"
-				/>
-			</div>
-		</Panel>
-
+		<!-- Event Panel -->
+		<!-- This is the panel on the left with event timeseries etc. -->
 		<Panel
 			id="event-panel"
 			class="left"
 			:class="{ small: store.viewMode === 'heatmap' }"
 			:active="store.viewMode === 'timemachine' && eventStore.eventSelected"
 		>
-			<Histogram
-				v-if="eventStore.selectedEvent"
-				:data="
-					eventStore.intensitiesForEventStep(
-						eventStore.selectedEvent,
-						timeStore.selectedTime,
-					)
-				"
-				:nbins="10"
-				:xmin="0"
-				:xmax="eventStore.intensityRange[1]"
-				:labelFunc="(v: number) => v.toFixed(1)"
-				:units="'°C'"
-				:types="
-					eventStore
-						.intensitiesForEventStep(
+			<div class="subpanel histo" :style="`margin-left: ${offset}%`">
+				<Histogram
+					v-if="eventStore.selectedEvent"
+					:data="
+						eventStore.intensitiesForEventStep(
 							eventStore.selectedEvent,
 							timeStore.selectedTime,
 						)
-						.map(() => eventStore.selectedEvent?.event_type || 'hot')
-				"
-			/>
-			<svg
-				width="100%"
-				class="funnel"
-				viewBox="0 0 100 100"
-				preserveAspectRatio="none"
-			>
-				<polygon
-					:points="funnelPoints"
-					:style="`fill: ${eventStore.selectedEvent ? eventStore.colorForEvent(eventStore.selectedEvent) : 'red'}; stroke: none; opacity: ${selectedDayIdx! % 2 ? 0.05 : 0.075};`"
+					"
+					:nbins="10"
+					:xmin="0"
+					:xmax="eventStore.intensityRange[1]"
+					:labelFunc="(v: number) => v.toFixed(1)"
+					:units="'°C'"
+					:types="
+						eventStore
+							.intensitiesForEventStep(
+								eventStore.selectedEvent,
+								timeStore.selectedTime,
+							)
+							.map(() => eventStore.selectedEvent?.event_type || 'hot')
+					"
+					variable="intensity"
 				/>
-			</svg>
-			<EventGraphs
-				:selected-event="eventStore.selectedEvent"
-				:event-store="eventStore"
-			/>
+			</div>
+			<div class="funnel" :style="`clip-path: ${funnelPoints};`" />
+			<div class="subpanel">
+				<EventGraphs
+					:selected-event="eventStore.selectedEvent"
+					:event-store="eventStore"
+				/>
+			</div>
 		</Panel>
 
+		<!-- Event Window -->
+		<!-- This is the invisible div that defines where the map should zoom to -->
 		<div
 			id="event-window"
 			:class="{
@@ -512,8 +358,6 @@ const funnelPoints = computed(() => {
 <style lang="scss" scoped>
 @use '@/assets/styles/scssVars.module.scss' as *;
 
-$smallTimePanelHeight: max(6rem, 20%);
-
 .main {
 	display: flex;
 	flex-direction: column;
@@ -524,10 +368,64 @@ $smallTimePanelHeight: max(6rem, 20%);
 	max-height: 100vh;
 	position: relative;
 
+	#hamburger-button {
+		position: absolute;
+		top: 0.5rem;
+		right: 1rem;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 300;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+
+		&.hidden {
+			transform: translateX(150%);
+		}
+	}
+
+	#hamburger-menu {
+		background-color: var(--panel-bg);
+		backdrop-filter: $frosty;
+		top: 2 * $panelMargin;
+		right: 2 * $panelMargin;
+		padding: 1rem;
+	}
+
 	.focus-frame {
 		overflow: hidden;
 		transition: all $settleTime ease-in-out;
 		z-index: 200;
+		position: absolute;
+	}
+
+	.panel {
+		border-radius: $borderRadius;
+		background-color: var(--panel-bg);
+		backdrop-filter: $frosty;
+		box-shadow: var(--shadow-md);
+	}
+	#event-panel {
+		border-radius: 0;
+		background-color: transparent;
+		backdrop-filter: none;
+		box-shadow: none;
+		.subpanel {
+			border-radius: $borderRadius;
+			backdrop-filter: $frosty;
+			box-shadow: var(--shadow-md);
+
+			&.histo {
+				background-color: var(--panel-bg-alt);
+				border-bottom-left-radius: $borderRadius;
+				border-bottom-right-radius: $borderRadius;
+			}
+
+			:deep(svg.graph-container) {
+				border-top-left-radius: $borderRadius;
+				border-top-right-radius: $borderRadius;
+			}
+		}
 	}
 
 	#buttons-debug {
@@ -542,26 +440,26 @@ $smallTimePanelHeight: max(6rem, 20%);
 	}
 	#mode-toggle {
 		position: absolute;
-		bottom: 0;
+		top: 0;
 		left: 50%;
 		z-index: 250;
-		transform: translateX(-50%);
-		// border-bottom-right-radius: 0;
-		// border-bottom-left-radius: 0;
-		// padding: 0 3rem;
+		transform: translateX(-50%) translateY(-1rem);
+		transition: transform $transition;
+		&.hidden {
+			transform: translateX(-50%) translateY(-150%);
+		}
 	}
 	#time-panel {
-		box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;
 		width: calc(100% - 2 * $panelMargin);
 		right: $panelMargin;
 		bottom: $panelMargin;
 		height: 40%;
 		z-index: 20;
-		transition: all $animTime ease-in-out;
-		background-color: rgba(255,0,0,0.2);
+		transition: all $transition;
+		border-radius: $borderRadius;
 
 		&.expanded {
-			height: calc(100% - 4 * $panelMargin);
+			height: calc(100% - 2 * $panelMargin);
 		}
 
 		&.event {
@@ -574,10 +472,9 @@ $smallTimePanelHeight: max(6rem, 20%);
 			border-bottom-left-radius: 0;
 		}
 
-		transition: height 0 linear;
 		&.heatmap {
 			height: $smallTimePanelHeight;
-			transition: height $animTime linear;
+			transition: height $transition;
 		}
 
 		#times {
@@ -589,24 +486,51 @@ $smallTimePanelHeight: max(6rem, 20%);
 			align-items: center;
 			justify-content: center;
 			border: none;
+			border-radius: $borderRadius;
 		}
 		.show-bars,
-		.panel-expand,
-		.panel-hide {
+		.panel-expand {
 			padding: 0.5rem;
 			position: absolute;
 			right: 0;
-			top: -0.5rem;
+			top: 0;
 			z-index: 20;
-			border: none;
-			background-color: transparent;
-			color: $textColor;
+			width: 2.5rem;
+			height: 2.5rem;
+			border-radius: 0;
+
+			// box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+			// color: var(--primary);
+
 			&:hover {
-				color: $c3sred;
+				// background-color: transparent;
+				// backdrop-filter: none;
+				// box-shadow: none;
+				// color: var(--text-on-primary);
+			}
+			&.selected,
+			&:active {
+				// transform: scale(0.95);
+				// background-color: var(--primary-active);
 			}
 		}
+		.show-bars {
+			border-bottom-right-radius: $borderRadius;
+			border-top-left-radius: $borderRadius;
+		}
 		.panel-expand {
-			// right: 1.2rem;
+			border-top-right-radius: $borderRadius;
+			border-bottom-left-radius: $borderRadius;
+			// background-color: var(--primary-glass);
+		}
+		&.expanded {
+			.panel-expand {
+				// right: -$panelMargin;
+				// top: -$panelMargin;
+				width: 2rem;
+				height: 2rem;
+				padding: 0.25rem;
+			}
 		}
 		.panel-sideline {
 			position: absolute;
@@ -617,20 +541,9 @@ $smallTimePanelHeight: max(6rem, 20%);
 			right: unset;
 			left: 0;
 
-			top: -0.5rem;
 			z-index: 20;
-
-			&.active {
-				color: $c3sred;
-				filter: drop-shadow(0 0 2px rgb(255, 255, 255))
-					drop-shadow(0 0 5px rgb(255, 255, 255));
-			}
 		}
 	}
-
-	$eventPanelWidth: min(400px, 33%);
-	$multiEventPanelWidth: 40%;
-	$smallMultiScale: 0.6;
 
 	#event-window {
 		position: absolute;
@@ -639,9 +552,9 @@ $smallTimePanelHeight: max(6rem, 20%);
 		width: calc(100% - 2 * $panelMargin);
 		height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 		pointer-events: none;
-		// background-color: rgba(34, 150, 200, 0.5);
-		// border: 1px solid orange;
 		z-index: 10000;
+
+		// background-color: rgba(0,255,0,0.1);
 
 		&.eventPanelOn {
 			left: calc($panelMargin + $eventPanelWidth);
@@ -657,127 +570,68 @@ $smallTimePanelHeight: max(6rem, 20%);
 	}
 
 	#multi-event-panel {
-		display: flex;
-		flex-direction: column;
-		// gap: 0.5rem;
 		width: calc($multiEventPanelWidth - $panelMargin);
-		height: calc(100% - 3 * $panelMargin - $smallTimePanelHeight);
+		height: calc(100% - 8 * $panelMargin - $smallTimePanelHeight);
 		right: $panelMargin;
-		bottom: calc(1 * $panelMargin + $smallTimePanelHeight);
+		bottom: calc($panelMargin + $smallTimePanelHeight);
+		background-color: var(--panel-bg);
+		backdrop-filter: $frosty;
+		overflow: visible;
 
-		&.small {
-			transform: scale($smallMultiScale) translateX(120%);
-			transform-origin: bottom right;
+		// &.small {
+		// 	transform: scale($smallMultiScale) translateX(120%);
+		// 	transform-origin: bottom right;
 
-			&.active {
-				transform: scale($smallMultiScale);
-			}
-		}
-
-		.panel-toggle {
-			position: absolute;
-			top: 50%;
-			left: -2.5rem;
-			padding: 1rem;
-			border: none;
-			border-top-right-radius: 0;
-			border-bottom-right-radius: 0;
-			border-top-left-radius: 100%;
-			border-bottom-left-radius: 100%;
-			// padding-left: 1rem;
-			// background-color: transparent;
-			color: $textColor;
-			z-index: -100;
-			&:hover {
-				color: $c3sred;
-			}
-
-			svg {
-				margin-left: -0.5rem;
-			}
-		}
-
-		.title-panel {
-			display: flex;
-			justify-content: space-around;
-			justify-content: space-between;
-			width: 100%;
-			h1 {
-				// position: absolute;
-				// top: -1.75rem;
-				// left: 0;
-				flex: 1 1 100%;
-				margin: 0;
-				padding: 0.5rem 0;
-				background-color: transparent;
-				font-size: 0.9rem;
-				text-align: center;
-				z-index: 10;
-			}
-		}
-
-		.subpanel {
-			flex: 1 1 100%;
-			height: 33%;
-			width: 100%;
-			display: flex;
-			flex-direction: row;
-			// gap: 0.5rem;
-			border: 0.5px solid $c3sred;
-			// margin-bottom: 0.5rem;
-		}
-
-		.medals-subpanel {
-			.event-ranker {
-				flex: 1 1 33%;
-				height: 100%;
-			}
-		}
-
-		.histogram-subpanel {
-		}
-
-		.scatter-subpanel {
-		}
+		// 	&.active {
+		// 		transform: scale($smallMultiScale);
+		// 	}
+		// }
 	}
 
 	#event-panel {
 		width: $eventPanelWidth;
 		left: $panelMargin;
 		height: calc(80% - $smallTimePanelHeight - 2 * $panelMargin);
-		bottom: calc($panelMargin + $smallTimePanelHeight);
+		bottom: calc(1 * $panelMargin + $smallTimePanelHeight);
 		display: flex;
 		flex-direction: column;
+		justify-content: flex-start;
+		align-items: flex-start;
 
-		.histogram-root {
+		.subpanel {
 			flex: 1 1 50%;
+			width: 100%;
+
+			&.histo {
+				width: 90%;
+				box-shadow: var(--shadow-md);
+			}
 		}
 
 		.funnel {
-			flex: 0 0 50px;
-		}
-
-		svg.graph-container {
-			width: 100% !important;
-			flex: 1 1 50%;
+			flex: 0 0 2 * $panelMargin;
+			width: 100%;
+			pointer-events: none;
+			background-color: var(--panel-bg);
+			backdrop-filter: $frosty;
 		}
 	}
 
 	#event-info-panel {
 		// display: none;
-		box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;
-		// width: calc(20% - 2 * $panelMargin);
+		box-shadow: var(--shadow-md);
+		background-color: var(--panel-solid);
 		right: 50%;
-		transform: translate(50%, -110%);
+		transform: translate(50%, 120%);
 		// bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
-		top: 0;
+		bottom: 0;
 		height: auto;
 		z-index: 250;
-		transition: all $animTime ease-in-out;
-		border-top-left-radius: 0;
-		border-top-right-radius: 0;
-		border: 0.25rem solid $c3sred;
-		border-top: none;
+		transition: all $transition;
+		border-bottom-left-radius: 0;
+		border-bottom-right-radius: 0;
+		border: 0.25rem solid var(--primary);
+		border-bottom: none;
 
 		&.active {
 			transform: translate(50%, 0);

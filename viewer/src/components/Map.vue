@@ -16,11 +16,11 @@ import {
 	LPolygon,
 	LTileLayer,
 } from '@vue-leaflet/vue-leaflet'
-import { LatLngBounds, Map as LeafletMap, LeafletMouseEvent } from 'leaflet'
+import { Map as LeafletMap, LeafletMouseEvent } from 'leaflet'
 import 'leaflet-draw'
 import 'leaflet-draw/dist/leaflet.draw.css'
 import 'leaflet/dist/leaflet.css'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
@@ -37,6 +37,17 @@ import FilterPanel from './FilterPanel.vue'
 import RegionControl from './util/RegionControl.vue'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import * as d3 from 'd3'
+import L from 'leaflet'
+import {
+	getCurrentEvents,
+	setFilterToRegion,
+	setFilterToPoint,
+	getGlobalFilteredEvents,
+	getEventCount,
+	getFilteredEvents,
+	onGlobalEventsReady,
+	onCurrentEventsReady,
+} from '@/lib/eventFiltering'
 
 const store = useStore()
 const timeStore = useTimeStore()
@@ -44,22 +55,6 @@ const eventStore = useEventStore()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
 const map = computed(() => mapRef.value?.leafletObject as LeafletMap)
 const eventPixelsRef = ref<InstanceType<typeof LGridLayer> | null>(null)
-
-import L from 'leaflet'
-import ModeToggle from './util/ModeToggle.vue'
-import {
-	getCurrentEvents,
-	setFilterToRegion,
-	setFilterToPoint,
-	clearFilter,
-	getGlobalFilteredEvents,
-	getEventCount,
-	getFilteredEvents,
-	onGlobalEventsReady,
-	onRegionEventsReady,
-	onCurrentEventsReady,
-} from '@/lib/eventFiltering'
-import EventTypeToggle from './util/EventTypeToggle.vue'
 // create a single canvas renderer for the heatmap
 const heatmapRenderer = L.canvas({ padding: 0.5, pane: 'eventPane' })
 // create a single canvas renderer for the rapidly-changing filter events
@@ -421,6 +416,13 @@ const addEventPanes = () => {
 		return
 	}
 
+	const mapPane = document.querySelector('.leaflet-map-pane')
+	if (!mapPane?.querySelector('.frost-pane')) {
+		const frost = document.createElement('div')
+		frost.className = 'frost-pane'
+		mapPane!.insertBefore(frost, mapPane!.querySelector('.leaflet-marker-pane'))
+	}
+
 	// create a pane just below overlayPane
 	map.createPane('eventPane')
 	const pane = map.getPane('eventPane')!
@@ -474,7 +476,7 @@ const addEventPanes = () => {
 			ctx.fillStyle = (
 				event.event_type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
 			)
-				.replace(')', event.event_type === 'hot' ? ',0.1)' : ',0.1)')
+				.replace(')', event.event_type === 'hot' ? ',0.1)' : ',0.05)')
 				.replace('rgb', 'rgba')
 			ctx.fill()
 		}
@@ -554,7 +556,7 @@ const addEventPanes = () => {
 			v-model:zoom="zoom"
 			:center="store.mapCentre"
 			:max-zoom="12"
-			:min-zoom="1"
+			:min-zoom="2"
 			:options="mapOptions"
 			style="z-index: 1"
 			:world-copy-jump="true"
@@ -640,7 +642,7 @@ const addEventPanes = () => {
 			<LMarker
 				v-if="store.filteringByPoint && store.viewMode === 'heatmap'"
 				ref="markerRef"
-				:lat-lng="eventPointFilter || store.lastPoint || [20, 0]"
+				:lat-lng="eventPointFilter || store.lastPoint || [50.706360, 7.138647]"
 				:draggable="true"
 				:icon="markerIcon"
 				@movestart="pointSelectorMoveStarted"
@@ -650,51 +652,12 @@ const addEventPanes = () => {
 			/>
 
 			<!-- Controls -->
-			<EventTypeToggle
-				class="event-type-toggle"
-				v-model:cold="eventStore.coldEventsOn"
-				v-model:hot="eventStore.hotEventsOn"
-				@update:cold="eventStore.coldEventsOn = $event"
-				@update:hot="eventStore.hotEventsOn = $event"
-			/>
 			<LControl position="topleft" class="region-control">
-				<RegionControl v-show="store.viewMode === 'heatmap'" />
-				<button
-					class="filter-button"
-					:class="{ heatmap: store.viewMode === 'heatmap' }"
-					@click="store.filtersExpanded = !store.filtersExpanded"
-				>
-					<FontAwesomeIcon :icon="store.filtersExpanded ? faClose : faFilter" />
-				</button>
-				<FilterPanel
-					v-show="store.filtersExpanded"
-					v-model="store.filters"
-					class="filter panel"
-					:filters="[
-						{
-							key: 'duration',
-							label: 'Duration (days)',
-							type: 'range',
-							pass: 'high-pass',
-							min: 3,
-							max: eventStore.durationRange
-								? Math.min(14, eventStore.durationRange[1])
-								: 7,
-						},
-						{
-							key: 'size',
-							label: 'Size',
-							type: 'range',
-							pass: 'high-pass',
-							min: eventStore.sizeRange ? eventStore.sizeRange[0] : 1000,
-							max: eventStore.sizeRange ? eventStore.sizeRange[1] : 10000,
-						},
-						{
-							key: 'includeOceanEvents',
-							label: 'Include ocean-only events',
-							type: 'toggle',
-						},
-					]"
+				<RegionControl
+					:class="{
+						hidden:
+							store.viewMode !== 'heatmap' || eventStore.selectedEvent !== null,
+					}"
 				/>
 			</LControl>
 			<LControlScale
@@ -731,6 +694,24 @@ const addEventPanes = () => {
 		transform: translateX(-50%);
 		position: absolute;
 		z-index: 1000;
+	}
+
+	.frost-panel {
+		position: absolute;
+		top: -500vh;
+		left: -500vw;
+		width: 1100vw;
+		height: 1100vh;
+		background-color: rgba(0, 100, 200, 0.6);
+		z-index: 550;
+		pointer-events: none;
+		user-select: none;
+	}
+
+	.region-control {
+		&.hidden {
+			transform: translateY(-250%);
+		}
 	}
 
 	:deep(.leaflet-top),
@@ -798,14 +779,6 @@ const addEventPanes = () => {
 		margin-top: -2.75rem;
 	}
 
-	.filter-button {
-		color: white;
-		background-color: $c3sblue;
-		&.heatmap {
-			background-color: $c3sred;
-		}
-	}
-
 	:deep(.region-select) {
 		stroke: rgb(0.25, 0.25, 0.25);
 		stroke-width: 1px;
@@ -821,8 +794,6 @@ const addEventPanes = () => {
 	:deep(.leaflet-control-zoom),
 	:deep(.leaflet-control-zoom-out),
 	:deep(.leaflet-control-zoom-in) {
-		background-color: $bg;
-		border-color: $bgContrast;
 	}
 
 	:deep(.leaflet-tile) {
@@ -831,8 +802,17 @@ const addEventPanes = () => {
 	}
 
 	&.focussed {
-		:deep(.leaflet-marker-pane canvas) {
-			background-color: rgba(255, 255, 255, 0.5);
+		:deep(.frost-pane) {
+			background-color: rgba(0, 0, 0, 0.5);
+			backdrop-filter: blur(4px);
+
+			pointer-events: none;
+			position: fixed;
+			top: -500vh;
+			left: -500vh;
+			width: 1100vw;
+			height: 1100vh;
+			z-index: 450;
 		}
 	}
 }

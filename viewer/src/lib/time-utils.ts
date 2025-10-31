@@ -27,23 +27,11 @@ export const monthsForYear = (
 	return months.map((month, i) => {
 		const monthStartX = startX
 		startX += month.length
-		const color = alternateYears
-			? year % 2 === 0
-				? i % 2 === 0
-					? 'rgba(0, 0, 0, 0.0)'
-					: 'rgba(0, 0, 0, 0.05)'
-				: i % 2 === 0
-					? 'rgba(0, 0, 0, 0.05)'
-					: 'rgba(0, 0, 0, 0.0)'
-			: i % 2 === 0
-				? 'rgba(0, 0, 0, 0.05)'
-				: 'rgba(0, 0, 0, 0.0)'
 
 		return {
 			name: month.name,
 			startX: monthStartX,
 			length: month.length,
-			color,
 		}
 	})
 }

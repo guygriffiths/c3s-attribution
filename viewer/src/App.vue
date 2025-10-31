@@ -53,6 +53,7 @@ onMounted(() => {
 		height: 100vh;
 		position: absolute;
 		margin: auto;
+		backdrop-filter: $frosty;
 	}
 
 	#header {

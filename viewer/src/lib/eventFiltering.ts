@@ -65,7 +65,6 @@ pixelWorker.onmessage = (e: MessageEvent<Record<number, number[]>>) => {
 	for (const cb of indexBuiltTriggers) {
 		cb()
 	}
-	console.log('Event filters built')
 }
 
 const dateWorker = new DateWorker()
@@ -81,7 +80,6 @@ dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
 	for (const cb of currentEventTriggers) {
 		cb()
 	}
-	console.log('Date filters built')
 }
 
 /**
