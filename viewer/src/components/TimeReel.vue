@@ -52,8 +52,10 @@ const props = defineProps({
 		default: 'default',
 	},
 	showBars: { type: Boolean, default: true },
-	hot: { type: Boolean, default: true },
-	cold: { type: Boolean, default: true },
+	eventType: {
+		type: String as PropType<'hotcold' | 'hot' | 'cold'>,
+		default: 'hotcold',
+	},
 	colorForEvent: {
 		type: Function as PropType<(event: ExtremeEvent) => string | null>,
 		default: (event: ExtremeEvent) => event.color || null,
@@ -444,7 +446,7 @@ const needleOffset = computed(() => {
 
 const eventBoxesForYear = ref<Record<number, EventBox[]>>({})
 const positionY = (y: number, eventType: 'hot' | 'cold') => {
-	if (props.hot && props.cold) {
+	if (props.eventType === 'hotcold') {
 		return (0.5 + y) * 0.5 * eventHeight.value * (eventType === 'hot' ? -1 : 1)
 	} else {
 		if (y % 2 !== 0) {
@@ -457,7 +459,7 @@ const positionY = (y: number, eventType: 'hot' | 'cold') => {
 
 onMounted(() => {
 	for (let year of years.value) {
-		const res = getEventBoxes(props.events, year, props.hot && props.cold)
+		const res = getEventBoxes(props.events, year, props.eventType === 'hotcold')
 		eventBoxesForYear.value[year] = res.events
 	}
 	const handleKey = (e: KeyboardEvent) => {
@@ -519,26 +521,27 @@ const highlightRowHeight = computed(() =>
 
 const getAreaString = () => {
 	console.log('calculating area string for events')
-	const data: Array<{ x: number; y0: number; y1: number }> = props.hot
-		? props.cold
+	const data: Array<{ x: number; y0: number; y1: number }> =
+		props.eventType === 'hotcold'
 			? // Hot and cold events
 				hwDayCounts.value.map((d, i) => ({
 					x: i,
 					y0: cwDayCounts.value[i],
 					y1: d,
 				}))
-			: // Hot events only
-				hwDayCounts.value.map((d, i) => ({
-					x: i,
-					y0: d,
-					y1: d,
-				}))
-		: // Cold events only
-			cwDayCounts.value.map((d, i) => ({
-				x: i,
-				y0: d,
-				y1: d,
-			}))
+			: props.eventType === 'hot'
+				? // Hot events only
+					hwDayCounts.value.map((d, i) => ({
+						x: i,
+						y0: d,
+						y1: d,
+					}))
+				: // Cold events only
+					cwDayCounts.value.map((d, i) => ({
+						x: i,
+						y0: d,
+						y1: d,
+					}))
 
 	const yScale = computed(() => {
 		return d3
@@ -599,7 +602,11 @@ watch(
 	() => {
 		console.log('events changed, recalculating day counts and boxes')
 		for (let year of years.value) {
-			const res = getEventBoxes(props.events, year, props.hot && props.cold)
+			const res = getEventBoxes(
+				props.events,
+				year,
+				props.eventType === 'hotcold',
+			)
 			eventBoxesForYear.value[year] = res.events
 		}
 
@@ -764,11 +771,16 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			}"
 		>
 			<div class="buttons">
-				<button class="glassy color" @click="startOfYear" :title="$l.startOfYear">
+				<button
+					class="glassy color"
+					@click="startOfYear"
+					:title="$l.startOfYear"
+				>
 					<span class="sr-only">{{ $l.startOfYear }}</span>
 					<font-awesome-icon :icon="faFastBackward" />
 				</button>
-				<button class="glassy color"
+				<button
+					class="glassy color"
 					@click.stop="prevDay"
 					:disabled="selectedYear <= startYear && selectedDay <= 1"
 					:title="$l.prevDay"
@@ -776,7 +788,8 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					<span class="sr-only">{{ $l.prevDay }}</span>
 					<font-awesome-icon :icon="faBackwardStep" />
 				</button>
-				<button class="glassy color"
+				<button
+					class="glassy color"
 					@click="togglePlay"
 					:title="$l.play"
 					:disabled="
@@ -791,7 +804,8 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					<span class="sr-only">{{ $l.play }}</span>
 					<font-awesome-icon :icon="playing ? faPause : faPlay" />
 				</button>
-				<button class="glassy color"
+				<button
+					class="glassy color"
 					@click="nextDay"
 					:disabled="selectedYear >= endYear && selectedDay >= 365"
 					:title="$l.nextDay"
@@ -936,7 +950,14 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 								<path
 									:id="`events-line-${year}`"
 									class="event-line"
-									:class="{ hot: props.hot, cold: props.cold }"
+									:class="{
+										hot:
+											props.eventType === 'hot' ||
+											props.eventType === 'hotcold',
+										cold:
+											props.eventType === 'cold' ||
+											props.eventType === 'hotcold',
+									}"
 									d=""
 									vector-effect="non-scaling-stroke"
 									:stroke-width="3"
@@ -963,7 +984,9 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 										:width="box.endX - box.startX + 1"
 										:y="positionY(box.y, box.event.event_type)"
 										:height="
-											props.hot && props.cold ? 0.5 * eventHeight : eventHeight
+											props.eventType === 'hotcold'
+												? 0.5 * eventHeight
+												: eventHeight
 										"
 										:key="box.event.id"
 										vector-effect="non-scaling-stroke"
@@ -994,10 +1017,10 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 										:y="positionY(box.y, box.event.event_type)"
 										:height="
 											isZoom
-												? props.hot && props.cold
+												? props.eventType === 'hotcold'
 													? 0.75 * eventHeight
 													: 1.5 * eventHeight
-												: props.hot && props.cold
+												: props.eventType === 'hotcold'
 													? 0.5 * eventHeight
 													: eventHeight
 										"
@@ -1137,7 +1160,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 		transition: all $transition;
 		&.zoom {
 			left: 17%;
-			top: 85%;
+			top: calc(100% - 1.75rem);
 			// top: auto;
 		}
 
@@ -1148,12 +1171,10 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			justify-content: center;
 			gap: 0;
 			button {
-				width: 2.5rem;
+				width: 2.75rem;
 				border-radius: 0;
-				border-left: 0.5px solid var(--primary-active);
-				border-right: 0.5px solid var(--primary-active);
 				margin: 0;
-				height: 1.5rem;
+				height: 1.75rem;
 				display: flex;
 				align-items: center;
 				font-size: 0.85rem;
@@ -1475,7 +1496,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 
 	.events-svg {
 		background-color: transparent;
-		
+
 		.year-group {
 			transition: all $transition;
 			background-color: transparent;

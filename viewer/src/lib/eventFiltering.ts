@@ -86,19 +86,31 @@ dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
  * Initialise global store
  */
 export function buildEventFilters(events: ExtremeEvent[]) {
+	const year = events[0]?.times[0]?.getUTCFullYear()
+	console.time(`buildEventFilters ${year}`)
 	pixelIndexReady = false
-
+	dateIndexReady = false
 	const startI = _events.length
+	console.time(`saveEvents ${year}`)
 	_events.push(...events)
+	console.timeEnd(`saveEvents ${year}`)
+
+	console.time(`saveFiltered ${year}`)
 	_filteredEvents = _events
+	console.timeEnd(`saveFiltered ${year}`)
+	console.time(`saveFilteredIds ${year}`)
 	_filteredIds = new Set(_events.map((e) => e.id))
+	console.timeEnd(`saveFilteredIds ${year}`)
 	globalEventsReady = true
 
-	pixelIndexReady = false
+	console.time(`kickoffPixelWorker ${year}`)
 	pixelWorker.postMessage({ events, startI })
+	console.timeEnd(`kickoffPixelWorker ${year}`)
 
-	dateIndexReady = false
+	console.time(`kickoffDateWorker ${year}`)
 	dateWorker.postMessage({ events, startI })
+	console.timeEnd(`kickoffDateWorker ${year}`)
+	console.timeEnd(`buildEventFilters ${year}`)
 }
 
 export function manualGlobalTrigger() {

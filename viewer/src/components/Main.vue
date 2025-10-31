@@ -124,13 +124,13 @@ watch(
 )
 
 watch(
-	() => [eventStore.coldEventsOn, eventStore.hotEventsOn],
+	() => [eventStore.eventTypeMode],
 	() => {
-		if (eventStore.coldEventsOn && eventStore.hotEventsOn) {
+		if (eventStore.eventTypeMode === 'hotcold') {
 			setHotColdBoth()
-		} else if (eventStore.coldEventsOn) {
+		} else if (eventStore.eventTypeMode === 'cold') {
 			setColdOnly()
-		} else if (eventStore.hotEventsOn) {
+		} else if (eventStore.eventTypeMode === 'hot') {
 			setHotOnly()
 		} else {
 			// none selected, default to both
@@ -203,10 +203,7 @@ const toggleMenu = () => {
 		</button>
 		<Panel id="hamburger-menu" class="right" :active="store.hamburgerMenuOpen">
 			<EventTypeToggle
-				v-model:cold="eventStore.coldEventsOn"
-				v-model:hot="eventStore.hotEventsOn"
-				@update:cold="eventStore.coldEventsOn = $event"
-				@update:hot="eventStore.hotEventsOn = $event"
+				v-model="eventStore.eventTypeMode"
 			/>
 			<!-- <h1>Filters</h1>
 			<h1>Animation speed</h1> -->
@@ -243,8 +240,7 @@ const toggleMenu = () => {
 				:show-bars="timeStore.showBars"
 				:color-for-event="eventStore.colorForEvent"
 				:class="mode"
-				:hot="eventStore.hotEventsOn"
-				:cold="eventStore.coldEventsOn"
+				:eventType="eventStore.eventTypeMode"
 				:value-extractor="eventStore.intensityForEvent"
 			></TimeReel>
 			<button

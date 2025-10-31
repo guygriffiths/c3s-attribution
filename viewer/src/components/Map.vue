@@ -26,14 +26,12 @@ import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
 	centreMapOnDiv,
 	fitBoundsToDiv,
-	markerIconHot, markerIconCold,
+	markerIconHot,
+	markerIconCold,
 	getEventRegion,
 } from '@/lib/map-utils'
 import { drawEventTile, TILE_SIZE } from '@/lib/renderer'
-import { faClose, faFilter } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { Feature, MultiPolygon, Polygon } from 'geojson'
-import FilterPanel from './FilterPanel.vue'
 import RegionControl from './util/RegionControl.vue'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import * as d3 from 'd3'
@@ -260,7 +258,7 @@ watch(
 
 // If we change what kind of events are being shown, update the heatmap and filtered events
 watch(
-	() => [eventStore.coldEventsOn, eventStore.hotEventsOn],
+	() => [eventStore.eventTypeMode],
 	() => {
 		globalHeatmapEvents.value = getGlobalFilteredEvents()
 		currentEvents.value = getCurrentEvents(timeStore.selectedTime)
@@ -591,15 +589,13 @@ const addEventPanes = () => {
 				v-for="event in currentEvents"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event, timeStore.selectedTime)"
-				:weight="event.id === eventStore.selectedEventId ? 2 : 1"
+				:weight="event.id === eventStore.selectedEventId ? 4 : 2"
 				:fill="true"
 				:fill-opacity="event.id === eventStore.selectedEventId ? 0.0 : 0.5"
 				:color="
 					event.id === eventStore.selectedEventId
 						? scssVars.lightbulb
-						: event.event_type == 'hot'
-							? scssVars.c3sred
-							: scssVars.c3sblue
+						: eventStore.colorForEvent(event)
 				"
 				:fill-color="eventStore.colorForEvent(event)"
 				@click="eventStore.selectEvent(event.id)"
@@ -642,9 +638,13 @@ const addEventPanes = () => {
 			<LMarker
 				v-if="store.filteringByPoint && store.viewMode === 'heatmap'"
 				ref="markerRef"
-				:lat-lng="eventPointFilter || store.lastPoint || [50.706360, 7.138647]"
+				:lat-lng="eventPointFilter || store.lastPoint || [50.70636, 7.138647]"
 				:draggable="true"
-				:icon="(eventStore.coldEventsOn ? markerIconCold : markerIconHot) as any"
+				:icon="
+					(eventStore.eventTypeMode === 'cold'
+						? markerIconCold
+						: markerIconHot) as any
+				"
 				@movestart="pointSelectorMoveStarted"
 				@move="updatePointSelector"
 				@moveend="pointSelectorSettled"
@@ -667,12 +667,6 @@ const addEventPanes = () => {
 				position="bottomright"
 				class="map-scale"
 			></LControlScale>
-			<LControl position="bottomleft" class="panel debug" style="z-index: 5000"
-				><div class="panel debug">
-					{{ regionFilteredEvents.length }}
-				</div></LControl
-			>
-			<!-- <LControlZoom :class="{ shifted: eventStore.eventSelected }"></LControlZoom> -->
 		</LMap>
 	</div>
 </template>
@@ -683,6 +677,18 @@ const addEventPanes = () => {
 .map {
 	width: 100%;
 	height: 100%;
+
+	// This matches the default map theme, so that it's white at the bottom
+	// to jut up against antarctica, grey at the top for arctic ocean
+	.leaflet-container {
+		background: linear-gradient(
+			to top,
+			rgb(249, 249, 249),
+			rgb(249, 249, 249) 49%,
+			rgb(195, 200, 202) 51%,
+			rgb(195, 200, 202)
+		);
+	}
 
 	.the-toggle {
 		margin: $panelMargin;

@@ -2,7 +2,7 @@ import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
 	buildEventFilters,
 	manualGlobalTrigger,
-	setPostFilters,
+	setPostFilters
 } from '@/lib/eventFiltering'
 import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
 import * as d3 from 'd3'
@@ -29,8 +29,8 @@ interface State {
 	durationRange: [number, number]
 	heatIntensityRange: [number, number]
 	coldIntensityRange: [number, number]
-	hotEventsOn: boolean
-	coldEventsOn: boolean
+
+	eventTypeMode: 'hot' | 'cold' | 'hotcold'
 	sizeRange: [number, number]
 
 	eventSetsLoaded: number
@@ -82,25 +82,21 @@ export const useStore = defineStore('events', {
 			durationRange: [3, 14],
 			heatIntensityRange: [0, 0],
 			coldIntensityRange: [0, 0],
-			hotEventsOn: true,
-			coldEventsOn: false,
+			eventTypeMode: 'hot',
 			sizeRange: [0, 100],
 			eventSetsLoaded: 0,
 		}
 	},
 	getters: {
-		dualMode: (state: State) => {
-			return state.hotEventsOn && state.coldEventsOn
-		},
 		intensityRange: (state: State) => {
-			if (state.hotEventsOn && state.coldEventsOn) {
+			if (state.eventTypeMode === 'hotcold') {
 				return [
 					Math.min(state.coldIntensityRange[0], state.heatIntensityRange[0]),
 					Math.max(state.coldIntensityRange[1], state.heatIntensityRange[1]),
 				]
-			} else if (state.hotEventsOn) {
+			} else if (state.eventTypeMode === 'hot') {
 				return state.heatIntensityRange
-			} else if (state.coldEventsOn) {
+			} else if (state.eventTypeMode === 'cold') {
 				return state.coldIntensityRange
 			} else {
 				return [0, 1]
@@ -246,6 +242,7 @@ export const useStore = defineStore('events', {
 			mainStore.setLoadingDone()
 		},
 		async addEvents(data: ExtremeEvent[]) {
+			const mainStore = useMainStore()
 			// console.log(
 			// 	'Setting events, count:',
 			// 	data.length,
@@ -305,8 +302,13 @@ export const useStore = defineStore('events', {
 
 			this.sizeRange = [0, Math.max(sizes[sizes.length - 1], this.sizeRange[1])]
 
+			console.time('ES:buildEventFilters')
 			buildEventFilters(data) // Kick off building the pixel index
+			console.timeEnd('ES:buildEventFilters')
 			this.eventSetsLoaded += 1
+			if(this.eventSetsLoaded === 1) {
+				mainStore.setLoadingDone()
+			}
 			if (
 				this.eventSetsLoaded <= 3 ||
 				this.eventSetsLoaded === 5 ||

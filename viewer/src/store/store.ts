@@ -53,7 +53,7 @@ export const useStore = defineStore('main', {
 			lang: 'en',
 			loadingCount: 0,
 			viewMode: 'timemachine', // 'timemachine' or 'heatmap'
-			mapCentre: new LatLng(0, 0) as unknown as Point, // Default center point for the map
+			mapCentre: new LatLng(-20, 0) as unknown as Point, // Default center point for the map
 			mapPeephole: null, // This will be set to the map container element when the map is initialized
 
 			layerDetails: null,
@@ -163,67 +163,111 @@ export const useStore = defineStore('main', {
 				})
 			}
 
-			this.setLoadingDone()
 			const timeStore = useTimeStore()
 			// TODO Unhard-code this
 			const from = 1979
 			const to = 2024
 			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
 			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
-			for (let year = to; year >= from; year--) {
-				const respH = await fetch(`${DATA_ROOT}events-hot-${year}.jsonl`)
-				try {
-					if (!respH.ok) {
-						throw new Error('Network response was not ok')
-					}
-					const textH = await respH.text()
-					const linesH = textH.trim().split('\n')
-					const objectsH = linesH.map((line) => JSON.parse(line))
 
+			const processYear = (year: number, objectsH: any, objectsC: any) => {
+				console.log('processing year', year)
+				const allEvents = [] as ExtremeEvent[]
+				try {
 					massageData(objectsH, 'hot')
-					eventStore.addEvents(objectsH as ExtremeEvent[])
+					allEvents.push(...objectsH)
 				} catch (e) {
 					console.error('Error processing hot events:', e)
 				}
 
-				const respC = await fetch(`${DATA_ROOT}events-cold-${year}.jsonl`)
+				console.time(`Fetched cold events for year ${year}`)
+				console.timeEnd(`Fetched cold events for year ${year}`)
 				try {
-					if (!respC.ok) {
-						throw new Error('Network response was not ok')
-					}
-					const textC = await respC.text()
-					const linesC = textC.trim().split('\n')
-					const objectsC = linesC.map((line) => JSON.parse(line))
-
 					massageData(objectsC, 'cold')
-					eventStore.addEvents(objectsC as ExtremeEvent[])
+					allEvents.push(...objectsC)
 				} catch (e) {
 					// console.error('Error processing cold events:', e)
 				}
+				console.time(`Processed events for year ${year}`)
+				eventStore.addEvents(allEvents)
+				console.timeEnd(`Processed events for year ${year}`)
 			}
+
+			const fetchData = async (year: number) => {
+				const [hot, cold] = await Promise.all([
+					fetch(`${DATA_ROOT}events-hot-${year}.jsonl`)
+						.then((r) => r.text())
+						// @ts-ignore
+						.then((t) => t.trim().split('\n').map(JSON.parse))
+						.catch((e) => {
+							console.error('Error fetching hot', year, e)
+							return []
+						}),
+						fetch(`${DATA_ROOT}events-cold-${year}.jsonl`)
+						.then((r) => r.text())
+						// @ts-ignore
+						.then((t) => t.trim().split('\n').map(JSON.parse))
+						.catch((e) => {
+							console.error('Error fetching cold', year, e)
+							return []
+						}),
+				])
+				return { year, data: [hot, cold] }
+			}
+			// async function* fetchAndYield(years: number[]) {
+			// 	const fetches = years.map(fetchData)
+
+			// 	// yield as they complete
+			// 	const pending = new Set(fetches)
+
+			// 	while (pending.size) {
+			// 		// Wait for the first one to finish
+			// 		const res = await Promise.race(pending)
+			// 		// Find the promise that resolved to res
+			// 		for (const p of pending) {
+			// 			p.then((val) => {
+			// 				if (val === res) pending.delete(p)
+			// 			})
+			// 		}
+			// 		yield res
+			// 	}
+			// }
+
+			const latestData = await fetchData(to)
+			processYear(to, latestData.data[0], latestData.data[1])
 			manualGlobalTrigger()
 
-			// const respC = await fetch(`${DATA_ROOT}events-cw.jsonl`)
-			// if (!respC.ok) {
-			// 	throw new Error('Network response was not ok')
-			// }
-			// try {
-			// 	const textC = await respC.text()
-			// 	const linesC = textC.trim().split('\n')
-			// 	const objectsC = linesC.map((line) => JSON.parse(line))
-			// 	massageData(objectsC, 'cold')
-			// 	data.push(...objectsC)
+			// Consumer with controlled processing
+			const years = Array.from(
+				{ length: to - from },
+				(_, i) => from + i,
+			).reverse()
+			console.log('Starting fetch loop')
+			for (const year of years) {
+				const { data } = await fetchData(year)
+				console.log(`Got data for year ${year}`, data)
+				console.log('About to process year', year)
+				processYear(year, data[0], data[1])
+				console.log('Finished processing year', year)
+				// @ts-ignore
+				await (scheduler?.yield?.() ?? new Promise((r) => setTimeout(r, 0)))
+			}
+			console.log('Finished all years')
 
-			// 	const timeStore = useTimeStore()
-			// 	timeStore.startTime = new Date(
-			// 		Date.UTC(firstEventTime.getUTCFullYear(), 0, 1),
-			// 	)
-			// 	timeStore.endTime = new Date(
-			// 		Date.UTC(lastEventTime.getUTCFullYear(), 11, 31),
-			// 	)
-			// } catch (e) {
-			// 	console.error('Error processing cold events:', e)
+			// console.time('Processed latest year first')
+			// await processYear(to)()
+			// console.timeEnd('Processed latest year first')
+			// const promises = []
+			// for (let year = to - 1; year >= from; year--) {
+			// 	console.time(`setting up processing for year ${year}`)
+			// 	const promise = processYear(year)
+			// 	promises.push(promise())
+			// 	console.timeEnd(`setting up processing for year ${year}`)
 			// }
+			// console.log('firing off all year processing')
+			// await Promise.all(promises)
+			// console.log('firing off all year processing done')
+			manualGlobalTrigger()
 		},
 	},
 })

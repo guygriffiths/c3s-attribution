@@ -7,50 +7,51 @@ import {
 	IconTemperatureSnow,
 	IconTemperatureSun,
 } from '@tabler/icons-vue'
-import { set } from 'date-fns';
-import { ref } from 'vue'
-
-const props = defineProps<{
-	hot: boolean
-	cold: boolean
-}>()
-
-const emits = defineEmits<{
-	(e: 'update:hot', value: boolean): void
-	(e: 'update:cold', value: boolean): void
-}>()
+import { nextTick, ref } from 'vue'
+import { useStore } from '@/store/store'
+const store = useStore()
+const model = defineModel({
+	type: String as () => 'hotcold' | 'hot' | 'cold',
+})
 
 const coldClicked = () => {
-	emits('update:cold', true)
-	emits('update:hot', false)
+	store.setLoading()
+	model.value = 'cold'
 	setTheme('cold')
+	nextTick(() => {
+		store.setLoadingDone()
+	})
 }
 
 const hotClicked = () => {
-	emits('update:hot', true)
-	emits('update:cold', false)
+	store.setLoading()
+	model.value = 'hot'
 	setTheme('hot')
+	nextTick(() => {
+		store.setLoadingDone()
+	})
 }
 
-const lastOnWasHot = ref(props.hot)
+const lastOnWasHot = ref(model.value === 'hot')
 const bothClickedfromMiddle = () => {
-	if (props.hot && props.cold) {
+	store.setLoading()
+	if (model.value === 'hotcold') {
 		// both on -> turn one off
 		if (lastOnWasHot.value) {
-			emits('update:hot', true)
-			emits('update:cold', false)
+			model.value = 'hot'
 			setTheme('hot')
 		} else {
-			emits('update:hot', false)
-			emits('update:cold', true)
+			model.value = 'cold'
 			setTheme('cold')
 		}
 	} else {
 		// one or none on -> turn both on
-		emits('update:hot', true)
-		emits('update:cold', true)
+		model.value = 'hotcold'
 		setTheme('hotcold')
 	}
+	nextTick(() => {
+		store.setLoadingDone()
+	})
 }
 </script>
 
@@ -59,14 +60,14 @@ const bothClickedfromMiddle = () => {
 		<button
 			class="left cold glassy"
 			@click="coldClicked"
-			:class="{ selected: props.cold && !props.hot }"
+			:class="{ selected: model === 'cold' }"
 		>
 			<IconTemperatureSnow class="icon left" />
 		</button>
 		<button
 			class="middle glassy"
 			@click="bothClickedfromMiddle"
-			:class="{ selected: props.hot && props.cold }"
+			:class="{ selected: model === 'hotcold' }"
 		>
 			<IconSnowflake class="icon leftmerge" />
 			<IconTemperature class="icon thin" />
@@ -75,7 +76,7 @@ const bothClickedfromMiddle = () => {
 		<button
 			class="right hot glassy"
 			@click="hotClicked"
-			:class="{ selected: props.hot && !props.cold }"
+			:class="{ selected: model === 'hot' }"
 		>
 			<IconTemperatureSun class="icon right" />
 		</button>
