@@ -50,11 +50,24 @@ export const toPx = (value: string): number => {
 // 	return (t: number) => d3.hsl(hsl.h, hsl.s, (1 - t) * 0.7 + 0.2).toString()
 // }
 
-export const interpolateColor = (baseColor: string = 'rgb(151, 24, 65)') => {
+export const interpolateColorHot = (baseColor: string = 'rgb(151, 24, 65)') => {
 	const hcl = d3.hcl(baseColor)
-	const L0 = 98
-	const L1 = 2
-	return (t: number) => d3.hcl(hcl.h, hcl.c, L0 * (1 - t) + L1 * t).formatRgb()
+	return (t: number) => {
+		const C = t * 50 // a wee bit punchier
+		const L = 20 + t * 70 // deeper lows, brighter highs
+		return d3.hcl(hcl.h, C, L).formatRgb()
+	}
+}
+
+export const interpolateColorCold = (
+	baseColor: string = 'rgb(44, 102, 162)',
+) => {
+	const hcl = d3.hcl(baseColor)
+	return (t: number) => {
+		const C = Math.pow(t, 1.2) * 70 // very strong saturation swing
+		const L = 80 - t * 70 // smaller lightness spread, keeps mids strong
+		return d3.hcl(hcl.h, C, L).formatRgb()
+	}
 }
 
 export const binGradient = (
@@ -72,4 +85,22 @@ export const binGradient = (
 
 	return mix
 	// return `linear-gradient(135deg, ${startColor} ${startPct * 100}%, ${mix} 50%, ${endColor} ${endPct * 100}%)`
+}
+
+// Switch to a specific theme
+export const setTheme = (themeName: 'hot' | 'cold' | 'hotcold') => {
+	console.log('Setting theme to', themeName)
+	const root = document.documentElement
+	const themePrefix = `--theme-${themeName}-`
+
+	const styles: any = getComputedStyle(root)
+
+	// Loop over all computed properties instead
+	for (const prop of styles) {
+		if (prop.startsWith(themePrefix)) {
+			const token = prop.replace(themePrefix, '')
+			const value = styles.getPropertyValue(prop)
+			root.style.setProperty(`--${token}`, value)
+		}
+	}
 }

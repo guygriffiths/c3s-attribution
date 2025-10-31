@@ -1,7 +1,10 @@
 import iconPng from '@/assets/img/marker-icon-2x-c3sred.png'
 import scssVars from '@/assets/styles/scssVars.module.scss'
+import { IconMapPinFilled } from '@tabler/icons-vue'
+import { renderToString } from '@vue/server-renderer'
 import L from 'leaflet'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+import { h } from 'vue'
 
 export const fitMapToBounds = (map: L.Map, event: ExtremeEvent) => {
 	// TODO - 32px is hardcoded padding, yuck
@@ -99,7 +102,7 @@ export const getZeitgeistOpacity = (stepsFromNow: number) => {
 	return Math.max(opacity, 0.01)
 }
 
-export const markerIcon = L.icon({
+export const markerIcon2 = L.icon({
 	iconUrl: iconPng,
 	shadowUrl: markerShadow,
 	iconSize: [25, 41],
@@ -107,6 +110,26 @@ export const markerIcon = L.icon({
 	popupAnchor: [1, -34],
 	tooltipAnchor: [16, -28],
 	shadowSize: [41, 41],
+})
+
+export const markerIconCold = L.divIcon({
+	className: '', // disable Leaflet’s default styles
+	iconSize: [32, 32],
+	iconAnchor: [16, 32],
+	shadowUrl: markerShadow,
+
+})
+export const markerIconHot = L.divIcon({
+	className: '', // disable Leaflet’s default styles
+	iconSize: [32, 32],
+	iconAnchor: [16, 32],
+	shadowUrl: markerShadow,
+})
+renderToString(h(IconMapPinFilled, { size: 32, color: scssVars.lightbulb })).then((svgString) => {
+	markerIconCold.options.html = `<div style="filter: drop-shadow(0 0 6px ${scssVars.c3sred}) drop-shadow(0 2px 4px rgba(0,0,0,0.3))">${svgString}</div>`
+})
+renderToString(h(IconMapPinFilled, { size: 32, color: scssVars.lightbulb })).then((svgString) => {
+	markerIconHot.options.html = `<div style="filter: drop-shadow(0 0 6px ${scssVars.c3sblue}) drop-shadow(0 2px 4px rgba(0,0,0,0.3))">${svgString}</div>`
 })
 
 // Extract the region for a given event at the currently selected time

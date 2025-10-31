@@ -79,53 +79,38 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 		<IconDimensions class="size-icon" :class="{ [eventType]: true }" />
 		<IconTemperature class="intensity-icon" :class="{ [eventType]: true }" />
 		<svg class="graph-container" ref="svgRef">
-			<!-- <transition-group
-			name="graph-bg-transition"
-			tag="g"
-			:style="{ transform: 'scaleY(-1) translateY(-100%)' }"
-		> -->
+			<defs>
+				<filter id="egBarShadow" height="130%">
+					<feDropShadow
+						dx="1"
+						dy="1"
+						stdDeviation="1"
+						flood-color="rgba(0, 0, 0, 0.1)"
+					/>
+				</filter>
+			</defs>
 			<rect
-				:x="xScale('0') - xScale.bandwidth()"
+				:x="xScale(selectedIndex.toString())"
 				:y="0"
 				:width="xScale.bandwidth()"
 				:height="height * 3"
-				class="graph-bg"
+				class="graph-bg selected"
 			/>
-			<rect
-				:x="xScale.range()[1]"
-				:y="0"
-				:width="xScale.bandwidth()"
-				:height="height * 3"
-				class="graph-bg"
-			/>
-			<template v-for="(day, i) in days" :key="day">
-				<rect
-					:x="xScale(i.toString())"
-					:y="0"
-					:width="xScale.bandwidth()"
-					:height="height * 3"
-					class="graph-bg"
-					:class="{ odd: i % 2 === 1, selected: i === selectedIndex }"
-					@click="emits('dateSelected', day)"
-				/>
-			</template>
-			<!-- </transition-group> -->
 
 			<g>
 				<template v-for="(value, i) in areaData" :key="i">
 					<rect
 						:x="xScale(i.toString())"
 						:y="sizeScale(value)"
-						:width="xScale.bandwidth()"
+						:width="xScale.bandwidth() - 0.5"
 						:height="height - sizeScale(value)"
 						:class="{
 							selected: i === selectedIndex,
 							[eventType]: true,
 						}"
-						stroke="white"
-						:stroke-width="0.5"
 						vector-effect="non-scaling-stroke"
 						class="area-bar"
+						filter="url(#egBarShadow)"
 					/>
 				</template>
 			</g>
@@ -179,10 +164,10 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 		z-index: 10;
 
 		&.hot {
-			color: var(--theme-hot-primary-hover);
+			color: var(--theme-hot-primary);
 		}
 		&.cold {
-			color: var(--theme-cold-primary-hover);
+			color: var(--theme-cold-primary);
 		}
 	}
 
@@ -196,10 +181,10 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 		right: 4px;
 		pointer-events: none;
 		&.hot {
-			color: var(--theme-hot-primary-muted);
+			color: var(--theme-hot-primary-selected);
 		}
 		&.cold {
-			color: var(--theme-cold-primary-muted);
+			color: var(--theme-cold-primary-selected);
 		}
 	}
 
@@ -220,19 +205,19 @@ svg {
 
 	.area-bar {
 		&.hot {
-			fill: var(--theme-hot-primary-hover);
+			fill: var(--theme-hot-primary);
 		}
 		&.cold {
-			fill: var(--theme-cold-primary-hover);
+			fill: var(--theme-cold-primary);
 		}
 	}
 
 	.intensity-line {
 		&.hot {
-			stroke: var(--theme-hot-primary-muted);
+			stroke: var(--theme-hot-primary-selected);
 		}
 		&.cold {
-			stroke: var(--theme-cold-primary-muted);
+			stroke: var(--theme-cold-primary-selected);
 		}
 	}
 
@@ -264,9 +249,5 @@ svg {
 	.graph-bg-transition-leave-from {
 		height: 100%;
 	}
-}
-text {
-	fill: #444;
-	font-weight: bold;
 }
 </style>

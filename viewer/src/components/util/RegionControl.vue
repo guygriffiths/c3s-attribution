@@ -13,7 +13,7 @@ import { useLabels } from '@/lib/labels'
 import scssModule from '@/assets/styles/scssVars.module.scss'
 import { onFilterBuilt } from '@/lib/eventFiltering'
 import { nextTick, ref } from 'vue'
-import { IconMapPin, IconPencil, IconPolygon, IconWorld } from '@tabler/icons-vue'
+import { IconLayersSelected, IconMapPin, IconPencil, IconPolygon, IconWorld } from '@tabler/icons-vue'
 
 const store = useStore()
 const eventStore = useEventStore()
@@ -64,7 +64,7 @@ onFilterBuilt(() => {
 <template>
 	<div class="region-control">
 		<div class="label">
-			<IconPolygon size="16" aria-hidden="true" />
+			<IconLayersSelected size="16" aria-hidden="true" />
 			<!-- <span>{{ $l.selectByRegion}}</span> -->
 		</div>
 		<!-- <p> {{ eventStore.eventPointFilter }}</p> -->
@@ -134,7 +134,7 @@ onFilterBuilt(() => {
 		z-index: 10;
 
 		svg {
-			transform: translate(-1px, 3px) scale(1.2);
+			transform: translate(0, 3px) scale(1.2);
 		}
 	}
 

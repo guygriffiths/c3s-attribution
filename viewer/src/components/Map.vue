@@ -26,7 +26,7 @@ import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
 	centreMapOnDiv,
 	fitBoundsToDiv,
-	markerIcon,
+	markerIconHot, markerIconCold,
 	getEventRegion,
 } from '@/lib/map-utils'
 import { drawEventTile, TILE_SIZE } from '@/lib/renderer'
@@ -644,7 +644,7 @@ const addEventPanes = () => {
 				ref="markerRef"
 				:lat-lng="eventPointFilter || store.lastPoint || [50.706360, 7.138647]"
 				:draggable="true"
-				:icon="markerIcon"
+				:icon="(eventStore.coldEventsOn ? markerIconCold : markerIconHot) as any"
 				@movestart="pointSelectorMoveStarted"
 				@move="updatePointSelector"
 				@moveend="pointSelectorSettled"
@@ -694,18 +694,6 @@ const addEventPanes = () => {
 		transform: translateX(-50%);
 		position: absolute;
 		z-index: 1000;
-	}
-
-	.frost-panel {
-		position: absolute;
-		top: -500vh;
-		left: -500vw;
-		width: 1100vw;
-		height: 1100vh;
-		background-color: rgba(0, 100, 200, 0.6);
-		z-index: 550;
-		pointer-events: none;
-		user-select: none;
 	}
 
 	.region-control {
@@ -791,11 +779,6 @@ const addEventPanes = () => {
 		}
 	}
 
-	:deep(.leaflet-control-zoom),
-	:deep(.leaflet-control-zoom-out),
-	:deep(.leaflet-control-zoom-in) {
-	}
-
 	:deep(.leaflet-tile) {
 		image-rendering: pixelated; /* or auto/smooth depending on your preference */
 		transform-origin: center center;
@@ -803,7 +786,7 @@ const addEventPanes = () => {
 
 	&.focussed {
 		:deep(.frost-pane) {
-			background-color: rgba(0, 0, 0, 0.5);
+			background-color: rgba(225, 255, 255, 0.5);
 			backdrop-filter: blur(4px);
 
 			pointer-events: none;
@@ -813,6 +796,12 @@ const addEventPanes = () => {
 			width: 1100vw;
 			height: 1100vh;
 			z-index: 450;
+		}
+
+		&.heatmap {
+			:deep(.frost-pane) {
+				background-color: rgba(20, 0, 0, 0.7);
+			}
 		}
 	}
 }

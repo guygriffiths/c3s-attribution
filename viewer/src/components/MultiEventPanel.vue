@@ -416,7 +416,7 @@ const N = 200
 		}
 
 		.subpanel {
-			flex: 0 0 33.33333%;
+			flex: 0 0 calc(33.33333% - 0.5rem);
 			width: 100%;
 			display: flex;
 			flex-direction: row;
@@ -434,7 +434,7 @@ const N = 200
 			// padding: 0.25rem;
 
 			&.medals-subpanel {
-				height: calc(66.66666% - 0.25rem);
+				height: calc(66.66666% - 1rem);
 			}
 		}
 	}

@@ -123,7 +123,7 @@ const downloadEvent = () => {
 }
 
 .icon {
-	color: var(--text-secondary);
+	color: var(--text-primary);
 	width: 1rem;
 }
 
@@ -138,10 +138,11 @@ const downloadEvent = () => {
 	flex-grow: 1;
 	text-align: left;
 	text-wrap: nowrap;
+	color: var(--text-primary);
 
 	.small {
-		font-size: 0.95rem;
-		color: var(--text-tertiary);
+		font-size: 0.7rem;
+		color: var(--text-secondary);
 		margin-left: 0.25rem;
 	}
 }

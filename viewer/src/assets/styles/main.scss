@@ -97,7 +97,7 @@ button {
 		&.selected,
 		&:active {
 			transform: scale(0.98);
-			background-color: var(--primary-glass);
+			background-color: var(--primary-glass-shine);
 			color: var(--primary-selected);
 
 			&.color {

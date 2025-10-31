@@ -764,11 +764,11 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			}"
 		>
 			<div class="buttons">
-				<button @click="startOfYear" :title="$l.startOfYear">
+				<button class="glassy color" @click="startOfYear" :title="$l.startOfYear">
 					<span class="sr-only">{{ $l.startOfYear }}</span>
 					<font-awesome-icon :icon="faFastBackward" />
 				</button>
-				<button
+				<button class="glassy color"
 					@click.stop="prevDay"
 					:disabled="selectedYear <= startYear && selectedDay <= 1"
 					:title="$l.prevDay"
@@ -776,7 +776,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					<span class="sr-only">{{ $l.prevDay }}</span>
 					<font-awesome-icon :icon="faBackwardStep" />
 				</button>
-				<button
+				<button class="glassy color"
 					@click="togglePlay"
 					:title="$l.play"
 					:disabled="
@@ -791,7 +791,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					<span class="sr-only">{{ $l.play }}</span>
 					<font-awesome-icon :icon="playing ? faPause : faPlay" />
 				</button>
-				<button
+				<button class="glassy color"
 					@click="nextDay"
 					:disabled="selectedYear >= endYear && selectedDay >= 365"
 					:title="$l.nextDay"
@@ -799,7 +799,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					<span class="sr-only">{{ $l.nextDay }}</span>
 					<font-awesome-icon :icon="faForwardStep" />
 				</button>
-				<button @click="endOfYear" :title="$l.endOfYear">
+				<button class="glassy color" @click="endOfYear" :title="$l.endOfYear">
 					<span class="sr-only">{{ $l.endOfYear }}</span>
 					<font-awesome-icon :icon="faFastForward" />
 				</button>
@@ -1508,7 +1508,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			}
 			&.selected {
 				stroke: black;
-				stroke-width: 0.5;
+				stroke-width: 0;
 				pointer-events: auto;
 				cursor: pointer;
 				// fill: black;

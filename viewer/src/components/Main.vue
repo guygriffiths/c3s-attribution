@@ -226,7 +226,7 @@ const toggleMenu = () => {
 			:class="{
 				event: eventStore.eventSelected,
 				expanded: timeStore.timePanelExpanded,
-				heatmap: store.viewMode === 'heatmap',
+				[store.viewMode]: true,
 				focused: store.isFocused,
 			}"
 		>
@@ -405,28 +405,6 @@ const toggleMenu = () => {
 		backdrop-filter: $frosty;
 		box-shadow: var(--shadow-md);
 	}
-	#event-panel {
-		border-radius: 0;
-		background-color: transparent;
-		backdrop-filter: none;
-		box-shadow: none;
-		.subpanel {
-			border-radius: $borderRadius;
-			backdrop-filter: $frosty;
-			box-shadow: var(--shadow-md);
-
-			&.histo {
-				background-color: var(--panel-bg-alt);
-				border-bottom-left-radius: $borderRadius;
-				border-bottom-right-radius: $borderRadius;
-			}
-
-			:deep(svg.graph-container) {
-				border-top-left-radius: $borderRadius;
-				border-top-right-radius: $borderRadius;
-			}
-		}
-	}
 
 	#buttons-debug {
 		position: absolute;
@@ -470,6 +448,10 @@ const toggleMenu = () => {
 			border-top-right-radius: 0;
 			border-top-left-radius: 0;
 			border-bottom-left-radius: 0;
+
+			&.timemachine {
+				background-color: var(--panel-bg-dark);
+			}
 		}
 
 		&.heatmap {
@@ -498,21 +480,6 @@ const toggleMenu = () => {
 			width: 2.5rem;
 			height: 2.5rem;
 			border-radius: 0;
-
-			// box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-			// color: var(--primary);
-
-			&:hover {
-				// background-color: transparent;
-				// backdrop-filter: none;
-				// box-shadow: none;
-				// color: var(--text-on-primary);
-			}
-			&.selected,
-			&:active {
-				// transform: scale(0.95);
-				// background-color: var(--primary-active);
-			}
 		}
 		.show-bars {
 			border-bottom-right-radius: $borderRadius;
@@ -597,14 +564,30 @@ const toggleMenu = () => {
 		flex-direction: column;
 		justify-content: flex-start;
 		align-items: flex-start;
+		border-radius: 0;
+		background-color: transparent;
+		backdrop-filter: none;
+		box-shadow: none;
 
 		.subpanel {
+			border-radius: $borderRadius;
+			backdrop-filter: $frosty;
+			box-shadow: var(--shadow-md);
+			background-color: var(--panel-bg-dark);
 			flex: 1 1 50%;
 			width: 100%;
 
 			&.histo {
+				background-color: var(--panel-bg-dark);
+				border-bottom-left-radius: $borderRadius;
+				border-bottom-right-radius: $borderRadius;
 				width: 90%;
 				box-shadow: var(--shadow-md);
+			}
+
+			:deep(svg.graph-container) {
+				border-top-left-radius: $borderRadius;
+				border-top-right-radius: $borderRadius;
 			}
 		}
 
@@ -612,7 +595,7 @@ const toggleMenu = () => {
 			flex: 0 0 2 * $panelMargin;
 			width: 100%;
 			pointer-events: none;
-			background-color: var(--panel-bg);
+			background-color: var(--panel-bg-dark);
 			backdrop-filter: $frosty;
 		}
 	}

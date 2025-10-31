@@ -1,17 +1,5 @@
 <script setup lang="ts">
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import {
-	faGauge,
-	faCalendarDays,
-	faTemperatureHigh,
-	faTemperatureLow,
-	faPlus,
-	faCertificate,
-	faSnowflake,
-	faBolt,
-} from '@fortawesome/free-solid-svg-icons'
-import { nextTick, ref, watch } from 'vue'
-import { useStore } from '@/store/store'
+import { setTheme } from '@/lib/utils'
 import {
 	IconSnowflake,
 	IconSun,
@@ -19,6 +7,8 @@ import {
 	IconTemperatureSnow,
 	IconTemperatureSun,
 } from '@tabler/icons-vue'
+import { set } from 'date-fns';
+import { ref } from 'vue'
 
 const props = defineProps<{
 	hot: boolean
@@ -33,11 +23,13 @@ const emits = defineEmits<{
 const coldClicked = () => {
 	emits('update:cold', true)
 	emits('update:hot', false)
+	setTheme('cold')
 }
 
 const hotClicked = () => {
 	emits('update:hot', true)
 	emits('update:cold', false)
+	setTheme('hot')
 }
 
 const lastOnWasHot = ref(props.hot)
@@ -47,14 +39,17 @@ const bothClickedfromMiddle = () => {
 		if (lastOnWasHot.value) {
 			emits('update:hot', true)
 			emits('update:cold', false)
+			setTheme('hot')
 		} else {
 			emits('update:hot', false)
 			emits('update:cold', true)
+			setTheme('cold')
 		}
 	} else {
 		// one or none on -> turn both on
 		emits('update:hot', true)
 		emits('update:cold', true)
+		setTheme('hotcold')
 	}
 }
 </script>
@@ -76,7 +71,6 @@ const bothClickedfromMiddle = () => {
 			<IconSnowflake class="icon leftmerge" />
 			<IconTemperature class="icon thin" />
 			<IconSun class="icon rightmerge" />
-			<!-- <FontAwesomeIcon :icon="faCertificate" class="icon right" /> -->
 		</button>
 		<button
 			class="right hot glassy"
@@ -130,7 +124,7 @@ const bothClickedfromMiddle = () => {
 				background-color: var(--theme-hot-primary-glass-shine);
 			}
 			&.selected {
-				background-color: var(--theme-hot-primary-glass);
+				background-color: var(--theme-hot-primary-glass-shine);
 			}
 		}
 		&.cold {
@@ -139,7 +133,7 @@ const bothClickedfromMiddle = () => {
 				background-color: var(--theme-cold-primary-glass-shine);
 			}
 			&.selected {
-				background-color: var(--theme-cold-primary-glass);
+				background-color: var(--theme-cold-primary-glass-shine);
 			}
 		}
 
@@ -165,10 +159,10 @@ const bothClickedfromMiddle = () => {
 			&.selected {
 				background: linear-gradient(
 					to right,
-					var(--theme-cold-primary-glass),
-					var(--theme-cold-primary-glass) 10%,
-					var(--theme-hot-primary-glass) 90%,
-					var(--theme-hot-primary-glass)
+					var(--theme-cold-primary-glass-shine),
+					var(--theme-cold-primary-glass-shine) 10%,
+					var(--theme-hot-primary-glass-shine) 90%,
+					var(--theme-hot-primary-glass-shine)
 				);
 			}
 		}

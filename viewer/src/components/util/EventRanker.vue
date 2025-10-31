@@ -56,7 +56,6 @@ watch(
 	() => {
 		rankedEvents.value = [...(props.events || [])]
 			.sort(props.sortFunc)
-			.splice(0, props.topN)
 		// console.log('Ranked events:', [...rankedEvents.value].splice(0, 10).map((e) => `events/event-${e.id}.json`).join(' '))
 	},
 	{ deep: false },
@@ -107,9 +106,7 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 
 const selectedIndex = computed(() => {
 	if (!eventStore.selectedEvent) return -1
-	return (
-		props.events.findIndex((e) => e.id === eventStore.selectedEventId) + 1
-	)
+	return props.events.findIndex((e) => e.id === eventStore.selectedEventId) + 1
 })
 </script>
 
@@ -130,10 +127,22 @@ const selectedIndex = computed(() => {
 					:title="`Duration: ${eventStore.durationForEvent(rankedEvents[i - 1])} days\nSize: ${eventStore.sizeForEvent(rankedEvents[i - 1]).toFixed(2)} km²\nIntensity: ${eventStore.intensityForEvent(rankedEvents[i - 1]).toFixed(2)}`"
 				></div>
 				<div
-					v-if="eventsInRanker < props.events.length"
+					v-if="
+						eventsInRanker < props.events.length && eventStore.selectedEvent
+					"
 					class="rank"
 					:class="{
 						odd: topN % 2 === 1,
+					}"
+				></div>
+				<div v-else>{{ eventsInRanker }}, {{ props.events.length }}, {{ eventStore.selectedEvent?.id }}</div>
+				<div
+					v-if="
+						eventsInRanker < props.events.length && eventStore.selectedEvent
+					"
+					class="rank"
+					:class="{
+						odd: topN % 2 === 0,
 						selected: selectFinal,
 					}"
 					:title="
@@ -148,12 +157,23 @@ const selectedIndex = computed(() => {
 					:height="
 						ROW_SIZE *
 						(eventsInRanker < props.events.length
-							? eventsInRanker + 1
+							? eventsInRanker + 2
 							: eventsInRanker)
 					"
 					preserveAspectRatio="none"
 					style="pointer-events: none"
 				>
+					<defs>
+						<filter id="barShadow" height="130%">
+							<feDropShadow
+								dx="1"
+								dy="1"
+								stdDeviation="2"
+								flood-color="rgba(0, 0, 0, 0.3)"
+							/>
+						</filter>
+					</defs>
+
 					<rect
 						v-for="(event, idx) in rankedEvents"
 						class="ranked-event"
@@ -164,6 +184,7 @@ const selectedIndex = computed(() => {
 						:width="widthScale(eventStore.durationForEvent(event) || 0)"
 						:height="heightScale(eventStore.sizeForEvent(event) || 0)"
 						:fill="eventStore.colorForEvent(event) || scssVars.c3sred"
+						filter="url(#rankedShadow)"
 					/>
 					<rect
 						v-if="
@@ -172,7 +193,7 @@ const selectedIndex = computed(() => {
 						class="ranked-event"
 						x="0"
 						y="0"
-						:transform="`translate(0, ${eventsInRanker * ROW_SIZE + 0.5 * ROW_SIZE - 0.5 * heightScale(eventStore.sizeForEvent(eventStore.selectedEvent) || 0)})`"
+						:transform="`translate(0, ${(eventsInRanker + 1) * ROW_SIZE + 0.5 * ROW_SIZE - 0.5 * heightScale(eventStore.sizeForEvent(eventStore.selectedEvent) || 0)})`"
 						:width="
 							widthScale(
 								eventStore.durationForEvent(eventStore.selectedEvent) || 0,
@@ -202,12 +223,27 @@ const selectedIndex = computed(() => {
 						{{ idx + 1 }}
 					</text>
 					<text
-						v-if="selectedIndex > props.events.length"
+						v-if="
+							eventsInRanker < props.events.length && eventStore.selectedEvent
+						"
 						class="ranked-event"
 						:class="eventStore.selectedEvent?.event_type || 'mixed'"
 						x="0"
 						y="0"
-						:transform="`translate(${eventStore.selectedEvent ? widthScale(eventStore.durationForEvent(eventStore.selectedEvent)) + 4 : 10}, ${eventsInRanker * ROW_SIZE + 14})`"
+						:transform="`translate(${width / 2}, ${eventsInRanker * ROW_SIZE + 18})`"
+						font-size="14"
+					>
+						...
+					</text>
+					<text
+						v-if="
+							eventsInRanker < props.events.length && eventStore.selectedEvent
+						"
+						class="ranked-event"
+						:class="eventStore.selectedEvent?.event_type || 'mixed'"
+						x="0"
+						y="0"
+						:transform="`translate(${eventStore.selectedEvent ? widthScale(eventStore.durationForEvent(eventStore.selectedEvent)) + 4 : 10}, ${(eventsInRanker + 1) * ROW_SIZE + 18})`"
 						font-size="14"
 					>
 						{{ selectedIndex }}
@@ -279,9 +315,10 @@ const selectedIndex = computed(() => {
 				x $rate ease-out,
 				all $rate ease-out;
 			rx: 2;
-			stroke: black;
-			stroke-width: 0.5;
+			// stroke: black;
+			// stroke-width: 0.5;
 
+			// Text styles
 			&.hot {
 				stroke-width: 0;
 				fill: $c3sred !important;
@@ -292,7 +329,7 @@ const selectedIndex = computed(() => {
 			}
 			&.mixed {
 				stroke-width: 0;
-				fill: black;
+				fill: $c3spurple !important;
 			}
 		}
 	}

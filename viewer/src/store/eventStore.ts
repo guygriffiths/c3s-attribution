@@ -4,7 +4,7 @@ import {
 	manualGlobalTrigger,
 	setPostFilters,
 } from '@/lib/eventFiltering'
-import { interpolateColor } from '@/lib/utils'
+import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
 import * as d3 from 'd3'
 import { differenceInDays } from 'date-fns'
 import { defineStore } from 'pinia'
@@ -54,9 +54,9 @@ export const colorForValue = (
 ) => {
 	// if (!event || !scale) return (v: number) => 'transparent'
 	if (hot) {
-		return interpolateColor(scssVars.c3sred)(scale(v))
+		return interpolateColorHot(scssVars.c3sred)(scale(v))
 	} else {
-		return interpolateColor(scssVars.c3sblue)(scale(v))
+		return interpolateColorCold(scssVars.c3sblue)(scale(v))
 	}
 }
 

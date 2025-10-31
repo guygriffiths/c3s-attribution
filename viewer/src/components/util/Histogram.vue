@@ -13,7 +13,11 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as d3 from 'd3'
 import { binGradient } from '@/lib/utils'
 import scssVars from '@/assets/styles/scssVars.module.scss'
-import { IconDimensions, IconHourglassHigh, IconTemperature } from '@tabler/icons-vue'
+import {
+	IconDimensions,
+	IconHourglassHigh,
+	IconTemperature,
+} from '@tabler/icons-vue'
 
 type Props = {
 	data: number[]
@@ -199,12 +203,10 @@ const bars = computed(() => {
 			count: counts.value[idx],
 			bin0: b.x0,
 			bin1: b.x1,
-			color: b.hotPct === 0 && b.coldPct === 0 ? 'var(--primary)' : binGradient(
-				b.hotPct,
-				b.coldPct,
-				scssVars.c3sred,
-				scssVars.c3sblue,
-			), // red→blue
+			color:
+				b.hotPct === 0 && b.coldPct === 0
+					? 'var(--primary)'
+					: binGradient(b.hotPct, b.coldPct, scssVars.c3sred, scssVars.c3sblue), // red→blue
 		}
 	})
 	return ret
@@ -229,6 +231,14 @@ watch(
 		<IconDimensions v-else-if="props.variable === 'size'" />
 		<IconTemperature v-else-if="props.variable === 'intensity'" />
 		<svg class="histogram-svg" role="img">
+			<filter id="histoBarShadow" height="130%">
+				<feDropShadow
+					dx="1"
+					dy="1"
+					stdDeviation="2"
+					flood-color="rgba(0, 0, 0, 0.3)"
+				/>
+			</filter>
 			<!-- group for plotting area -->
 			<g :transform="`translate(${margin.left},${margin.top})`">
 				<!-- X axis ticks -->
@@ -267,6 +277,7 @@ watch(
 								highlight: highlightBin === b.idx,
 							}"
 							:fill="b.color"
+							filter="url(#histoBarShadow)"
 						/>
 						<!-- <circle
 							:opacity="highlightBin === b.idx ? 1 : 0"
@@ -336,17 +347,16 @@ watch(
 $rate: 0.5 * $animTime;
 
 .bar-rect {
-	stroke: black;
-	stroke-width: 0.5;
+	// stroke: black;
+	// stroke-width: 0.5;
 	// fill: $c3sred;
-	rx: 2;
+	// rx: 2;
 	transition: all $rate ease-in-out;
 
 	&.highlight {
 		fill: $lightbulb;
 		stroke: var(--highlight-hover);
 		stroke-width: 1;
-		filter: drop-shadow(0 0 2px $lightbulb) drop-shadow(0 0 4px $lightbulb);
 	}
 }
 
@@ -362,7 +372,7 @@ $rate: 0.5 * $animTime;
 }
 
 .bar-label {
-	fill: white;
+	fill: var(--primary-selected);
 	font-size: 11px;
 	pointer-events: none;
 	user-select: none;
