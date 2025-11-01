@@ -135,7 +135,6 @@ const selectedIndex = computed(() => {
 						odd: topN % 2 === 1,
 					}"
 				></div>
-				<div v-else>{{ eventsInRanker }}, {{ props.events.length }}, {{ eventStore.selectedEvent?.id }}</div>
 				<div
 					v-if="
 						eventsInRanker < props.events.length && eventStore.selectedEvent

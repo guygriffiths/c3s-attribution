@@ -20,7 +20,7 @@ import { Map as LeafletMap, LeafletMouseEvent } from 'leaflet'
 import 'leaflet-draw'
 import 'leaflet-draw/dist/leaflet.draw.css'
 import 'leaflet/dist/leaflet.css'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
@@ -533,6 +533,20 @@ const addEventPanes = () => {
 		}
 	})
 }
+
+const showMarkerTrigger = computed(
+	() => store.filteringByPoint && store.viewMode === 'heatmap',
+)
+const showMarker = ref(showMarkerTrigger.value)
+watch(
+	showMarkerTrigger,
+	(newVal) => {
+		nextTick(() => {
+			showMarker.value = newVal
+		})
+	},
+	{ immediate: true },
+)
 </script>
 
 <template>
@@ -635,21 +649,22 @@ const addEventPanes = () => {
 			></LGeoJson>
 
 			<!-- Point to select by -->
-			<LMarker
-				v-if="store.filteringByPoint && store.viewMode === 'heatmap'"
-				ref="markerRef"
-				:lat-lng="eventPointFilter || store.lastPoint || [50.70636, 7.138647]"
-				:draggable="true"
-				:icon="
-					(eventStore.eventTypeMode === 'cold'
-						? markerIconCold
-						: markerIconHot) as any
-				"
-				@movestart="pointSelectorMoveStarted"
-				@move="updatePointSelector"
-				@moveend="pointSelectorSettled"
-				@add="pointSelectorAdded"
-			/>
+			<div v-if="store.filteringByPoint && store.viewMode === 'heatmap'">
+				<LMarker
+					ref="markerRef"
+					:lat-lng="eventPointFilter || store.lastPoint || [50.70636, 7.138647]"
+					:draggable="true"
+					:icon="
+						(eventStore.eventTypeMode === 'cold'
+							? markerIconCold
+							: markerIconHot) as any
+					"
+					@movestart="pointSelectorMoveStarted"
+					@move="updatePointSelector"
+					@moveend="pointSelectorSettled"
+					@add="pointSelectorAdded"
+				/>
+			</div>
 
 			<!-- Controls -->
 			<LControl position="topleft" class="region-control">

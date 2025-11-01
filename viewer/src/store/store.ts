@@ -165,7 +165,7 @@ export const useStore = defineStore('main', {
 
 			const timeStore = useTimeStore()
 			// TODO Unhard-code this
-			const from = 1979
+			const from = 1981
 			const to = 2024
 			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
 			timeStore.endTime = new Date(Date.UTC(to, 11, 31))

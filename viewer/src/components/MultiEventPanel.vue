@@ -77,10 +77,10 @@ const N = 200
 			<h1>
 				<!-- <FontAwesomeIcon :icon="faTemperatureHigh" /> -->
 				<IconTemperature
-					v-if="eventStore.hotEventsOn && eventStore.coldEventsOn"
+					v-if="eventStore.eventTypeMode === 'hotcold'"
 				/>
-				<IconTemperatureSnow v-else-if="eventStore.coldEventsOn" />
-				<IconTemperatureSun v-else-if="eventStore.hotEventsOn" />
+				<IconTemperatureSnow v-else-if="eventStore.eventTypeMode === 'cold'" />
+				<IconTemperatureSun v-else-if="eventStore.eventTypeMode === 'hot'" />
 				<IconTemperature v-else />
 			</h1>
 		</div>

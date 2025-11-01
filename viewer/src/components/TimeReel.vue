@@ -1280,6 +1280,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			}
 			.scrollee {
 				.year {
+					align-items: center;
 					.label {
 						font-size: 0.75rem !important;
 						margin: 0 0.25rem;
