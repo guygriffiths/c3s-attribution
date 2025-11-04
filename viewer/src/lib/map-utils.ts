@@ -126,10 +126,10 @@ export const markerIconHot = L.divIcon({
 	shadowUrl: markerShadow,
 })
 renderToString(h(IconMapPinFilled, { size: 32, color: scssVars.lightbulb })).then((svgString) => {
-	markerIconCold.options.html = `<div style="filter: drop-shadow(0 0 6px ${scssVars.c3sred}) drop-shadow(0 2px 4px rgba(0,0,0,0.3))">${svgString}</div>`
+	markerIconCold.options.html = `<div style="filter: drop-shadow(0 0 6px ${scssVars.c3sgrey}) drop-shadow(0 2px 4px rgba(0,0,0,0.3))">${svgString}</div>`
 })
 renderToString(h(IconMapPinFilled, { size: 32, color: scssVars.lightbulb })).then((svgString) => {
-	markerIconHot.options.html = `<div style="filter: drop-shadow(0 0 6px ${scssVars.c3sblue}) drop-shadow(0 2px 4px rgba(0,0,0,0.3))">${svgString}</div>`
+	markerIconHot.options.html = `<div style="filter: drop-shadow(0 0 6px ${scssVars.c3sgrey}) drop-shadow(0 2px 4px rgba(0,0,0,0.3))">${svgString}</div>`
 })
 
 // Extract the region for a given event at the currently selected time

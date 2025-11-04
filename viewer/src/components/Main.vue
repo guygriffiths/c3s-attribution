@@ -80,6 +80,13 @@ onGlobalEventsReady(() => {
 	}
 })
 
+onGlobalEventsReady(() => {
+	console.log('global event trigger')
+})
+onRegionEventsReady(() => {
+	console.log('region event trigger')
+})
+
 onRegionEventsReady(() => {
 	console.log(
 		'eventsOfInterest updated from filtered events',
@@ -202,9 +209,7 @@ const toggleMenu = () => {
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
 		<Panel id="hamburger-menu" class="right" :active="store.hamburgerMenuOpen">
-			<EventTypeToggle
-				v-model="eventStore.eventTypeMode"
-			/>
+			<EventTypeToggle v-model="eventStore.eventTypeMode" />
 			<!-- <h1>Filters</h1>
 			<h1>Animation speed</h1> -->
 		</Panel>

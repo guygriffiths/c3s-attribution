@@ -241,7 +241,7 @@ export const useStore = defineStore('events', {
 			// This needs to get set by the leaflet layers
 			mainStore.setLoadingDone()
 		},
-		async addEvents(data: ExtremeEvent[]) {
+		async addEvents(data: ExtremeEvent[], final: boolean = false) {
 			const mainStore = useMainStore()
 			// console.log(
 			// 	'Setting events, count:',
@@ -312,7 +312,7 @@ export const useStore = defineStore('events', {
 			if (
 				this.eventSetsLoaded <= 3 ||
 				this.eventSetsLoaded === 5 ||
-				this.eventSetsLoaded % 10 === 0
+				this.eventSetsLoaded % 10 === 0 || final
 			) {
 				console.log('Manually triggering global events ready callback after', this.eventSetsLoaded, 'sets loaded')
 				// Trigger a global events ready callback at various points during loading

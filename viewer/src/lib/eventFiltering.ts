@@ -21,6 +21,7 @@ let lastResult: ExtremeEvent[] = []
 let lastIds: Set<string> = new Set()
 let resultReady = false
 let counts: Map<number, Array<number>> = new Map()
+let finalised = false
 
 const regionEventsReadyTriggers: Array<() => void> = []
 const globalEventsReadyTriggers: Array<() => void> = []
@@ -62,8 +63,10 @@ pixelWorker.onmessage = (e: MessageEvent<Record<number, number[]>>) => {
 		}
 	}
 	pixelIndexReady = true
-	for (const cb of indexBuiltTriggers) {
-		cb()
+	if (finalised) {
+		for (const cb of indexBuiltTriggers) {
+			cb()
+		}
 	}
 }
 
@@ -77,8 +80,10 @@ dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
 		}
 	}
 	dateIndexReady = true
-	for (const cb of currentEventTriggers) {
-		cb()
+	if (finalised) {
+		for (const cb of currentEventTriggers) {
+			cb()
+		}
 	}
 }
 
@@ -111,6 +116,11 @@ export function buildEventFilters(events: ExtremeEvent[]) {
 	dateWorker.postMessage({ events, startI })
 	console.timeEnd(`kickoffDateWorker ${year}`)
 	console.timeEnd(`buildEventFilters ${year}`)
+}
+
+export function finaliseEventFilters() {
+	if (finalised) return
+	finalised = true
 }
 
 export function manualGlobalTrigger() {

@@ -1,4 +1,4 @@
-import { manualGlobalTrigger } from '@/lib/eventFiltering'
+import { finaliseEventFilters, manualGlobalTrigger } from '@/lib/eventFiltering'
 import * as d3 from 'd3'
 import { addHours, differenceInDays } from 'date-fns'
 import { LatLng, Point } from 'leaflet'
@@ -250,8 +250,9 @@ export const useStore = defineStore('main', {
 				processYear(year, data[0], data[1])
 				console.log('Finished processing year', year)
 				// @ts-ignore
-				await (scheduler?.yield?.() ?? new Promise((r) => setTimeout(r, 0)))
+				// await (scheduler?.yield?.() ?? new Promise((r) => setTimeout(r, 0)))
 			}
+			finaliseEventFilters()
 			console.log('Finished all years')
 
 			// console.time('Processed latest year first')

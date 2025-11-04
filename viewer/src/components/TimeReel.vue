@@ -151,9 +151,9 @@ const endOfYear = () => {
 
 const playing = ref(false)
 const frameInterval = computed(() => {
-	let FPS = 10
+	let FPS = 20
 	if (isZoom) FPS = 5
-	return 1000 / FPS
+	return 0//1000 / FPS
 })
 
 const togglePlay = () => {
@@ -411,7 +411,7 @@ const eventClicked = (id: string) => {
 
 const needleOffset = computed(() => {
 	if (isDefault.value || isOverview.value) {
-		const offset = (selectedDay.value / TOTAL_DAYS) * 100 - 0.5
+		const offset = ((selectedDay.value + 2) / TOTAL_DAYS) * 100
 		return Math.max(Math.min(offset, 100), 0)
 	} else if (isTimeline.value) {
 		const totalDays = differenceInDays(props.end, props.start) + 1
@@ -520,7 +520,7 @@ const highlightRowHeight = computed(() =>
 )
 
 const getAreaString = () => {
-	console.log('calculating area string for events')
+	console.time('getAreaString')
 	const data: Array<{ x: number; y0: number; y1: number }> =
 		props.eventType === 'hotcold'
 			? // Hot and cold events
@@ -584,6 +584,7 @@ const getAreaString = () => {
 			areaStr(data.slice(startIdx, endIdx)) + ` M0,${-2} l0,0 M0,${2} l0,0` ||
 			''
 	}
+	console.timeEnd('getAreaString')
 	return ret
 }
 
@@ -638,12 +639,20 @@ watch(
 
 		const newD = getAreaString()
 
-		for (const year of years.value) {
+		const yearsList = [...years.value].reverse()
+		const drawNextYear = () => {
+			if (!yearsList.length) return
+
+			const year = yearsList.shift()!
 			d3.select(`#events-line-${year}`)
 				.transition()
-				.duration(0) //intervalToMs(scssVars.animTime))
+				.duration(0)
 				.attr('d', newD[year])
+
+			requestAnimationFrame(drawNextYear)
 		}
+
+		drawNextYear()
 
 		// if (container.value) {
 		// 	const yearsOffset = selectedYear.value - startYear.value
@@ -964,6 +973,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 									:transform="lineTransform(year)"
 									:opacity="lineOpacity(year)"
 									:filter="isZoom ? 'url(#blur)' : ''"
+									style="display: none;"
 								/>
 								<g
 									tag="g"
@@ -1530,7 +1540,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			}
 			&.selected {
 				stroke: black;
-				stroke-width: 0;
+				stroke-width: 0.5;
 				pointer-events: auto;
 				cursor: pointer;
 				// fill: black;

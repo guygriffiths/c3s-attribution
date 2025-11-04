@@ -1,0 +1,10 @@
+TODO Friday
+
+Make event bars clickable
+Render areas to background canvases - one per year, plus one for the timeline and one for the overview for global events
+    Then they can be turned off and an overlaid svg used. This means duplicating evreything, but fuck it'll be fast.
+Don't allow region dragging etc. when event selected
+Performance of mode switch
+Draw areas as canvas - one per year, one timeline, one overview
+Time scrubber
+Single event histogram - lock the y-scale to the max event value - add caching of all histogram data while you're at it?
