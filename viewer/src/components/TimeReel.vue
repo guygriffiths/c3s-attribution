@@ -60,11 +60,10 @@ const props = defineProps({
 		type: Function as PropType<(event: ExtremeEvent) => string | null>,
 		default: (event: ExtremeEvent) => event.color || null,
 	},
-	valueExtractor: {
-		type: Function as PropType<(event: ExtremeEvent) => number>,
-		default: (event: ExtremeEvent) => event.max_value || 0,
-	},
 })
+
+
+// console.log('Time Reel: colorForEvent:', props.colorForEvent)
 
 const startYear = computed(() => props.start.getUTCFullYear())
 const endYear = computed(() => props.end.getUTCFullYear())
@@ -101,7 +100,7 @@ const scrollToYear = (year: number) => {
 		// Snap to top of specified year
 		const yearsOffset = year - startYear.value
 		const scrollOffset = (yearsOffset + 0.5) * rowHeight.value
-		console.log('scrolling to year', year, 'at offset', scrollOffset)
+		// console.log('scrolling to year', year, 'at offset', scrollOffset)
 		container.value.scrollTo({
 			top: scrollOffset,
 			behavior: 'smooth',
@@ -153,7 +152,7 @@ const playing = ref(false)
 const frameInterval = computed(() => {
 	let FPS = 20
 	if (isZoom) FPS = 5
-	return 0//1000 / FPS
+	return 0 //1000 / FPS
 })
 
 const togglePlay = () => {
@@ -450,9 +449,9 @@ const positionY = (y: number, eventType: 'hot' | 'cold') => {
 		return (0.5 + y) * 0.5 * eventHeight.value * (eventType === 'hot' ? -1 : 1)
 	} else {
 		if (y % 2 !== 0) {
-			return 0.5 * (y - 1) * eventHeight.value
+			return 0.5 * y * eventHeight.value
 		} else {
-			return -0.5 * (y + 2) * eventHeight.value
+			return -0.5 * (y + 1) * eventHeight.value
 		}
 	}
 }
@@ -495,7 +494,7 @@ onMounted(() => {
 		container.value.scrollTo({
 			top: scrollOffset * rowHeight.value,
 		})
-		console.log('and scrolled to', selectedYear.value)
+		// console.log('and scrolled to', selectedYear.value)
 	}
 
 	onBeforeUnmount(() => {
@@ -520,7 +519,7 @@ const highlightRowHeight = computed(() =>
 )
 
 const getAreaString = () => {
-	console.time('getAreaString')
+	// console.time('getAreaString')
 	const data: Array<{ x: number; y0: number; y1: number }> =
 		props.eventType === 'hotcold'
 			? // Hot and cold events
@@ -584,7 +583,7 @@ const getAreaString = () => {
 			areaStr(data.slice(startIdx, endIdx)) + ` M0,${-2} l0,0 M0,${2} l0,0` ||
 			''
 	}
-	console.timeEnd('getAreaString')
+	// console.timeEnd('getAreaString')
 	return ret
 }
 
@@ -601,7 +600,7 @@ const hwDayCounts = ref<number[]>([])
 watch(
 	() => props.events,
 	() => {
-		console.log('events changed, recalculating day counts and boxes')
+		// console.time('update event boxes')
 		for (let year of years.value) {
 			const res = getEventBoxes(
 				props.events,
@@ -638,16 +637,26 @@ watch(
 		// .map((d) => (isNaN(d) ? 0 : d))
 
 		const newD = getAreaString()
-
+		// console.timeEnd('update event boxes')
 		const yearsList = [...years.value].reverse()
 		const drawNextYear = () => {
 			if (!yearsList.length) return
 
 			const year = yearsList.shift()!
-			d3.select(`#events-line-${year}`)
-				.transition()
-				.duration(0)
-				.attr('d', newD[year])
+			let currentPath = null
+			try {
+				currentPath = d3.select(`#events-line-${year}`).attr('d')
+			} catch (e) {
+				// Sometimes happens on first draw in race conditions
+			}
+			if (currentPath !== newD[year]) {
+				// No change, skip
+				d3.select(`#events-line-${year}`)
+					.transition()
+					.duration(0)
+					.attr('d', newD[year])
+				// console.log('Redrew year', year)
+			}
 
 			requestAnimationFrame(drawNextYear)
 		}
@@ -672,11 +681,11 @@ watch(
 		// When the selected event changes, ensure the year is in view
 		// In timeline mode, this happens instantly, at the same time as the line transition,
 		// so that we don't see any movement, but we are in the right place to transition back to default mode,
-		console.log(
-			'selected event changed, scrolling to',
-			selectedYear.value,
-			rowsToShow.value,
-		)
+		// console.log(
+		// 	'selected event changed, scrolling to',
+		// 	selectedYear.value,
+		// 	rowsToShow.value,
+		// )
 		if (newVal !== oldVal && container.value) {
 			const yearsOffset = selectedYear.value - startYear.value
 			const scrollOffset = 0.5 * (yearsOffset * 2)
@@ -973,7 +982,6 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 									:transform="lineTransform(year)"
 									:opacity="lineOpacity(year)"
 									:filter="isZoom ? 'url(#blur)' : ''"
-									style="display: none;"
 								/>
 								<g
 									tag="g"

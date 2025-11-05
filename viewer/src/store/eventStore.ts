@@ -68,6 +68,7 @@ export const colorForEvent = (
 		event.event_type === 'hot' ? event.max_value : event.mean_value,
 		event.event_type === 'hot',
 	)
+	console.log('intensity for event', event.id, 'is', value, intensityForValue, colorForValue)
 	return colorForValue(value, event.event_type === 'hot', scale)
 }
 
@@ -302,9 +303,9 @@ export const useStore = defineStore('events', {
 
 			this.sizeRange = [0, Math.max(sizes[sizes.length - 1], this.sizeRange[1])]
 
-			console.time('ES:buildEventFilters')
+			// console.time('ES:buildEventFilters')
 			buildEventFilters(data) // Kick off building the pixel index
-			console.timeEnd('ES:buildEventFilters')
+			// console.timeEnd('ES:buildEventFilters')
 			this.eventSetsLoaded += 1
 			if(this.eventSetsLoaded === 1) {
 				mainStore.setLoadingDone()

@@ -52,10 +52,12 @@ export const toPx = (value: string): number => {
 
 export const interpolateColorHot = (baseColor: string = 'rgb(151, 24, 65)') => {
 	const hcl = d3.hcl(baseColor)
+	console.log('interpolateColorHot baseColor', baseColor, 'hcl', hcl)
 	return (t: number) => {
+		const H = (hcl.h + t * 100 - 80) % 360
 		const C = Math.pow(t, 1.6) * 40
 		const L = 20 + t * 70
-		return d3.hcl(hcl.h, C, L).formatRgb()
+		return d3.hcl(H, C, L).formatRgb()
 	}
 }
 
@@ -64,9 +66,10 @@ export const interpolateColorCold = (
 ) => {
 	const hcl = d3.hcl(baseColor)
 	return (t: number) => {
+		const H = hcl.h + (t * 10)
 		const C = Math.pow(t, 1.2) * 70
 		const L = 80 - t * 70
-		return d3.hcl(hcl.h, C, L).formatRgb()
+		return d3.hcl(H, C, L).formatRgb()
 	}
 }
 

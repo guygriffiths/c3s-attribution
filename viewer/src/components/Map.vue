@@ -349,21 +349,19 @@ watch(
 	},
 )
 
-const cScale = computed(() =>
-	d3
-		.scaleLinear()
-		.domain([
-			intensityForValue(
-				eventStore.selectedEvent?.min_value!,
-				eventStore.selectedEvent?.event_type === 'hot',
-			),
-			intensityForValue(
-				eventStore.selectedEvent?.max_value!,
-				eventStore.selectedEvent?.event_type === 'hot',
-			),
-		])
-		.range([0, 1]),
-)
+const cScale = computed(() => {
+	const minValIntensity = intensityForValue(
+		eventStore.selectedEvent?.min_value!,
+		eventStore.selectedEvent?.event_type === 'hot',
+	)
+	const maxValIntensity = intensityForValue(
+		eventStore.selectedEvent?.max_value!,
+		eventStore.selectedEvent?.event_type === 'hot',
+	)
+	const minIntensity = Math.min(minValIntensity, maxValIntensity)
+	const maxIntensity = Math.max(minValIntensity, maxValIntensity)
+	return d3.scaleLinear().domain([minIntensity, maxIntensity]).range([0, 1])
+})
 // watch(
 // 	() => eventStore.selectedEvent,
 // 	() => {
@@ -392,9 +390,6 @@ const renderTile = (props: any) => {
 		eventStore.selectedEvent,
 		timeStore.selectedTime,
 		store.viewMode,
-		eventStore.selectedEvent?.event_type == 'hot'
-			? eventStore.heatIntensityRange
-			: eventStore.coldIntensityRange,
 		eventPixelsRef.value,
 		(v: number) =>
 			colorForValue(

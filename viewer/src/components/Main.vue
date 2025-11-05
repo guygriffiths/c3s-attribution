@@ -457,7 +457,7 @@ const toggleMenu = () => {
 
 		&.heatmap {
 			height: $smallTimePanelHeight;
-			transition: height $transition;
+			// transition: height $transition;
 		}
 
 		#times {

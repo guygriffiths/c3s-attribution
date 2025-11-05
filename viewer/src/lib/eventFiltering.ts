@@ -34,7 +34,7 @@ export function onRegionEventsReady(cb: () => void) {
 	}
 }
 export function onGlobalEventsReady(cb: () => void) {
-	console.log('Registering global events ready callback', cb)
+	// console.log('Registering global events ready callback', cb)
 	globalEventsReadyTriggers.push(cb)
 	if (globalEventsReady) {
 		cb()
@@ -92,30 +92,30 @@ dateWorker.onmessage = (e: MessageEvent<Record<string, number[]>>) => {
  */
 export function buildEventFilters(events: ExtremeEvent[]) {
 	const year = events[0]?.times[0]?.getUTCFullYear()
-	console.time(`buildEventFilters ${year}`)
+	// console.time(`buildEventFilters ${year}`)
 	pixelIndexReady = false
 	dateIndexReady = false
 	const startI = _events.length
-	console.time(`saveEvents ${year}`)
+	// console.time(`saveEvents ${year}`)
 	_events.push(...events)
-	console.timeEnd(`saveEvents ${year}`)
+	// console.timeEnd(`saveEvents ${year}`)
 
-	console.time(`saveFiltered ${year}`)
+	// console.time(`saveFiltered ${year}`)
 	_filteredEvents = _events
-	console.timeEnd(`saveFiltered ${year}`)
-	console.time(`saveFilteredIds ${year}`)
+	// console.timeEnd(`saveFiltered ${year}`)
+	// console.time(`saveFilteredIds ${year}`)
 	_filteredIds = new Set(_events.map((e) => e.id))
-	console.timeEnd(`saveFilteredIds ${year}`)
+	// console.timeEnd(`saveFilteredIds ${year}`)
 	globalEventsReady = true
 
-	console.time(`kickoffPixelWorker ${year}`)
+	// console.time(`kickoffPixelWorker ${year}`)
 	pixelWorker.postMessage({ events, startI })
-	console.timeEnd(`kickoffPixelWorker ${year}`)
+	// console.timeEnd(`kickoffPixelWorker ${year}`)
 
-	console.time(`kickoffDateWorker ${year}`)
+	// console.time(`kickoffDateWorker ${year}`)
 	dateWorker.postMessage({ events, startI })
-	console.timeEnd(`kickoffDateWorker ${year}`)
-	console.timeEnd(`buildEventFilters ${year}`)
+	// console.timeEnd(`kickoffDateWorker ${year}`)
+	// console.timeEnd(`buildEventFilters ${year}`)
 }
 
 export function finaliseEventFilters() {

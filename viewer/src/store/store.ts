@@ -171,26 +171,26 @@ export const useStore = defineStore('main', {
 			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
 
 			const processYear = (year: number, objectsH: any, objectsC: any) => {
-				console.log('processing year', year)
+				// console.log('processing year', year)
 				const allEvents = [] as ExtremeEvent[]
 				try {
 					massageData(objectsH, 'hot')
 					allEvents.push(...objectsH)
 				} catch (e) {
-					console.error('Error processing hot events:', e)
+					// console.error('Error processing hot events:', e)
 				}
 
-				console.time(`Fetched cold events for year ${year}`)
-				console.timeEnd(`Fetched cold events for year ${year}`)
+				// console.time(`Fetched cold events for year ${year}`)
+				// console.timeEnd(`Fetched cold events for year ${year}`)
 				try {
 					massageData(objectsC, 'cold')
 					allEvents.push(...objectsC)
 				} catch (e) {
-					// console.error('Error processing cold events:', e)
+					console.error('Error processing cold events:', e)
 				}
-				console.time(`Processed events for year ${year}`)
+				// console.time(`Processed events for year ${year}`)
 				eventStore.addEvents(allEvents)
-				console.timeEnd(`Processed events for year ${year}`)
+				// console.timeEnd(`Processed events for year ${year}`)
 			}
 
 			const fetchData = async (year: number) => {
@@ -200,7 +200,7 @@ export const useStore = defineStore('main', {
 						// @ts-ignore
 						.then((t) => t.trim().split('\n').map(JSON.parse))
 						.catch((e) => {
-							console.error('Error fetching hot', year, e)
+							// console.error('Error fetching hot', year, e)
 							return []
 						}),
 						fetch(`${DATA_ROOT}events-cold-${year}.jsonl`)
@@ -208,7 +208,7 @@ export const useStore = defineStore('main', {
 						// @ts-ignore
 						.then((t) => t.trim().split('\n').map(JSON.parse))
 						.catch((e) => {
-							console.error('Error fetching cold', year, e)
+							// console.error('Error fetching cold', year, e)
 							return []
 						}),
 				])
@@ -242,32 +242,32 @@ export const useStore = defineStore('main', {
 				{ length: to - from },
 				(_, i) => from + i,
 			).reverse()
-			console.log('Starting fetch loop')
+			// console.log('Starting fetch loop')
 			for (const year of years) {
 				const { data } = await fetchData(year)
-				console.log(`Got data for year ${year}`, data)
-				console.log('About to process year', year)
+				// console.log(`Got data for year ${year}`, data)
+				// console.log('About to process year', year)
 				processYear(year, data[0], data[1])
-				console.log('Finished processing year', year)
+				// console.log('Finished processing year', year)
 				// @ts-ignore
-				// await (scheduler?.yield?.() ?? new Promise((r) => setTimeout(r, 0)))
+				await (scheduler?.yield?.() ?? new Promise((r) => setTimeout(r, 0)))
 			}
 			finaliseEventFilters()
-			console.log('Finished all years')
+			// console.log('Finished all years')
 
-			// console.time('Processed latest year first')
+			console.time('Processed latest year first')
 			// await processYear(to)()
-			// console.timeEnd('Processed latest year first')
+			console.timeEnd('Processed latest year first')
 			// const promises = []
 			// for (let year = to - 1; year >= from; year--) {
-			// 	console.time(`setting up processing for year ${year}`)
+				console.time(`setting up processing for year ${year}`)
 			// 	const promise = processYear(year)
 			// 	promises.push(promise())
-			// 	console.timeEnd(`setting up processing for year ${year}`)
+				console.timeEnd(`setting up processing for year ${year}`)
 			// }
-			// console.log('firing off all year processing')
+			console.log('firing off all year processing')
 			// await Promise.all(promises)
-			// console.log('firing off all year processing done')
+			console.log('firing off all year processing done')
 			manualGlobalTrigger()
 		},
 	},

@@ -132,7 +132,6 @@ export const getCanvasFromCache = (
 	selectedEvent: ExtremeEventFull | null,
 	selectedTime: Date,
 	viewMode: ViewMode,
-	intensityRange: [number, number],
 	eventHeatmapRef: any | null,
 	colorForValue: (v: number) => string,
 	intensityForValue: (v: number) => number,
@@ -200,7 +199,6 @@ export const drawEventTile =
 		selectedEvent: ExtremeEventFull | null,
 		selectedTime: Date,
 		viewMode: ViewMode,
-		intensityRange: [number, number],
 		eventHeatmapRef: any | null,
 		colorForValue: (v: number) => string,
 		intensityForValue: (v: number) => number,
@@ -213,6 +211,7 @@ export const drawEventTile =
 		if(tIndex < 0) {
 			return
 		}
+		console.log('Drawing event tile for event', selectedEvent.id, 'at time index', tIndex, colorForValue, intensityForValue)
 
 		const key = eventTileKey(
 			props.coords,
@@ -233,7 +232,6 @@ export const drawEventTile =
 			selectedEvent,
 			selectedTime,
 			viewMode,
-			intensityRange,
 			eventHeatmapRef,
 			colorForValue,
 			intensityForValue,
