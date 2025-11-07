@@ -207,7 +207,7 @@ export const drawEventTile =
 		if(!selectedEvent) {
 			return
 		}
-		const tIndex = selectedEvent?.times.findIndex((t) => t.getTime() === selectedTime.getTime())
+		const tIndex = selectedEvent?.times.findIndex((t) => t === selectedTime.getTime())
 		if(tIndex < 0) {
 			return
 		}

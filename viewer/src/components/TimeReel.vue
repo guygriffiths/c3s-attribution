@@ -36,6 +36,7 @@ import {
 	Ref,
 	watch,
 } from 'vue'
+import { useStore } from '@/store/store'
 
 const $l = useLabels()
 
@@ -87,7 +88,8 @@ const emits = defineEmits<{
 ////////////////////
 // Time selection //
 ////////////////////
-const setDate = (date: Date) => {
+const setDate = (dateVal: number) => {
+	const date = new Date(dateVal)
 	if (
 		date.getUTCFullYear() >= props.start.getUTCFullYear() &&
 		date.getUTCFullYear() <= props.end.getUTCFullYear()
@@ -111,17 +113,21 @@ const nextDay = () => {
 	const newVal = addHours(model.value, 24)
 	if (newVal.getUTCFullYear() <= endYear.value) {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
-			scrollToYear(newVal.getUTCFullYear())
-		}
-		model.value = newVal
+			console.log('nextDay year change to', newVal.getUTCFullYear())
+			model.value = newVal
+			scrollToYear(newVal.getUTCFullYear()-1)
+		} else {
+			model.value = newVal
+		}	
 	}
 }
 const prevDay = () => {
 	const newVal = subHours(model.value, 24)
 	if (newVal.getUTCFullYear() >= startYear.value) {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
+			console.log('prevDay year change to', newVal.getUTCFullYear())
 			model.value = newVal
-			scrollToYear(model.value.getUTCFullYear())
+			scrollToYear(newVal.getUTCFullYear())
 		} else {
 			model.value = newVal
 		}
@@ -132,14 +138,14 @@ const startOfYear = () => {
 		setDate(props.selectedEvent.times[0])
 		return
 	}
-	setDate(new Date(Date.UTC(selectedYear.value, 0, 1)))
+	setDate(Date.UTC(selectedYear.value, 0, 1))
 }
 const endOfYear = () => {
 	if (isZoom && props.selectedEvent) {
 		setDate(props.selectedEvent.times[props.selectedEvent.times.length - 1])
 		return
 	}
-	setDate(new Date(Date.UTC(selectedYear.value, 11, 31)))
+	setDate(Date.UTC(selectedYear.value, 11, 31))
 }
 // const nextYear = () => {
 // 	scrollToYear(selectedYear.value + 1)
@@ -150,9 +156,9 @@ const endOfYear = () => {
 
 const playing = ref(false)
 const frameInterval = computed(() => {
-	let FPS = 20
-	if (isZoom) FPS = 5
-	return 0 //1000 / FPS
+	let FPS = 30
+	if (isZoom) FPS = 10
+	return 1000 / FPS
 })
 
 const togglePlay = () => {
@@ -165,13 +171,13 @@ const togglePlay = () => {
 				model.value.getTime() ===
 					props.selectedEvent!.times[
 						props.selectedEvent!.times.length - 1
-					].getTime()))
+					]))
 	) {
 		// Restart from beginning
 		if (isZoom.value && props.selectedEvent) {
 			setDate(props.selectedEvent.times[0])
 		} else {
-			setDate(new Date(Date.UTC(selectedYear.value, 0, 1)))
+			setDate(Date.UTC(selectedYear.value, 0, 1))
 		}
 	}
 	playing.value = !playing.value
@@ -188,7 +194,7 @@ const togglePlay = () => {
 						model.value.getTime() ===
 							props.selectedEvent!.times[
 								props.selectedEvent!.times.length - 1
-							].getTime())
+							])
 				) {
 					// Reached end of event
 					playing.value = false
@@ -308,13 +314,11 @@ const endDrag = (event: MouseEvent) => {
 			// Only set the date if it has changed, otherwise it slows things down unnecessarily
 			if (differenceInDays(newDate, model.value) !== 0) {
 				setDate(
-					new Date(
 						Date.UTC(
 							newDate.getFullYear(),
 							newDate.getMonth(),
 							newDate.getDate(),
 						),
-					),
 				)
 			}
 		} else {
@@ -324,13 +328,11 @@ const endDrag = (event: MouseEvent) => {
 			)
 			const newDate = new Date(Date.UTC(selectedYear.value, 0, dayFromStart))
 			setDate(
-				new Date(
 					Date.UTC(
 						newDate.getFullYear(),
 						newDate.getMonth(),
 						newDate.getDate(),
 					),
-				),
 			)
 		}
 	}
@@ -361,11 +363,11 @@ const handleDrag = (event: MouseEvent) => {
 				// addHours will respect DST, addDays won't
 				const newDate = addHours(startDate, 24 * daysMoved)
 				if (newDate.getFullYear() === selectedYear.value) {
-					setDate(newDate)
+					setDate(newDate.getTime())
 				} else if (newDate.getFullYear() < selectedYear.value) {
-					setDate(new Date(Date.UTC(selectedYear.value, 0, 1)))
+					setDate(Date.UTC(selectedYear.value, 0, 1))
 				} else if (newDate.getFullYear() > selectedYear.value) {
-					setDate(new Date(Date.UTC(selectedYear.value, 11, 31)))
+					setDate(Date.UTC(selectedYear.value, 11, 31))
 				}
 			} else {
 				const rect = container.getBoundingClientRect()
@@ -384,11 +386,11 @@ const handleDrag = (event: MouseEvent) => {
 				// addHours will respect DST, addDays won't
 				const newDate = addHours(startDate, 24 * daysMoved)
 				if (newDate.getFullYear() === selectedYear.value) {
-					setDate(newDate)
+					setDate(newDate.getTime())
 				} else if (newDate.getFullYear() < selectedYear.value) {
-					setDate(new Date(Date.UTC(selectedYear.value, 0, 1)))
+					setDate(Date.UTC(selectedYear.value, 0, 1))
 				} else if (newDate.getFullYear() > selectedYear.value) {
-					setDate(new Date(Date.UTC(selectedYear.value, 11, 31)))
+					setDate(Date.UTC(selectedYear.value, 11, 31))
 				}
 			}
 		}
@@ -470,8 +472,8 @@ onMounted(() => {
 		// else if (e.key === 'ArrowUp') prevYear()
 		// else if (e.key === 'ArrowDown') nextYear()
 		// else if (e.key === 'R') nextYear()
-		else if (e.key === 'Home') setDate(new Date(props.start.getTime()))
-		else if (e.key === 'End') setDate(new Date(props.end.getTime()))
+		else if (e.key === 'Home') setDate(props.start.getTime())
+		else if (e.key === 'End') setDate(props.end.getTime())
 	}
 	window.addEventListener('keydown', handleKey)
 
@@ -546,8 +548,8 @@ const getAreaString = () => {
 		return d3
 			.scaleLinear()
 			.domain([
-				Math.min(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 0,
-				Math.max(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 1,
+				0,
+				Math.max(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 5,
 			])
 			.range([0, 0.5])
 	})
@@ -591,7 +593,7 @@ const scrollListener = () => {
 	const scrollTop = container.value!.scrollTop
 	const rowsDown = scrollTop / rowHeight.value
 	const newYear = Math.round(startYear.value + rowsDown)
-	const newDate = new Date(Date.UTC(newYear, 0, getDayOfYear(model.value)))
+	const newDate = Date.UTC(newYear, 0, getDayOfYear(model.value))
 	setDate(newDate)
 }
 
@@ -600,7 +602,6 @@ const hwDayCounts = ref<number[]>([])
 watch(
 	() => props.events,
 	() => {
-		// console.time('update event boxes')
 		for (let year of years.value) {
 			const res = getEventBoxes(
 				props.events,
@@ -640,7 +641,9 @@ watch(
 		// console.timeEnd('update event boxes')
 		const yearsList = [...years.value].reverse()
 		const drawNextYear = () => {
-			if (!yearsList.length) return
+			if (!yearsList.length) {
+				return
+			}
 
 			const year = yearsList.shift()!
 			let currentPath = null
@@ -650,27 +653,20 @@ watch(
 				// Sometimes happens on first draw in race conditions
 			}
 			if (currentPath !== newD[year]) {
-				// No change, skip
+				// The line has changed, redraw it
 				d3.select(`#events-line-${year}`)
 					.transition()
 					.duration(0)
 					.attr('d', newD[year])
-				// console.log('Redrew year', year)
 			}
 
+			// We can use this if it's blocking the UI, but the result will be a staggered draw,
+			// so should be avoided if possible. Same is true of setTimeout.
 			requestAnimationFrame(drawNextYear)
+			// drawNextYear()
 		}
 
-		drawNextYear()
-
-		// if (container.value) {
-		// 	const yearsOffset = selectedYear.value - startYear.value
-		// 	const scrollOffset = 0.5 * (yearsOffset * 2 - 1)
-		// 	container.value.scrollTo({
-		// 		top: scrollOffset * rowHeight.value,
-		// 	})
-		// 	console.log('and scrolled to', selectedYear.value)
-		// }
+		requestAnimationFrame(drawNextYear)
 	},
 	{ immediate: true, deep: false },
 )
@@ -813,9 +809,9 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					:disabled="
 						isZoom &&
 						(!props.selectedEvent ||
-							props.selectedEvent.times[0] > model ||
+							props.selectedEvent.times[0] > model.getTime() ||
 							props.selectedEvent.times[props.selectedEvent.times.length - 1] <
-								model)
+								model.getTime())
 					"
 					:class="{ selected: playing }"
 				>
@@ -1044,7 +1040,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 										"
 										:key="`${box.event.id}-${i}`"
 										vector-effect="non-scaling-stroke"
-										@click="model = props.selectedEvent.times[i]"
+										@click="model = new Date(props.selectedEvent.times[i])"
 									></rect>
 								</g>
 							</g>

@@ -6,13 +6,15 @@ import AppHeader from '@/components/common/AppHeader.vue'
 import AppFooter from '@/components/common/Footer.vue'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
+import { useStore as useEventStore } from '@/store/eventStore'
 
 const l = useLabels()
 const store = useStore()
+const eventStore = useEventStore()
 
 onMounted(() => {
 	document.title = l.value.title
-	store.init()
+	eventStore.init()
 
 	let resizeTimer: number
 

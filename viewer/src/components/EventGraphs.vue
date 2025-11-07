@@ -53,7 +53,7 @@ const selectedIndex = computed(() => {
 	if (!props.selectedEvent) return -1
 	const selectedTime = timeStore.selectedTime
 	return props.selectedEvent.times.findIndex(
-		(d) => d.getTime() === selectedTime.getTime(),
+		(d) => d === selectedTime.getTime(),
 	)
 })
 

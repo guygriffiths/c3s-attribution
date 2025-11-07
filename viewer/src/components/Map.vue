@@ -45,7 +45,7 @@ import {
 	getFilteredEvents,
 	onGlobalEventsReady,
 	onCurrentEventsReady,
-} from '@/lib/eventFiltering'
+} from '@/lib/eventsDB'
 
 const store = useStore()
 const timeStore = useTimeStore()
@@ -125,6 +125,7 @@ const drawControl = computed(
 const currentEvents = ref<ExtremeEvent[]>([])
 onCurrentEventsReady(() => {
 	// This gets called when the time index is ready
+	console.log('Map.vue - Current events ready, updating for selected time')
 	currentEvents.value = getCurrentEvents(timeStore.selectedTime)
 })
 const eventPointFilter = ref<[number, number] | null>(null)

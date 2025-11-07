@@ -32,7 +32,7 @@ import {
 	setColdOnly,
 	setHotColdBoth,
 	setHotOnly,
-} from '@/lib/eventFiltering'
+} from '@/lib/eventsDB'
 import { differenceInDays } from 'date-fns'
 import MultiEventPanel from './MultiEventPanel.vue'
 import {
@@ -74,24 +74,26 @@ const globalEventsOfInterest = computed((): boolean => {
 const globalFilteredEvents = ref([] as ExtremeEvent[])
 const eventsOfInterest = ref([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
+	console.log('global events ready - Main.vue')
 	globalFilteredEvents.value = getGlobalFilteredEvents()
 	if (globalEventsOfInterest.value) {
 		eventsOfInterest.value = globalFilteredEvents.value
 	}
 })
 
-onGlobalEventsReady(() => {
-	console.log('global event trigger')
-})
-onRegionEventsReady(() => {
-	console.log('region event trigger')
-})
+// onGlobalEventsReady(() => {
+// 	console.log('global event trigger')
+// })
+// onRegionEventsReady(() => {
+// 	console.log('region event trigger')
+// })
 
 onRegionEventsReady(() => {
-	console.log(
-		'eventsOfInterest updated from filtered events',
-		eventsOfInterest.value,
-	)
+	console.log('region events ready - Main.vue')
+	// console.log(
+	// 	'eventsOfInterest updated from filtered events',
+	// 	eventsOfInterest.value,
+	// )
 	eventsOfInterest.value = getFilteredEvents()
 })
 watch(

@@ -264,7 +264,7 @@ const N = 200
 			</div>
 			<div class="ts-subpanel subpanel">
 				<ScatterPlot
-					:xdata="eventsOfInterest.map((e) => e.times[0].getTime())"
+					:xdata="eventsOfInterest.map((e) => e.times[0])"
 					:ydata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
 					:types="eventsOfInterest.map((e) => e.event_type)"
 					:xmin="timeStore.startTime.getTime()"
@@ -284,7 +284,7 @@ const N = 200
 					yvar="duration"
 				/>
 				<ScatterPlot
-					:xdata="eventsOfInterest.map((e) => e.times[0].getTime())"
+					:xdata="eventsOfInterest.map((e) => e.times[0])"
 					:ydata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
 					:types="eventsOfInterest.map((e) => e.event_type)"
 					:xmin="timeStore.startTime.getTime()"
@@ -304,7 +304,7 @@ const N = 200
 					yvar="size"
 				/>
 				<ScatterPlot
-					:xdata="eventsOfInterest.map((e) => e.times[0].getTime())"
+					:xdata="eventsOfInterest.map((e) => e.times[0])"
 					:ydata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
 					:types="eventsOfInterest.map((e) => e.event_type)"
 					:xmin="timeStore.startTime.getTime()"

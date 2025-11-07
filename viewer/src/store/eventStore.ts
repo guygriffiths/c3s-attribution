@@ -1,39 +1,37 @@
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
-	buildEventFilters,
-	manualGlobalTrigger,
+	fetchAndIndexEvents,
+	getGlobalFilteredEvents,
+	onGlobalEventsReady,
 	setPostFilters
-} from '@/lib/eventFiltering'
-import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
+} from '@/lib/eventsDB'
+import { DATA_ROOT, interpolateColorCold, interpolateColorHot } from '@/lib/utils'
 import * as d3 from 'd3'
-import { differenceInDays } from 'date-fns'
 import { defineStore } from 'pinia'
-import { DATA_ROOT, useStore as useMainStore } from './store'
+import { watch } from 'vue'
+import { useStore as useMainStore } from './store'
 import { useStore as useTimeStore } from './timeStore'
 
-// const worker = createEventFilterWorker()
-// let spatialIndex: Flatbush | null = null // Spatial index for events
-
 interface State {
-	// events: ExtremeEvent[]
-	startYear: number
-	endYear: number
-
 	selectedEvent: ExtremeEventFull | null
 	selectedEventId: string | null
 	hoveringEventId: string | null
 
-	// These are the events after having the threshold filters applied
-	// globalFilteredEvents: ExtremeEvent[]
-
 	durationRange: [number, number]
 	heatIntensityRange: [number, number]
 	coldIntensityRange: [number, number]
-
-	eventTypeMode: 'hot' | 'cold' | 'hotcold'
 	sizeRange: [number, number]
 
+	eventTypeMode: 'hot' | 'cold' | 'hotcold'
+
 	eventSetsLoaded: number
+
+	filters: {
+		duration: number
+		intensity: number
+		size: number
+	}
+	firstEventSetLoaded: boolean
 }
 
 export const intensityForValue = (v: number, hot: boolean) => {
@@ -68,17 +66,23 @@ export const colorForEvent = (
 		event.event_type === 'hot' ? event.max_value : event.mean_value,
 		event.event_type === 'hot',
 	)
-	console.log('intensity for event', event.id, 'is', value, intensityForValue, colorForValue)
+	console.log(
+		'intensity for event',
+		event.id,
+		'is',
+		value,
+		intensityForValue,
+		colorForValue,
+	)
 	return colorForValue(value, event.event_type === 'hot', scale)
 }
+
 
 export const useStore = defineStore('events', {
 	state: (): State => {
 		return {
 			selectedEvent: null,
 			selectedEventId: null,
-			startYear: 2024,
-			endYear: 2024,
 			hoveringEventId: null,
 			durationRange: [3, 14],
 			heatIntensityRange: [0, 0],
@@ -86,6 +90,12 @@ export const useStore = defineStore('events', {
 			eventTypeMode: 'hot',
 			sizeRange: [0, 100],
 			eventSetsLoaded: 0,
+			filters: {
+				duration: 3,
+				intensity: 0,
+				size: 0,
+			},
+			firstEventSetLoaded: false,
 		}
 	},
 	getters: {
@@ -135,7 +145,7 @@ export const useStore = defineStore('events', {
 		},
 		durationForEvent: (state: State) => {
 			return (event: ExtremeEvent | ExtremeEventFull | null) =>
-				event?.duration || 0
+				event?.times.length || 0
 		},
 		sizeForEvent: (state: State) => {
 			return (event: ExtremeEvent | ExtremeEventFull | null) =>
@@ -169,7 +179,7 @@ export const useStore = defineStore('events', {
 		intensitiesForEventStep: (state: State) => {
 			return (event: ExtremeEventFull | null, time: Date) => {
 				if (!event) return []
-				const idx = event.times.findIndex((t) => t.getTime() === time.getTime())
+				const idx = event.times.findIndex((t) => t === time.getTime())
 				if (idx === -1) return []
 				if (event.event_type === 'hot') {
 					return event.values[idx].map((v) => intensityForValue(v, true))
@@ -210,10 +220,7 @@ export const useStore = defineStore('events', {
 				const event = await resp.json()
 				// // This should always be the case...
 				event.id = id
-				event.times = event.times.map((time: string) => new Date(time))
-				event.duration =
-					1 +
-					differenceInDays(event.times[event.times.length - 1], event.times[0])
+				event.times = event.times.map((time: string) => new Date(time).getTime())
 				this.selectedEvent = event as ExtremeEventFull
 				if (
 					timeStore.selectedTime < event.times[0] ||
@@ -224,17 +231,13 @@ export const useStore = defineStore('events', {
 				mainStore.setLoadingDone()
 			}
 		},
-		toggleEventSelectedDebug() {
-			this.selectedEvent =
-				this.selectedEvent === null ? (new Object() as ExtremeEventFull) : null
-		},
 		async runFilters() {
 			console.log('Running event filters')
 			const mainStore = useMainStore()
 			mainStore.setLoading()
 
 			setPostFilters(
-				mainStore.filters,
+				this.filters,
 				this.durationForEvent,
 				this.intensityForEvent,
 				this.sizeForEvent,
@@ -242,95 +245,140 @@ export const useStore = defineStore('events', {
 			// This needs to get set by the leaflet layers
 			mainStore.setLoadingDone()
 		},
-		async addEvents(data: ExtremeEvent[], final: boolean = false) {
+		// async addEvents(data: ExtremeEvent[], final: boolean = false) {
+		// 	const mainStore = useMainStore()
+		// 	// console.log(
+		// 	// 	'Setting events, count:',
+		// 	// 	data.length,
+		// 	// 	data.filter((e) => e.event_type === 'hot').length,
+		// 	// 	data.filter((e) => e.event_type === 'cold').length,
+		// 	// )
+		// 	// Throw away the top x% of values for setting the range on colour scales, histograms etc
+		// 	// const N = Math.ceil(data.length * 0.025)
+
+		// 	data.forEach((e) => {
+		// 		const duration = this.durationForEvent(e)
+		// 		if (duration < this.durationRange[0]) {
+		// 			this.durationRange[0] = duration
+		// 		}
+		// 		if (duration > this.durationRange[1]) {
+		// 			this.durationRange[1] = duration
+		// 		}
+
+		// 		const size = this.sizeForEvent(e)
+		// 		if (size < this.sizeRange[0]) {
+		// 			this.sizeRange[0] = size
+		// 		}
+		// 		if (size > this.sizeRange[1]) {
+		// 			this.sizeRange[1] = size
+		// 		}
+
+		// 		const intensity = intensityForValue(
+		// 			e.event_type === 'hot' ? e.max_value : e.mean_value,
+		// 			e.event_type === 'hot',
+		// 		)
+		// 		if (e.event_type === 'hot') {
+		// 			if (intensity < this.heatIntensityRange[0]) {
+		// 				this.heatIntensityRange[0] = intensity
+		// 			}
+		// 			if (intensity > this.heatIntensityRange[1]) {
+		// 				this.heatIntensityRange[1] = intensity
+		// 			}
+		// 		} else if (e.event_type === 'cold') {
+		// 			if (intensity < this.coldIntensityRange[0]) {
+		// 				this.coldIntensityRange[0] = intensity
+		// 			}
+		// 			if (intensity > this.coldIntensityRange[1]) {
+		// 				this.coldIntensityRange[1] = intensity
+		// 			}
+		// 		}
+		// 	})
+
+		// 	console.time('ES:buildEventFilters')
+		// 	buildEventFilters(data) // Kick off building the pixel index
+		// 	console.timeEnd('ES:buildEventFilters')
+		// 	this.eventSetsLoaded += 1
+		// 	if (this.eventSetsLoaded === 1) {
+		// 		mainStore.setLoadingDone()
+		// 	}
+		// 	if (
+		// 		this.eventSetsLoaded <= 3 ||
+		// 		this.eventSetsLoaded === 5 ||
+		// 		this.eventSetsLoaded % 10 === 0 ||
+		// 		final
+		// 	) {
+		// 		// console.log('Manually triggering global events ready callback after', this.eventSetsLoaded, 'sets loaded')
+		// 		// Trigger a global events ready callback at various points during loading
+		// 		// This allows a good balance between early rendering and processing speed
+		// 		// (rendering after every year is slow, particularly compared with data loads from cache)
+		// 		manualGlobalTrigger()
+		// 	}
+		// },
+		async init() {
+			this.firstEventSetLoaded = false
 			const mainStore = useMainStore()
-			// console.log(
-			// 	'Setting events, count:',
-			// 	data.length,
-			// 	data.filter((e) => e.event_type === 'hot').length,
-			// 	data.filter((e) => e.event_type === 'cold').length,
-			// )
-			// Throw away the top x% of values for setting the range on colour scales, histograms etc
-			// const N = Math.ceil(data.length * 0.025)
+			mainStore.setLoading()
+			watch(() => [this.filters], this.runFilters, {
+				deep: true,
+				immediate: false,
+			})
 
-			// Preprocess events a bit
-			const durations = data
-				.map((e) => this.durationForEvent(e))
-				.filter((v) => v != null)
-				.sort((a, b) => b - a)
+			// Hard-code start date, get end date from current year.
+			const timeStore = useTimeStore()
+			const from = 1979
+			const to = 2024//new Date().getFullYear()
+			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
+			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
 
-			const heatIntensities = data
-				.filter((d) => d != null && d.event_type === 'hot')
-				.map((e) => this.intensityForEvent(e))
-				.sort((a, b) => b - a)
-			// console.log('heat intensities', heatIntensities)
+			onGlobalEventsReady(() => {
+				if (!this.firstEventSetLoaded) {
+					this.firstEventSetLoaded = true
+					mainStore.setLoadingDone()
+				}
+				const events = getGlobalFilteredEvents()
+				events.forEach((e) => {
+					const duration = this.durationForEvent(e)
+					if (duration < this.durationRange[0]) {
+						this.durationRange[0] = duration
+					}
+					if (duration > this.durationRange[1]) {
+						this.durationRange[1] = duration
+					}
 
-			const coldIntensities = data
-				.filter((d) => d != null && d.event_type === 'cold')
-				.map((e) => this.intensityForEvent(e))
-				.sort((a, b) => b - a)
-			// console.log('cold intensities', coldIntensities)
+					const size = this.sizeForEvent(e)
+					if (size < this.sizeRange[0]) {
+						this.sizeRange[0] = size
+					}
+					if (size > this.sizeRange[1]) {
+						this.sizeRange[1] = size
+					}
 
-			const sizes = data
-				.map((e) => this.sizeForEvent(e))
-				.filter((v) => v != null)
-				.sort((a, b) => b - a)
+					const intensity = intensityForValue(
+						e.event_type === 'hot' ? e.max_value : e.mean_value,
+						e.event_type === 'hot',
+					)
+					if (e.event_type === 'hot') {
+						if (intensity < this.heatIntensityRange[0]) {
+							this.heatIntensityRange[0] = intensity
+						}
+						if (intensity > this.heatIntensityRange[1]) {
+							this.heatIntensityRange[1] = intensity
+						}
+					} else if (e.event_type === 'cold') {
+						if (intensity < this.coldIntensityRange[0]) {
+							this.coldIntensityRange[0] = intensity
+						}
+						if (intensity > this.coldIntensityRange[1]) {
+							this.coldIntensityRange[1] = intensity
+						}
+					}
+				})
+			})
 
-			if (durations.length > 0) {
-				this.durationRange = [
-					Math.min(durations[durations.length - 1], this.durationRange[0]),
-					Math.max(durations[0], this.durationRange[1]),
-				]
-			}
-			if (heatIntensities.length > 0) {
-				this.heatIntensityRange = [
-					Math.min(
-						heatIntensities[heatIntensities.length - 1],
-						this.heatIntensityRange[0],
-					),
-					Math.max(heatIntensities[0], this.heatIntensityRange[1]),
-				]
-			}
-			if (coldIntensities.length > 0) {
-				this.coldIntensityRange = [
-					Math.min(
-						coldIntensities[coldIntensities.length - 1],
-						this.coldIntensityRange[0],
-					),
-					Math.max(coldIntensities[0], this.coldIntensityRange[1]),
-				]
-			}
-
-			this.sizeRange = [0, Math.max(sizes[sizes.length - 1], this.sizeRange[1])]
-
-			// console.time('ES:buildEventFilters')
-			buildEventFilters(data) // Kick off building the pixel index
-			// console.timeEnd('ES:buildEventFilters')
-			this.eventSetsLoaded += 1
-			if(this.eventSetsLoaded === 1) {
-				mainStore.setLoadingDone()
-			}
-			if (
-				this.eventSetsLoaded <= 3 ||
-				this.eventSetsLoaded === 5 ||
-				this.eventSetsLoaded % 10 === 0 || final
-			) {
-				console.log('Manually triggering global events ready callback after', this.eventSetsLoaded, 'sets loaded')
-				// Trigger a global events ready callback at various points during loading
-				// This allows a good balance between early rendering and processing speed
-				// (rendering after every year is slow, particularly compared with data loads from cache)
-				manualGlobalTrigger()
-			}
-
-			this.startYear = Math.min(
-				data[0].times[0].getUTCFullYear(),
-				this.startYear,
-			)
-			this.endYear = Math.max(
-				data[0].times[data[0].times.length - 1].getUTCFullYear(),
-			)
+			// Load hot and cold events
+			await fetchAndIndexEvents(['hot', 'cold'], from, to)
 		},
 	},
 })
 
-export type MainStore = ReturnType<typeof useStore>
+export type EventStore = ReturnType<typeof useStore>

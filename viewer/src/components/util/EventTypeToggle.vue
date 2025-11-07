@@ -18,18 +18,14 @@ const coldClicked = () => {
 	store.setLoading()
 	model.value = 'cold'
 	setTheme('cold')
-	nextTick(() => {
-		store.setLoadingDone()
-	})
+	store.setLoadingDone()
 }
 
 const hotClicked = () => {
 	store.setLoading()
 	model.value = 'hot'
 	setTheme('hot')
-	nextTick(() => {
-		store.setLoadingDone()
-	})
+	store.setLoadingDone()
 }
 
 const lastOnWasHot = ref(model.value === 'hot')

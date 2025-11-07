@@ -49,15 +49,19 @@ export function getEventBoxes(
 ): { events: EventBox[]; maxEvents: number } {
 	// console.log('getEventBoxes', events, year, splitHotAndCold)
 	// Step 1: Filter and slice in one go, reuse timestamps to avoid creating Date objects
+
+	const yearStart = Date.UTC(year, 0, 1)
+	const yearEnd = Date.UTC(year + 1, 0, 1) - 1
+
 	const eventBars: EventBox[] = []
 	for (let e of events.filter((e) => {
 		const first = e.times[0]
 		const last = e.times[e.times.length - 1]
-		return first.getUTCFullYear() <= year && last.getUTCFullYear() >= year
+		return first <= yearEnd && last >= yearStart
 	})) {
 		// Get startX and endX for this year
-		const first = e.times[0]
-		const last = e.times[e.times.length - 1]
+		const first = new Date(e.times[0])	
+		const last = new Date(e.times[e.times.length - 1])
 
 		let startX = getDayOfYear(first) + first.getUTCFullYear() * TOTAL_DAYS
 		let endX = getDayOfYear(last) + last.getUTCFullYear() * TOTAL_DAYS

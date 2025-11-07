@@ -13,7 +13,7 @@ declare global {
 
 	interface ExtremeEvent {
 		id: string
-		times: Date[]
+		times: number[]
 		duration: number // in days
 		regions: [number, number][][]
 		total_region: [number, number][]

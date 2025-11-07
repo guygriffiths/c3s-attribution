@@ -1,5 +1,7 @@
 import * as d3 from 'd3'
 
+export const DATA_ROOT = `${import.meta.env.X_PUBLIC_PATH || ''}data/`
+
 export const debounce = (func: (...args: any[]) => void, delay: number) => {
 	let timeout: ReturnType<typeof setTimeout> | null = null
 	return (...args: any[]) => {
@@ -50,15 +52,17 @@ export const toPx = (value: string): number => {
 // 	return (t: number) => d3.hsl(hsl.h, hsl.s, (1 - t) * 0.7 + 0.2).toString()
 // }
 
-export const interpolateColorHot = (baseColor: string = 'rgb(151, 24, 65)') => {
-	const hcl = d3.hcl(baseColor)
-	console.log('interpolateColorHot baseColor', baseColor, 'hcl', hcl)
-	return (t: number) => {
-		const H = (hcl.h + t * 100 - 80) % 360
-		const C = Math.pow(t, 1.6) * 40
-		const L = 20 + t * 70
-		return d3.hcl(H, C, L).formatRgb()
+export const interpolateColorHot = (
+	baseColor: string = 'rgb(224, 192, 233)',
+) => {
+	const hcl = d3.lch(baseColor)
+	const retfunc = (t: number) => {
+		const H = hcl.h - (((t - 1) * 10) % 360)
+		const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 100
+		const L = hcl.l + (0.2 + 0.8 * (t - 0.4)) * 130
+		return d3.lch(L, C, H).formatRgb()
 	}
+	return retfunc
 }
 
 export const interpolateColorCold = (
@@ -66,7 +70,7 @@ export const interpolateColorCold = (
 ) => {
 	const hcl = d3.hcl(baseColor)
 	return (t: number) => {
-		const H = hcl.h + (t * 10)
+		const H = hcl.h + t * 10
 		const C = Math.pow(t, 1.2) * 70
 		const L = 80 - t * 70
 		return d3.hcl(H, C, L).formatRgb()
@@ -92,12 +96,12 @@ export const binGradient = (
 
 // Switch to a specific theme
 export const setTheme = (themeName: 'hot' | 'cold' | 'hotcold') => {
-	console.log('Setting theme to', themeName)
+	console.time(`Setting theme to ${themeName}`)
 	const root = document.documentElement
 	const themePrefix = `--theme-${themeName}-`
-
+	
 	const styles: any = getComputedStyle(root)
-
+	
 	// Loop over all computed properties instead
 	for (const prop of styles) {
 		if (prop.startsWith(themePrefix)) {
@@ -106,4 +110,39 @@ export const setTheme = (themeName: 'hot' | 'cold' | 'hotcold') => {
 			root.style.setProperty(`--${token}`, value)
 		}
 	}
+	console.timeEnd(`Setting theme to ${themeName}`)
+}
+
+export const fetchDataForYear = async (year: number) => {
+	const [hot, cold] = await Promise.all([
+		fetch(`${DATA_ROOT}events-hot-${year}.jsonl`)
+			.then((r) => r.text())
+			.then((t) =>
+				t
+					.trim()
+					.split('\n')
+					.map((line) => {
+						const event = JSON.parse(line)
+						// Convert to timestamps (numbers) instead of Date objects
+						event.times = event.times.map((t: string) => new Date(t).getTime())
+						return event
+					}),
+			)
+			.catch(() => []),
+
+		fetch(`${DATA_ROOT}events-cold-${year}.jsonl`)
+			.then((r) => r.text())
+			.then((t) =>
+				t
+					.trim()
+					.split('\n')
+					.map((line) => {
+						const event = JSON.parse(line)
+						event.times = event.times.map((t: string) => new Date(t).getTime())
+						return event
+					}),
+			)
+			.catch(() => []),
+	])
+	return [hot, cold]
 }

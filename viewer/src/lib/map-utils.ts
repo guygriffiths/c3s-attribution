@@ -137,7 +137,6 @@ renderToString(h(IconMapPinFilled, { size: 32, color: scssVars.lightbulb })).the
 export const getEventRegion = (event: ExtremeEvent, time: Date) => {
 	const selected = time.getTime()
 	const idx = event.times
-		.map((t: Date) => t.getTime())
 		.findIndex((t) => t === selected)
 
 	if (idx < 0) {

@@ -1,19 +1,9 @@
 <script lang="ts" setup>
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import {
-	faDrawPolygon,
-	faMapMarkerAlt,
-	faBan,
-	faPenAlt,
-	faGlobe,
-} from '@fortawesome/free-solid-svg-icons'
 import { useLabels } from '@/lib/labels'
-import scssModule from '@/assets/styles/scssVars.module.scss'
-import { onFilterBuilt } from '@/lib/eventFiltering'
-import { nextTick, ref } from 'vue'
-import { IconLayersSelected, IconMapPin, IconPencil, IconPolygon, IconWorld } from '@tabler/icons-vue'
+import { IconLayersSelected, IconMapPin, IconPencil, IconWorld } from '@tabler/icons-vue'
+import { ref } from 'vue'
 
 const store = useStore()
 const eventStore = useEventStore()
@@ -55,10 +45,10 @@ const setExploreGlobal = () => {
 	store.filteringByRegion = false
 }
 
-const ready = ref(false)
-onFilterBuilt(() => {
-	ready.value = true
-})
+const ready = ref(true)
+// onFilterBuilt(() => {
+// 	ready.value = true
+// })
 </script>
 
 <template>
