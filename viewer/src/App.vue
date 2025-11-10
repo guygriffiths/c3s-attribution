@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import 'vue3-loading-overlay/dist/vue3-loading-overlay.css'
-import Loading from 'vue3-loading-overlay'
+import Loading from '@/components/util/Loading.vue'
 import AppHeader from '@/components/common/AppHeader.vue'
 import AppFooter from '@/components/common/Footer.vue'
 import { useLabels } from '@/lib/labels'
@@ -30,7 +30,12 @@ onMounted(() => {
 </script>
 
 <template id="app">
-	<loading :active="store.isLoading" :isFullPage="true" id="loading"></loading>
+	<loading
+		id="loading-overlay"
+		:message="store.loadingMessage || 'Loading...'"
+		:progress="50"
+		:show-progress="false"
+	></loading>
 	<!-- <AppHeader id="header" /> -->
 	<router-view id="main"></router-view>
 	<!-- <AppFooter id="footer" /> -->
@@ -39,6 +44,15 @@ onMounted(() => {
 <style lang="scss">
 @forward '@/assets/styles/main.scss';
 @use '@/assets/styles/scssVars.module.scss' as *;
+
+#loading-overlay {
+	position: fixed;
+	width: 100vw;
+	height: 100vh;
+	top: 0;
+	left: 0;
+	margin: 0;
+}
 
 #app {
 	width: 100vw;
@@ -49,14 +63,6 @@ onMounted(() => {
 	// grid-template-columns: 100%;
 	// grid-template-rows: $headerHeight + $gap 1fr $footerHeight + $gap;
 	// grid-template-areas: 'header' 'main' 'footer';
-
-	#loading {
-		width: 100vw;
-		height: 100vh;
-		position: absolute;
-		margin: auto;
-		backdrop-filter: $frosty;
-	}
 
 	#header {
 		grid-area: header;

@@ -20,7 +20,7 @@ export const useStore = defineStore('time', {
 			selectedTime: new Date(Date.UTC(2024, 4, 28, 0, 0, 0)),
 			startTime: new Date(1979, 0, 1),
 			endTime: new Date(),
-			showBars: false,
+			showBars: true,
 
 			timePanelExpanded: false,
 			timePanelVisible: true,

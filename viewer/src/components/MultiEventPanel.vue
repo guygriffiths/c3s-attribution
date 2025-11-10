@@ -1,10 +1,4 @@
 <script setup lang="ts">
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import {
-	faClock,
-	faExpand,
-	faTemperatureHigh,
-} from '@fortawesome/free-solid-svg-icons'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useTimeStore } from '@/store/timeStore'
@@ -27,10 +21,9 @@ import {
 	IconTemperature,
 	IconTemperatureSnow,
 	IconTemperatureSun,
+	IconStopwatch,
 } from '@tabler/icons-vue'
-import { Icon } from '@vue-leaflet/vue-leaflet/dist/src/functions'
 import { ref, watch } from 'vue'
-import { intervalToMs } from '@/lib/time-utils'
 
 const store = useStore()
 const eventStore = useEventStore()
@@ -67,18 +60,14 @@ const N = 200
 		<h1><IconMapStar /> {{ eventsOfInterest.length }}</h1>
 		<div class="title-panel">
 			<h1>
-				<!-- <FontAwesomeIcon :icon="faClock" /> -->
-				<IconHourglassHigh />
+				<IconStopwatch />
 			</h1>
 			<h1>
 				<!-- <FontAwesomeIcon :icon="faExpand" /> -->
 				<IconDimensions />
 			</h1>
 			<h1>
-				<!-- <FontAwesomeIcon :icon="faTemperatureHigh" /> -->
-				<IconTemperature
-					v-if="eventStore.eventTypeMode === 'hotcold'"
-				/>
+				<IconTemperature v-if="eventStore.eventTypeMode === 'hotcold'" />
 				<IconTemperatureSnow v-else-if="eventStore.eventTypeMode === 'cold'" />
 				<IconTemperatureSun v-else-if="eventStore.eventTypeMode === 'hot'" />
 				<IconTemperature v-else />
@@ -390,7 +379,6 @@ const N = 200
 		z-index: 10;
 		display: flex;
 		gap: 0.25rem;
-		
 	}
 
 	.scroller {
@@ -427,10 +415,19 @@ const N = 200
 			.event-ranker-root,
 			.histogram-root,
 			.scatter-root {
-				background-color: var(--panel-alt);
+				background-color: var(--panel-hint);
 				backdrop-filter: $frosty;
 				// margin: 0 0.25rem;
 			}
+
+			.histogram-root,
+			.scatter-root {
+				&:hover {
+					cursor: pointer;
+					filter: brightness(1.05);
+				}
+			}
+
 			// padding: 0.25rem;
 
 			&.medals-subpanel {

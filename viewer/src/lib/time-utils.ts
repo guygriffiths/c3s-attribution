@@ -43,9 +43,15 @@ export const dayStr = (day: number, year: number, showYear: boolean) => {
 }
 
 export function getEventBoxes(
-	events: ExtremeEvent[],
+	events: {
+		times: number[]
+		id: string
+		event_type: 'hot' | 'cold'
+		color: string
+	}[],
 	year: number,
 	splitHotAndCold: boolean = false,
+
 ): { events: EventBox[]; maxEvents: number } {
 	// console.log('getEventBoxes', events, year, splitHotAndCold)
 	// Step 1: Filter and slice in one go, reuse timestamps to avoid creating Date objects
@@ -66,7 +72,7 @@ export function getEventBoxes(
 		let startX = getDayOfYear(first) + first.getUTCFullYear() * TOTAL_DAYS
 		let endX = getDayOfYear(last) + last.getUTCFullYear() * TOTAL_DAYS
 
-		eventBars.push({ event: e, startX, endX, y: 0 })
+		eventBars.push({ eventId: e.id, startX, endX, y: 0, type: e.event_type, color: e.color })
 	}
 
 	// Step 2: Assign y-positions using a greedy row-packing algorithm
@@ -90,7 +96,7 @@ export function getEventBoxes(
 		const coldRows: number[] = [] // row[y] = lastEndX
 
 		for (let e of eventBars
-			.filter((ev) => ev.event.event_type === 'hot')
+			.filter((ev) => ev.type === 'hot')
 			.sort((a, b) => a.startX - b.startX)) {
 			let y = 0
 			for (; y < hotRows.length; y++) {
@@ -101,7 +107,7 @@ export function getEventBoxes(
 			if (y > maxY) maxY = y
 		}
 		for (let e of eventBars
-			.filter((ev) => ev.event.event_type === 'cold')
+			.filter((ev) => ev.type === 'cold')
 			.sort((a, b) => a.startX - b.startX)) {
 			let y = 0
 			for (; y < coldRows.length; y++) {

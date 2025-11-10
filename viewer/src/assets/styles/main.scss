@@ -69,6 +69,17 @@ button {
 			background: var(--primary-glass);
 			color: var(--panel-surface);
 		}
+
+		&.selected {
+			transform: scale(0.98);
+			background-color: var(--primary-glass);
+			color: var(--primary-selected);
+
+			&.color {
+				color: var(--primary-selected);
+			}
+		}
+
 		// background-color: var(--primary-glass);
 		backdrop-filter: $frosty;
 
@@ -89,19 +100,27 @@ button {
 			}
 		}
 
-		&:focus-visible {
-			// outline: 2px solid var(--focus-ring);
-			// outline-offset: 2px;
-		}
-
-		&.selected,
 		&:active {
-			transform: scale(0.98);
-			background-color: var(--primary-glass-shine);
-			color: var(--primary-selected);
+			background-color: var(--primary-glass-dark);
+			color: var(--text-on-primary);
+			transform: translateY(1px);
 
 			&.color {
-				color: var(--primary-selected);
+				background-color: var(--primary-glass-dark);
+				color: var(--text-on-primary);
+			}
+
+			.icon {
+				transform: scale(0.95);
+			}
+		}
+
+		&:disabled {
+			background: var(--panel-bg-dark);
+			cursor: not-allowed;
+
+			&.color {
+				background: var(--primary-glass-dark);
 			}
 		}
 
@@ -113,10 +132,6 @@ button {
 			flex-shrink: 0;
 			pointer-events: none;
 			user-select: none;
-
-			&.active {
-				transform: scale(1.1);
-			}
 		}
 	}
 

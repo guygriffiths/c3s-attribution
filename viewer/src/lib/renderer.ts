@@ -211,7 +211,7 @@ export const drawEventTile =
 		if(tIndex < 0) {
 			return
 		}
-		console.log('Drawing event tile for event', selectedEvent.id, 'at time index', tIndex, colorForValue, intensityForValue)
+		// console.log('Drawing event tile for event', selectedEvent.id, 'at time index', tIndex, colorForValue, intensityForValue)
 
 		const key = eventTileKey(
 			props.coords,

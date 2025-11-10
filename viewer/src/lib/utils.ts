@@ -57,9 +57,9 @@ export const interpolateColorHot = (
 ) => {
 	const hcl = d3.lch(baseColor)
 	const retfunc = (t: number) => {
-		const H = hcl.h - (((t - 1) * 10) % 360)
-		const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 100
-		const L = hcl.l + (0.2 + 0.8 * (t - 0.4)) * 130
+		const H = hcl.h - (((t - 1) * 20) % 360)
+		const C = hcl.c + (Math.pow(t, 1.2) - 0.5) * 125
+		const L = hcl.l + (0.2 + 0.8 * (t - 0.4)) * 110
 		return d3.lch(L, C, H).formatRgb()
 	}
 	return retfunc
@@ -68,11 +68,11 @@ export const interpolateColorHot = (
 export const interpolateColorCold = (
 	baseColor: string = 'rgb(44, 102, 162)',
 ) => {
-	const hcl = d3.hcl(baseColor)
+	const hcl = d3.lch(baseColor)
 	return (t: number) => {
 		const H = hcl.h + t * 10
 		const C = Math.pow(t, 1.2) * 70
-		const L = 80 - t * 70
+		const L = 90 - t * 65
 		return d3.hcl(H, C, L).formatRgb()
 	}
 }

@@ -8,6 +8,7 @@ type LayerDetails = any
 interface State {
 	lang: Language
 	loadingCount: number
+	loadingMessage: string | null
 	viewMode: ViewMode
 	mapCentre: Point
 
@@ -32,12 +33,12 @@ interface State {
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
 export const T2M_LAYER = 'era5/t2m'
 
-
 export const useStore = defineStore('main', {
 	state: (): State => {
 		return {
 			lang: 'en',
 			loadingCount: 0,
+			loadingMessage: null,
 			viewMode: 'timemachine', // 'timemachine' or 'heatmap'
 			mapCentre: new LatLng(-20, 0) as unknown as Point, // Default center point for the map
 
@@ -81,18 +82,26 @@ export const useStore = defineStore('main', {
 		exploringRegion: (state) => {
 			return state.regionFilterReady || state.filteringByPoint
 		},
-		isLoading: (state) => state.loadingCount > 0,
-		// Returns the (filtered) events which are active at the selected time (i.e. plotted on the map)
-		// TODO make it respond to a range, and use this is region explore
 	},
 	actions: {
-		async setLoading() {
+		async setLoading(message: string | null = null) {
 			this.loadingCount++
-			// Triggers Vue to re-render the map
-			await new Promise((resolve) => setTimeout(resolve, 0))
+			this.loadingMessage = message
+			if (this.loadingCount > 0) {
+				const loadingOverlay = document.getElementById('loading-overlay')
+				if (loadingOverlay){
+					loadingOverlay.style.display = 'flex'
+					await new Promise((resolve) => setTimeout(resolve, 0))
+				}
+			}
 		},
-		setLoadingDone() {
+		async setLoadingDone() {
 			this.loadingCount--
+			if (this.loadingCount < 1) {
+				const loadingOverlay = document.getElementById('loading-overlay')
+				if (loadingOverlay) loadingOverlay.style.display = 'none'
+				this.loadingMessage = null
+			}
 		},
 	},
 })

@@ -3,9 +3,13 @@ import {
 	fetchAndIndexEvents,
 	getGlobalFilteredEvents,
 	onGlobalEventsReady,
-	setPostFilters
+	setPostFilters,
 } from '@/lib/eventsDB'
-import { DATA_ROOT, interpolateColorCold, interpolateColorHot } from '@/lib/utils'
+import {
+	DATA_ROOT,
+	interpolateColorCold,
+	interpolateColorHot,
+} from '@/lib/utils'
 import * as d3 from 'd3'
 import { defineStore } from 'pinia'
 import { watch } from 'vue'
@@ -77,7 +81,6 @@ export const colorForEvent = (
 	return colorForValue(value, event.event_type === 'hot', scale)
 }
 
-
 export const useStore = defineStore('events', {
 	state: (): State => {
 		return {
@@ -87,7 +90,7 @@ export const useStore = defineStore('events', {
 			durationRange: [3, 14],
 			heatIntensityRange: [0, 0],
 			coldIntensityRange: [0, 0],
-			eventTypeMode: 'hot',
+			eventTypeMode: 'cold',
 			sizeRange: [0, 100],
 			eventSetsLoaded: 0,
 			filters: {
@@ -212,7 +215,7 @@ export const useStore = defineStore('events', {
 				this.selectedEvent = null
 				this.selectedEventId = null
 			} else {
-				mainStore.setLoading()
+				// mainStore.setLoading()
 				this.selectedEventId = id
 				console.log('setting selected event to', id)
 				let path = `${DATA_ROOT}events/event-${id}.json`
@@ -220,7 +223,9 @@ export const useStore = defineStore('events', {
 				const event = await resp.json()
 				// // This should always be the case...
 				event.id = id
-				event.times = event.times.map((time: string) => new Date(time).getTime())
+				event.times = event.times.map((time: string) =>
+					new Date(time).getTime(),
+				)
 				this.selectedEvent = event as ExtremeEventFull
 				if (
 					timeStore.selectedTime < event.times[0] ||
@@ -228,7 +233,7 @@ export const useStore = defineStore('events', {
 				) {
 					timeStore.selectedTime = new Date(event.times[0])
 				}
-				mainStore.setLoadingDone()
+				// mainStore.setLoadingDone()
 			}
 		},
 		async runFilters() {
@@ -326,16 +331,22 @@ export const useStore = defineStore('events', {
 			// Hard-code start date, get end date from current year.
 			const timeStore = useTimeStore()
 			const from = 1979
-			const to = 2024//new Date().getFullYear()
+			const to = 2024 //new Date().getFullYear()
 			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
 			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
 
 			onGlobalEventsReady(() => {
-				if (!this.firstEventSetLoaded) {
-					this.firstEventSetLoaded = true
-					mainStore.setLoadingDone()
-				}
 				const events = getGlobalFilteredEvents()
+				if (events.length > 0) {
+					if (!this.firstEventSetLoaded) {
+						this.firstEventSetLoaded = true
+						console.log('First event set loaded, clearing loading state')
+						mainStore.setLoadingDone()
+					} else {
+						console.log('Setting loading...')
+						// mainStore.setLoading()
+					}
+				}
 				events.forEach((e) => {
 					const duration = this.durationForEvent(e)
 					if (duration < this.durationRange[0]) {

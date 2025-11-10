@@ -14,40 +14,28 @@ const model = defineModel({
 	type: String as () => 'hotcold' | 'hot' | 'cold',
 })
 
-const coldClicked = () => {
-	store.setLoading()
+const coldClicked = async () => {
+	await store.setLoading('Loading coldwave events...')
 	model.value = 'cold'
 	setTheme('cold')
-	store.setLoadingDone()
+	store.hamburgerMenuOpen = false
+	await store.setLoadingDone()
 }
 
-const hotClicked = () => {
-	store.setLoading()
+const hotClicked = async () => {
+	await store.setLoading('Loading heatwave events...')
 	model.value = 'hot'
 	setTheme('hot')
-	store.setLoadingDone()
+	store.hamburgerMenuOpen = false
+	await store.setLoadingDone()
 }
 
-const lastOnWasHot = ref(model.value === 'hot')
-const bothClickedfromMiddle = () => {
-	store.setLoading()
-	if (model.value === 'hotcold') {
-		// both on -> turn one off
-		if (lastOnWasHot.value) {
-			model.value = 'hot'
-			setTheme('hot')
-		} else {
-			model.value = 'cold'
-			setTheme('cold')
-		}
-	} else {
-		// one or none on -> turn both on
-		model.value = 'hotcold'
-		setTheme('hotcold')
-	}
-	nextTick(() => {
-		store.setLoadingDone()
-	})
+const bothClickedfromMiddle = async () => {
+	await store.setLoading('Loading all temperature events...')
+	model.value = 'hotcold'
+	setTheme('hotcold')
+	store.hamburgerMenuOpen = false
+	await store.setLoadingDone()
 }
 </script>
 
@@ -123,6 +111,9 @@ const bothClickedfromMiddle = () => {
 			&.selected {
 				background-color: var(--theme-hot-primary-glass-shine);
 			}
+			&:active {
+				background-color: var(--theme-hot-primary-glass-dark);
+			}
 		}
 		&.cold {
 			background-color: var(--theme-cold-primary-glass);
@@ -131,6 +122,9 @@ const bothClickedfromMiddle = () => {
 			}
 			&.selected {
 				background-color: var(--theme-cold-primary-glass-shine);
+			}
+			&:active {
+				background-color: var(--theme-cold-primary-glass-dark);
 			}
 		}
 
@@ -160,6 +154,15 @@ const bothClickedfromMiddle = () => {
 					var(--theme-cold-primary-glass-shine) 10%,
 					var(--theme-hot-primary-glass-shine) 90%,
 					var(--theme-hot-primary-glass-shine)
+				);
+			}
+			&:active {
+				background: linear-gradient(
+					to right,
+					var(--theme-cold-primary-glass-dark),
+					var(--theme-cold-primary-glass-dark) 10%,
+					var(--theme-hot-primary-glass-dark) 90%,
+					var(--theme-hot-primary-glass-dark)
 				);
 			}
 		}

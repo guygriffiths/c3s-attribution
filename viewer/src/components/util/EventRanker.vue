@@ -55,7 +55,7 @@ watch(
 	() => props.events,
 	() => {
 		rankedEvents.value = [...(props.events || [])]
-			.sort(props.sortFunc)
+		.sort(props.sortFunc)
 		// console.log('Ranked events:', [...rankedEvents.value].splice(0, 10).map((e) => `events/event-${e.id}.json`).join(' '))
 	},
 	{ deep: false },
@@ -163,18 +163,18 @@ const selectedIndex = computed(() => {
 					style="pointer-events: none"
 				>
 					<defs>
-						<filter id="barShadow" height="130%">
+						<filter id="rankedShadow" height="130%">
 							<feDropShadow
 								dx="1"
 								dy="1"
 								stdDeviation="2"
-								flood-color="rgba(0, 0, 0, 0.3)"
+								flood-color="rgba(0, 0, 0, 0.5)"
 							/>
 						</filter>
 					</defs>
 
 					<rect
-						v-for="(event, idx) in rankedEvents"
+						v-for="(event, idx) in rankedEvents.slice(0, eventsInRanker)"
 						class="ranked-event"
 						:key="idx"
 						x="0"
@@ -210,7 +210,7 @@ const selectedIndex = computed(() => {
 						"
 					/>
 					<text
-						v-for="(event, idx) in rankedEvents"
+						v-for="(event, idx) in rankedEvents.slice(0, eventsInRanker)"
 						:key="`text-${idx}`"
 						class="ranked-event"
 						:class="event.event_type"
@@ -283,10 +283,10 @@ const selectedIndex = computed(() => {
 			justify-content: flex-end;
 			width: 100%;
 			cursor: pointer;
-			background-color: var(--panel-bg);
+			background-color: transparent;
 
 			&.odd {
-				background-color: var(--panel-bg-alt);
+				background-color: var(--panel-hint);
 			}
 
 			&.hovering,

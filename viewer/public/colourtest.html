@@ -14,6 +14,7 @@
 				height: 20%;
 				width: 100%;
 				display: flex;
+				border: 10px solid rgb(151, 24, 65);
 			}
 			.gradient {
 				flex: 1;
@@ -30,88 +31,59 @@
 		<script>
 			const steps = 10 // t from 0 to 1 in 0.1 steps
 
-			// Your original HSL function
-			function interpolateHSL(baseColor = 'rgb(151, 24, 65)') {
-				const hcl = d3.hcl(baseColor)
-				const { h, c } = hcl
-				const deltaL = 90
-				const L1 = 5
-
-				// smooth chroma taper: fully saturated at mid L, drops near extremes
-				const safeChroma = (L) => {
-					const t = Math.abs((L - 50) / 50) // 0 at mid, 1 at extremes
-					return c * (1 - t ** 1.2) // tweak exponent for smoothness
-				}
-
-				return (t) => {
-					const L = L1 + deltaL * (1 - t) // flip t to go light -> dark
-					const adjustedC = safeChroma(L)
-					return d3.hcl(h, adjustedC, L).formatRgb()
-				}
-			}
-
-			// My HCL version
-			function interpolateHCL(baseColor = 'rgb(151, 24, 65)') {
-				const hcl = d3.hcl(baseColor)
-				const L0 = 98
-				const L1 = 2
-				return (t) => d3.hcl(hcl.h, hcl.c, L0 * (1 - t) + L1 * t).formatRgb()
-			}
-
-			// Midpoint = base colour version
-			function interpolateHCLMid(baseColor = 'rgb(151, 24, 65)') {
-				const hcl = d3.hcl(baseColor)
-				const L0 = 90
-				const L1 = 20
-				const Lmid = hcl.l
-				return (t) => {
-					const L =
-						t < 0.5
-							? L0 * (1 - 2 * t) + Lmid * 2 * t
-							: Lmid * (2 - 2 * t) + L1 * (2 * t - 1)
-					return d3.hcl(hcl.h, hcl.c, L).formatRgb()
-				}
-			}
 			function interpolateColorRev(baseColor = 'rgb(151, 24, 65)') {
-				const hcl = d3.hcl(baseColor)
-				return (t) => {
-					const C = t * 50 // a wee bit punchier
-					const L = 20 + t * 70 // deeper lows, brighter highs
-					return d3.hcl(hcl.h, C, L).formatRgb()
+				const hcl = d3.lch(baseColor)
+				const retfunc = (t) => {
+					const H = hcl.h - (((t - 0.5) * 50) % 360)
+					const C = hcl.c + (t - 0.5) * 240
+					const L = hcl.l + (t - 0.5) * 40
+					return d3.lch(L, C, H).formatRgb()
 				}
+				return retfunc
 			}
 
-			function interpolateColorRev1(baseColor = 'rgb(151, 24, 65)') {
-				const hcl = d3.hcl(baseColor)
-				return (t) => {
-					const C = t * 50 // a wee bit punchier
-					const L = 20 + t * 70 // deeper lows, brighter highs
-					return d3.hcl(hcl.h, C, L).formatRgb()
+			function interpolateColorRev1(baseColor = 'rgb(244, 102, 162)') {
+				const hcl = d3.lch(baseColor)
+				const retfunc = (t) => {
+					const H = hcl.h - (((t) * 5) % 360)
+					const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 150
+					const L = hcl.l + (0.5 + 0.6 * (t - 0.5) * 70)
+					return d3.lch(L, C, H).formatRgb()
 				}
+				return retfunc
 			}
-			function interpolateColorRev2(baseColor = 'rgb(151, 24, 65)') {
-				const hcl = d3.hcl(baseColor)
-				return (t) => {
-					const C = Math.pow(t, 2) * 50 // very strong saturation swing
-					const L = 20 + t * 70 // smaller lightness spread, keeps mids strong
-					return d3.hcl(hcl.h, C, L).formatRgb()
+
+			function interpolateColorRev2(baseColor = 'rgb(244, 102, 162)') {
+				const hcl = d3.lch(baseColor)
+				const retfunc = (t) => {
+					const H = hcl.h - (((t-1) * 10) % 360)
+					const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 100
+					const L = hcl.l + (0.2 + 0.8 * (t - 0.5) * 70)
+					return d3.lch(L, C, H).formatRgb()
 				}
+				return retfunc
 			}
+
 			function interpolateColorRev3(baseColor = 'rgb(151, 24, 65)') {
-				const hcl = d3.hcl(baseColor)
-				return (t) => {
-					const C = t * 60 // ramp saturation nonlinearly
-					const L = 30 + t * 50
-					return d3.hcl(hcl.h, C, L).formatRgb()
+				const hcl = d3.lch(baseColor)
+				const retfunc = (t) => {
+					const H = hcl.h - (((t-1) * 10) % 360)
+					const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 100
+					const L = hcl.l + (0.2 + 0.8 * (t - 0.5)) * 70
+					return d3.lch(L, C, H).formatRgb()
 				}
+				return retfunc
 			}
+
 			function interpolateColorRev4(baseColor = 'rgb(151, 24, 65)') {
-				const hcl = d3.hcl(baseColor)
-				return (t) => {
-					const C = 10 + t * 55 // start slightly coloured even at t=0
-					const L = 95 - t * 65 // from near-white tae deep tone
-					return d3.hcl(hcl.h, C, L).formatRgb()
+				const hcl = d3.lch(baseColor)
+				const retfunc = (t) => {
+					const H = hcl.h - (((t-1) * 10) % 360)
+					const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 100
+					const L = hcl.l + (0.15 + 0.85 * (t - 0.5)) * 90
+					return d3.lch(L, C, H).formatRgb()
 				}
+				return retfunc
 			}
 
 			// Helper to create CSS gradient
@@ -126,19 +98,19 @@
 
 			// Apply gradients
 			document.getElementById('div1').style.background = makeGradient(
-				interpolateColorRev('rgb(44,102,162)'),
+				interpolateColorRev(), //'rgb(44,102,162)'),
 			)
 			document.getElementById('div2').style.background = makeGradient(
-				interpolateColorRev1('rgb(44,102,162)'),
+				interpolateColorRev1(), //'rgb(44,102,162)'),
 			)
 			document.getElementById('div3').style.background = makeGradient(
-				interpolateColorRev2('rgb(44,102,162)'),
+				interpolateColorRev2(), //'rgb(44,102,162)'),
 			)
 			document.getElementById('div4').style.background = makeGradient(
-				interpolateColorRev3('rgb(44,102,162)'),
+				interpolateColorRev3(), //'rgb(44,102,162)'),
 			)
 			document.getElementById('div5').style.background = makeGradient(
-				interpolateColorRev4('rgb(44,102,162)'),
+				interpolateColorRev4(), //'rgb(44,102,162)'),
 			)
 		</script>
 	</body>

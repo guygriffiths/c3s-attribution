@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useStore } from '@/store/eventStore'
-import { faClose } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { IconX } from '@tabler/icons-vue'
 
 const eventStore = useStore()

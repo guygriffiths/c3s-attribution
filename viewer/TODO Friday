@@ -8,3 +8,15 @@ Performance of mode switch
 Draw areas as canvas - one per year, one timeline, one overview
 Time scrubber
 Single event histogram - lock the y-scale to the max event value - add caching of all histogram data while you're at it?
+
+Can I reverse the histogram calculation to get every event within a histogram bar and then highlight all of those events everywhere? Would that be cool as fuck?
+
+Olde-world version of data - need to generate and make selectable from the hamburger menu. Should just be as simple as triggering main method in eventDB
+
+Optimisation - pre-render all the grid tiles when the first one gets triggered for an event. Cache: key+event -> event-times -> ImageBitmap, then drawImage(ImageBitmap) is GPU-bound
+
+July 11th 2023 - good example for research (over USA)
+
+
+BUG ALERT!!!!
+If event has days with 100% ocean, they get removed and times.length doesn't match slices

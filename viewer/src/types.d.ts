@@ -43,7 +43,9 @@ declare global {
 	}
 
 	interface EventBox {
-		event: ExtremeEvent
+		eventId: string
+		type: EventType
+		color: string
 		y: number
 		startX: number
 		endX: number

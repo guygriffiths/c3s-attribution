@@ -11,15 +11,6 @@ import EventTypeToggle from './util/EventTypeToggle.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
 import EventInfo from './EventInfo.vue'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import {
-	faClose,
-	faBarsStaggered,
-	faClock,
-	faExpand,
-	faTemperatureHigh,
-	faCalendarDays,
-} from '@fortawesome/free-solid-svg-icons'
 import FocusFrame from './util/FocusFrame.vue'
 import EventRanker from './util/EventRanker.vue'
 import ModeToggle from './util/ModeToggle.vue'
@@ -36,9 +27,10 @@ import {
 import { differenceInDays } from 'date-fns'
 import MultiEventPanel from './MultiEventPanel.vue'
 import {
-	IconCalendar,
+	IconArrowRightSquare,
 	IconCalendarWeek,
-	IconMenu,
+	IconChartBar,
+	IconChartInfographic,
 	IconMenu2,
 	IconX,
 } from '@tabler/icons-vue'
@@ -74,8 +66,11 @@ const globalEventsOfInterest = computed((): boolean => {
 const globalFilteredEvents = ref([] as ExtremeEvent[])
 const eventsOfInterest = ref([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
-	console.log('global events ready - Main.vue')
 	globalFilteredEvents.value = getGlobalFilteredEvents()
+	console.log(
+		'global events ready - Main.vue',
+		globalFilteredEvents.value.length,
+	)
 	if (globalEventsOfInterest.value) {
 		eventsOfInterest.value = globalFilteredEvents.value
 	}
@@ -277,7 +272,8 @@ const toggleMenu = () => {
 				:class="{ selected: timeStore.showBars }"
 				@click="timeStore.showBars = !timeStore.showBars"
 			>
-				<font-awesome-icon :icon="faBarsStaggered" />
+				<!-- <IconArrowRightSquare  /> -->
+				<IconChartBar class="bar-icon" />
 			</button>
 		</Panel>
 
@@ -311,7 +307,11 @@ const toggleMenu = () => {
 			:class="{ small: store.viewMode === 'heatmap' }"
 			:active="store.viewMode === 'timemachine' && eventStore.eventSelected"
 		>
-			<div class="subpanel histo" :style="`margin-left: ${offset}%`">
+			<div
+				class="subpanel histo"
+				:class="{ hidden: selectedDayIdx === null }"
+				:style="`margin-left: ${offset}%`"
+			>
 				<Histogram
 					v-if="eventStore.selectedEvent"
 					:data="
@@ -336,7 +336,11 @@ const toggleMenu = () => {
 					variable="intensity"
 				/>
 			</div>
-			<div class="funnel" :style="`clip-path: ${funnelPoints};`" />
+			<div
+				class="funnel"
+				:class="{ hidden: selectedDayIdx === null }"
+				:style="`clip-path: ${funnelPoints};`"
+			/>
 			<div class="subpanel">
 				<EventGraphs
 					:selected-event="eventStore.selectedEvent"
@@ -439,6 +443,28 @@ const toggleMenu = () => {
 		transition: all $transition;
 		border-radius: $borderRadius;
 
+		.bar-icon {
+			// Manually tweak this icon so that it looks like an event bars icon with the bars offset
+			// rather than the normal bar chart icon
+			transform: rotate(-90deg);
+
+			:deep(path:first-child) {
+				transform: scaleY(1.5);
+				transform-box: fill-box; /* or view-box */
+				transform-origin: center;
+				vector-effect: non-scaling-stroke;
+			}
+			:deep(path:nth-child(3)) {
+				transform: scaleY(1) translateY(-3px);
+				transform-box: fill-box; /* or view-box */
+				transform-origin: center;
+				vector-effect: non-scaling-stroke;
+			}
+			:deep(path:last-child) {
+				display: none;
+			}
+		}
+
 		&.expanded {
 			height: calc(100% - 2 * $panelMargin);
 		}
@@ -453,12 +479,13 @@ const toggleMenu = () => {
 			border-bottom-left-radius: 0;
 
 			&.timemachine {
-				background-color: var(--panel-bg-dark);
+				background-color: var(--panel-bg);
 			}
 		}
 
 		&.heatmap {
 			height: $smallTimePanelHeight;
+			background-color: var(--panel-bg-alt);
 			// transition: height $transition;
 		}
 
@@ -544,18 +571,9 @@ const toggleMenu = () => {
 		height: calc(100% - 8 * $panelMargin - $smallTimePanelHeight);
 		right: $panelMargin;
 		bottom: calc($panelMargin + $smallTimePanelHeight);
-		background-color: var(--panel-bg);
+		background-color: var(--panel-bg-alt);
 		backdrop-filter: $frosty;
 		overflow: visible;
-
-		// &.small {
-		// 	transform: scale($smallMultiScale) translateX(120%);
-		// 	transform-origin: bottom right;
-
-		// 	&.active {
-		// 		transform: scale($smallMultiScale);
-		// 	}
-		// }
 	}
 
 	#event-panel {
@@ -576,16 +594,24 @@ const toggleMenu = () => {
 			border-radius: $borderRadius;
 			backdrop-filter: $frosty;
 			box-shadow: var(--shadow-md);
-			background-color: var(--panel-bg-dark);
+			background-color: var(--panel-bg);
 			flex: 1 1 50%;
 			width: 100%;
 
 			&.histo {
-				background-color: var(--panel-bg-dark);
-				border-bottom-left-radius: $borderRadius;
-				border-bottom-right-radius: $borderRadius;
+				background-color: var(--panel-bg);
+				border-bottom-left-radius: 0;
+				border-bottom-right-radius: 0;
 				width: 90%;
 				box-shadow: var(--shadow-md);
+				transition: all $transition;
+				// transition: transform 3s;
+				&.hidden {
+					// transition: transform 3s;
+					opacity: 0;
+					transform: translateY(120%);
+					// transform: scaleY(0) translateY(100%);
+				}
 			}
 
 			:deep(svg.graph-container) {
@@ -598,8 +624,13 @@ const toggleMenu = () => {
 			flex: 0 0 2 * $panelMargin;
 			width: 100%;
 			pointer-events: none;
-			background-color: var(--panel-bg-dark);
+			background-color: var(--panel-bg);
 			backdrop-filter: $frosty;
+			&.hidden {
+				opacity: 0;
+				transform: translateY(120%);
+				// transform: scaleY(0) translateY(100%);
+			}
 		}
 	}
 

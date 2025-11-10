@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import HeatmapWorker from '@/lib/worker/heatmapRenderWorker?worker'
+import {
+	latLngToLayerPoint,
+	renderToContext,
+} from '@/lib/worker/heatmapRenderWorker'
 import { debounce } from '@/lib/utils'
 import { useStore } from '@/store/store'
 import {
@@ -20,7 +25,7 @@ import { Map as LeafletMap, LeafletMouseEvent } from 'leaflet'
 import 'leaflet-draw'
 import 'leaflet-draw/dist/leaflet.draw.css'
 import 'leaflet/dist/leaflet.css'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
@@ -50,6 +55,7 @@ import {
 const store = useStore()
 const timeStore = useTimeStore()
 const eventStore = useEventStore()
+const heatmapWorker = new HeatmapWorker()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
 const map = computed(() => mapRef.value?.leafletObject as LeafletMap)
 const eventPixelsRef = ref<InstanceType<typeof LGridLayer> | null>(null)
@@ -68,21 +74,24 @@ const mapOptions = {
 
 const zoom = ref(2)
 
-const bgLayer = {
-	name: 'C3S Light',
-	url: 'https://extreme-events.climate.copernicus.eu/maps/styles/light/{z}/{x}/{y}{r}.png',
-	labelsUrl:
-		'https://extreme-events.climate.copernicus.eu/maps/styles/light-labels/{z}/{x}/{y}{r}.png',
-	attribution:
-		'&copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
+const bgLayers = {
+	light: {
+		name: 'C3S Light',
+		url: 'https://extreme-events.climate.copernicus.eu/maps/styles/light/{z}/{x}/{y}{r}.png',
+		labelsUrl:
+			'https://extreme-events.climate.copernicus.eu/maps/styles/light-labels/{z}/{x}/{y}{r}.png',
+		attribution:
+			'&copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
+	},
+	dark: {
+		name: 'C3S Dark',
+		url: 'https://extreme-events.climate.copernicus.eu/maps/styles/darkish/{z}/{x}/{y}{r}.png',
+		labelsUrl:
+			'https://extreme-events.climate.copernicus.eu/maps/styles/dark-labels/{z}/{x}/{y}{r}.png',
+		attribution:
+			'&copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
+	},
 }
-// const bgLayer = {
-// 	name: 'C3S Dark',
-// 	url: 'https://extreme-events.climate.copernicus.eu/maps/styles/dark/{z}/{x}/{y}{r}.png',
-// 	labelsUrl: 'https://extreme-events.climate.copernicus.eu/maps/styles/dark-labels/{z}/{x}/{y}{r}.png',
-// 	attribution:
-// 		'&copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
-// }
 const labelsOn = ref(false)
 
 const wmtsUrl = ref(
@@ -131,19 +140,19 @@ onCurrentEventsReady(() => {
 const eventPointFilter = ref<[number, number] | null>(null)
 const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
 let regionFilteredEvents = [] as ExtremeEvent[]
-const globalHeatmapEvents = ref([] as ExtremeEvent[])
+const globalHeatmapEvents = shallowRef([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
 	// Triggered when the global events have changed.
 	// This is on first load, or when any of the high-level filters change
 	// @ts-ignore
 	globalHeatmapEvents.value = getGlobalFilteredEvents()
 	try {
+		console.log('THIS LINE HERE SHOULD BE A MANUAL BG UPDATE?')
 		// @ts-ignore
 		heatmapRenderer._update()
 	} catch (e) {
 		console.warn('Error updating heatmap renderer', e)
 	}
-	// heatmapRenderer._update()
 })
 
 const drawRegion = () => {
@@ -265,6 +274,7 @@ watch(
 		currentEvents.value = getCurrentEvents(timeStore.selectedTime)
 		if (store.viewMode === 'heatmap') {
 			try {
+				console.log('THIS LINE HERE SHOULD BE A MANUAL BG UPDATE?')
 				// @ts-ignore
 				heatmapRenderer._update()
 			} catch (e) {
@@ -295,23 +305,28 @@ watch(
 	{ immediate: true },
 )
 
+// Watch for events which cause the view to change - e.g. to accomodate a panel etc.
+// This is done by defining #event-window (TODO: currently in Main.vue, but could live here and teleport?)
+// which changes dependent upon the rest of the screen layout. This should make adaptive views just work.
 watch(
-	() => [eventStore.selectedEvent, store.viewMode, store.showMultiEventPanel],
+	() => [eventStore.selectedEvent, store.viewMode],
 	(oldVal, newVal) => {
 		// Check if the event has changed from null, in which case set lastBbox
+		// TODO - is this definitely the behaviour we want?
 		if (oldVal[0] === null && newVal[0] !== null) {
 			lastBbox.value = (newVal[0] as ExtremeEventFull).bbox
 		}
 
 		const el = document.getElementById('event-window')
 		if (!el) {
-			console.log(
+			console.warn(
 				'No event window element to fit to',
 				el,
 				document.getElementById('event-window'),
 			)
 			return
 		}
+		// TODO this wants to be the *current* view, if we're just switching modes
 		fitBoundsToDiv(
 			mapRef.value!.leafletObject as L.Map,
 			el,
@@ -321,33 +336,6 @@ watch(
 		)
 	},
 	{ immediate: false },
-)
-
-const lastCentreZoom = ref<{ centre: L.LatLng; zoom: number } | null>(null)
-watch(
-	() => eventStore.selectedEvent,
-	(newVal) => {
-		if (store.viewMode === 'heatmap' || store.viewMode === 'timemachine') {
-			if (newVal) {
-				lastCentreZoom.value = {
-					centre: map.value!.getCenter(),
-					zoom: map.value!.getZoom(),
-				}
-				fitBoundsToDiv(
-					mapRef.value!.leafletObject as L.Map,
-					document.getElementById(newVal ? 'event-window' : 'map')!,
-					newVal ? newVal.bbox : [-85, -180, 85, 180],
-				)
-			} else if (lastCentreZoom.value) {
-				map.value!.setView(
-					lastCentreZoom.value.centre,
-					lastCentreZoom.value.zoom,
-					{ animate: true },
-				)
-				lastCentreZoom.value = null
-			}
-		}
-	},
 )
 
 const cScale = computed(() => {
@@ -363,27 +351,6 @@ const cScale = computed(() => {
 	const maxIntensity = Math.max(minValIntensity, maxValIntensity)
 	return d3.scaleLinear().domain([minIntensity, maxIntensity]).range([0, 1])
 })
-// watch(
-// 	() => eventStore.selectedEvent,
-// 	() => {
-// 		cScale.value = d3
-// 			.scaleLinear()
-// 			.domain([
-// 				intensityForValue(
-// 					eventStore.selectedEvent?.min_value!,
-// 					eventStore.selectedEvent?.event_type === 'hot',
-// 				),
-// 				intensityForValue(
-// 					eventStore.selectedEvent?.max_value!,
-// 					eventStore.selectedEvent?.event_type === 'hot',
-// 				),
-// 			])
-// 			.range([0, 1])
-// 		if (eventPixelsRef.value && eventPixelsRef.value.leafletObject) {
-// 			eventPixelsRef.value.leafletObject.redraw()
-// 		}
-// 	},
-// )
 
 const renderTile = (props: any) => {
 	return drawEventTile(
@@ -404,7 +371,6 @@ const renderTile = (props: any) => {
 }
 
 const addEventPanes = () => {
-	const map = mapRef.value?.leafletObject as LeafletMap
 	if (!map) {
 		console.error('Map not initialized')
 		return
@@ -418,70 +384,50 @@ const addEventPanes = () => {
 	}
 
 	// create a pane just below overlayPane
-	map.createPane('eventPane')
-	const pane = map.getPane('eventPane')!
+	map.value.createPane('eventPane')
+	const pane = map.value.getPane('eventPane')!
 	// set zIndex: just under overlay (z=400)
 	pane.style.zIndex = '380'
-	heatmapRenderer.addTo(map)
+
+	heatmapRenderer.addTo(map.value)
+	console.log('Added heatmap renderer at', performance.now(), heatmapRenderer)
+	// When leaflet triggers an update, re-remder the heatmap on the main thread
+	// Because we have already rendered this data once via the worker, GPU calculations
+	// should be cached and this should be *fast*
 	heatmapRenderer.on('update', () => {
+		console.log('Update fired at', performance.now())
 		// TODO - add pixel accurate method?
-		const ctx = (heatmapRenderer as any)._ctx as CanvasRenderingContext2D
-		if (!ctx) return
+		const canvasEl = (heatmapRenderer as any)._container
+		if (!canvasEl) return
 
-		ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+		const ctxEl = canvasEl.getContext('2d')
 
-		ctx.globalCompositeOperation = 'multiply'
-		for (const event of globalHeatmapEvents.value) {
-			// ctx.globalCompositeOperation = event.event_type === 'hot' ? 'multiply' : 'lighten'
-			ctx.beginPath()
-			for (const ring of event.total_region || []) {
-				// @ts-ignore
-				ring.forEach(([lat, lng], i) => {
-					// @ts-ignore
-					const point = heatmapRenderer._map.latLngToLayerPoint([lat, lng])
-					if (i === 0) ctx.moveTo(point.x, point.y)
-					else ctx.lineTo(point.x, point.y)
-				})
-				// @ts-ignore
-				ring.forEach(([lat, lng], i) => {
-					// @ts-ignore
+		const events = globalHeatmapEvents.value.map((event) => ({
+			total_region: [...event.total_region],
+			event_type: event.event_type,
+			id: event.id,
+		}))
+		const zoom = map.value.getZoom()
+		const crs = map.value.options.crs // Usually L.CRS.EPSG3857
+		// @ts-ignore
+		const transformation = crs!.transformation
+		const scale = crs!.scale(zoom)
+		const pixelOrigin = map.value.getPixelOrigin()
 
-					const point = heatmapRenderer._map.latLngToLayerPoint([
-						lat,
-						lng - 360,
-					])
-					if (i === 0) ctx.moveTo(point.x, point.y)
-					else ctx.lineTo(point.x, point.y)
-				})
-				// @ts-ignore
-				ring.forEach(([lat, lng], i) => {
-					// @ts-ignore
-
-					const point = heatmapRenderer._map.latLngToLayerPoint([
-						lat,
-						lng + 360,
-					])
-					if (i === 0) ctx.moveTo(point.x, point.y)
-					else ctx.lineTo(point.x, point.y)
-				})
-			}
-			ctx.closePath()
-			// const alpha = Math.min(0.25, Math.max(0.1
-			ctx.fillStyle = (
-				event.event_type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
-			)
-				.replace(')', event.event_type === 'hot' ? ',0.1)' : ',0.05)')
-				.replace('rgb', 'rgba')
-			ctx.fill()
+		const mapState = {
+			scale,
+			transformation,
+			pixelOrigin,
 		}
+		renderToContext(ctxEl, events, mapState)
 	})
 
 	// create a pane just below overlayPane
-	map.createPane('fastEventPane')
-	const fastPane = map.getPane('fastEventPane')!
+	map.value.createPane('fastEventPane')
+	const fastPane = map.value.getPane('fastEventPane')!
 	// set zIndex: just under overlay (z=400)
 	fastPane.style.zIndex = '390'
-	fastRenderer.addTo(map)
+	fastRenderer.addTo(map.value)
 	fastRenderer.on('update', () => {
 		const ctx = (fastRenderer as any)._ctx as CanvasRenderingContext2D
 		if (!ctx) return
@@ -530,19 +476,66 @@ const addEventPanes = () => {
 	})
 }
 
-const showMarkerTrigger = computed(
+// Manually trigger a heatmap update on the worker.
+// When it returns, blit the bitmap to the heatmap canvas.
+const manualHeatmapUpdate = () => {
+	const canvasEl = (heatmapRenderer as any)._container
+	if (!canvasEl) return
+
+	const offscreen = new OffscreenCanvas(canvasEl.width, canvasEl.height)
+	const events = globalHeatmapEvents.value.map((event) => ({
+		total_region: [...event.total_region],
+		event_type: event.event_type,
+		id: event.id,
+	}))
+	const zoom = map.value.getZoom()
+	const crs = map.value.options.crs // Usually L.CRS.EPSG3857
+	// @ts-ignore
+	const transformation = crs!.transformation
+	const scale = crs!.scale(zoom)
+	const pixelOrigin = map.value.getPixelOrigin()
+
+	heatmapWorker.postMessage(
+		{
+			canvas: offscreen,
+			events,
+			mapState: {
+				scale,
+				transformation,
+				pixelOrigin,
+			},
+		},
+		[offscreen],
+	)
+}
+// Takes care of the blitting on the worker's return
+heatmapWorker.onmessage = (e) => {
+	if (e.data.bitmap) {
+		const canvasEl = (heatmapRenderer as any)._container
+		const ctxEl = canvasEl.getContext('2d')
+		if (ctxEl) {
+			ctxEl.clearRect(0, 0, canvasEl.width, canvasEl.height)
+			ctxEl.drawImage(e.data.bitmap, 0, 0)
+		}
+	}
+}
+
+const showMarker = computed(
 	() => store.filteringByPoint && store.viewMode === 'heatmap',
 )
-const showMarker = ref(showMarkerTrigger.value)
-watch(
-	showMarkerTrigger,
-	(newVal) => {
-		nextTick(() => {
-			showMarker.value = newVal
-		})
-	},
-	{ immediate: true },
-)
+// const showMarkerTrigger = computed(
+// 	() => store.filteringByPoint && store.viewMode === 'heatmap',
+// )
+// const showMarker = ref(showMarkerTrigger.value)
+// watch(
+// 	showMarkerTrigger,
+// 	(newVal) => {
+// 		nextTick(() => {
+// 			showMarker.value = newVal
+// 		})
+// 	},
+// 	{ immediate: true },
+// )
 </script>
 
 <template>
@@ -573,16 +566,18 @@ watch(
 		>
 			<!-- Background layers -->
 			<LTileLayer
-				:url="bgLayer.url"
-				:attribution="bgLayer.attribution"
+				:url="bgLayers.light.url"
+				:attribution="bgLayers.light.attribution"
 				layer-type="base"
+				:opacity="store.viewMode === 'heatmap' ? 1 : 0"
 				:zIndex="1"
 			></LTileLayer>
 			<LTileLayer
-				:url="bgLayer.labelsUrl"
+				:url="bgLayers.dark.url"
+				:attribution="bgLayers.dark.attribution"
 				layer-type="base"
-				:zIndex="3"
-				v-if="labelsOn"
+				:opacity="store.viewMode === 'timemachine' ? 1 : 0"
+				:zIndex="2"
 			></LTileLayer>
 			<!-- <LTileLayer
 				class="bg-map"
@@ -801,9 +796,15 @@ watch(
 		transform-origin: center center;
 	}
 
+	:deep(.leaflet-tile-pane) {
+		.leaflet-layer {
+			transition: opacity $transition;
+		}
+	}
+
 	&.focussed {
 		:deep(.frost-pane) {
-			background-color: rgba(225, 255, 255, 0.5);
+			background-color: rgba(200, 200, 200, 0.5);
 			backdrop-filter: blur(4px);
 
 			pointer-events: none;
@@ -817,7 +818,7 @@ watch(
 
 		&.heatmap {
 			:deep(.frost-pane) {
-				background-color: rgba(20, 0, 0, 0.7);
+				background-color: rgba(0, 0, 0, 0.5);
 			}
 		}
 	}

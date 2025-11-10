@@ -228,10 +228,10 @@ svg {
 	.graph-bg {
 		cursor: pointer;
 		fill: none;
-		fill: var(--panel-bg);
+		fill: var(--panel-bg-alt);
 
 		&.selected {
-			fill: var(--panel-bg-alt);
+			fill: var(--panel-bg);
 		}
 	}
 

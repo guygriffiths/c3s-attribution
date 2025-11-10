@@ -6,7 +6,7 @@ import {
 	IconClockHour4,
 	IconTemperature,
 	IconDimensions,
-	IconHourglassHigh,
+	IconStopwatch,
 } from '@tabler/icons-vue'
 
 type Props = {
@@ -244,11 +244,11 @@ onMounted(() => loop())
 
 <template>
 	<div ref="containerRef" class="scatter-root">
-		<IconHourglassHigh v-if="props.xvar === 'duration'" class="xicon" />
+		<IconStopwatch v-if="props.xvar === 'duration'" class="xicon" />
 		<IconDimensions v-else-if="props.xvar === 'size'" class="xicon" />
 		<IconTemperature v-else-if="props.xvar === 'intensity'" class="xicon" />
 		<IconClockHour4 v-else-if="props.xvar === 'time'" class="xicon" />
-		<IconHourglassHigh v-if="props.yvar === 'duration'" class="yicon" />
+		<IconStopwatch v-if="props.yvar === 'duration'" class="yicon" />
 		<IconDimensions v-else-if="props.yvar === 'size'" class="yicon" />
 		<IconTemperature v-else-if="props.yvar === 'intensity'" class="yicon" />
 		<canvas

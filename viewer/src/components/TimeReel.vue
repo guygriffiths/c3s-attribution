@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TimeReelWorker from '@/lib/worker/timeReelEventProcessWorker?worker'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import { useLabels } from '@/lib/labels'
 import {
@@ -36,7 +37,6 @@ import {
 	Ref,
 	watch,
 } from 'vue'
-import { useStore } from '@/store/store'
 
 const $l = useLabels()
 
@@ -62,7 +62,6 @@ const props = defineProps({
 		default: (event: ExtremeEvent) => event.color || null,
 	},
 })
-
 
 // console.log('Time Reel: colorForEvent:', props.colorForEvent)
 
@@ -115,10 +114,10 @@ const nextDay = () => {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
 			console.log('nextDay year change to', newVal.getUTCFullYear())
 			model.value = newVal
-			scrollToYear(newVal.getUTCFullYear()-1)
+			scrollToYear(newVal.getUTCFullYear() - 1)
 		} else {
 			model.value = newVal
-		}	
+		}
 	}
 }
 const prevDay = () => {
@@ -169,9 +168,7 @@ const togglePlay = () => {
 		(model.value.getTime() === props.end.getTime() ||
 			(isZoom.value &&
 				model.value.getTime() ===
-					props.selectedEvent!.times[
-						props.selectedEvent!.times.length - 1
-					]))
+					props.selectedEvent!.times[props.selectedEvent!.times.length - 1]))
 	) {
 		// Restart from beginning
 		if (isZoom.value && props.selectedEvent) {
@@ -192,9 +189,7 @@ const togglePlay = () => {
 					model.value.getTime() === props.end.getTime() ||
 					(isZoom.value &&
 						model.value.getTime() ===
-							props.selectedEvent!.times[
-								props.selectedEvent!.times.length - 1
-							])
+							props.selectedEvent!.times[props.selectedEvent!.times.length - 1])
 				) {
 					// Reached end of event
 					playing.value = false
@@ -239,9 +234,7 @@ const rowsToShow = computed(() => {
 })
 watch(rowsToShow, () => updateRowHeight())
 
-const maxSimultaneousEvents = computed(() => {
-	return Math.max(3, ...hwDayCounts.value, ...cwDayCounts.value)
-})
+const maxSimultaneousEvents = ref(3)
 
 const eventHeight = computed(() => 1.0 / maxSimultaneousEvents.value)
 
@@ -314,11 +307,11 @@ const endDrag = (event: MouseEvent) => {
 			// Only set the date if it has changed, otherwise it slows things down unnecessarily
 			if (differenceInDays(newDate, model.value) !== 0) {
 				setDate(
-						Date.UTC(
-							newDate.getFullYear(),
-							newDate.getMonth(),
-							newDate.getDate(),
-						),
+					Date.UTC(
+						newDate.getFullYear(),
+						newDate.getMonth(),
+						newDate.getDate(),
+					),
 				)
 			}
 		} else {
@@ -328,11 +321,7 @@ const endDrag = (event: MouseEvent) => {
 			)
 			const newDate = new Date(Date.UTC(selectedYear.value, 0, dayFromStart))
 			setDate(
-					Date.UTC(
-						newDate.getFullYear(),
-						newDate.getMonth(),
-						newDate.getDate(),
-					),
+				Date.UTC(newDate.getFullYear(), newDate.getMonth(), newDate.getDate()),
 			)
 		}
 	}
@@ -520,75 +509,6 @@ const highlightRowHeight = computed(() =>
 	isOverview.value ? '100%' : `calc(100% / ${rowsToShow.value})`,
 )
 
-const getAreaString = () => {
-	// console.time('getAreaString')
-	const data: Array<{ x: number; y0: number; y1: number }> =
-		props.eventType === 'hotcold'
-			? // Hot and cold events
-				hwDayCounts.value.map((d, i) => ({
-					x: i,
-					y0: cwDayCounts.value[i],
-					y1: d,
-				}))
-			: props.eventType === 'hot'
-				? // Hot events only
-					hwDayCounts.value.map((d, i) => ({
-						x: i,
-						y0: d,
-						y1: d,
-					}))
-				: // Cold events only
-					cwDayCounts.value.map((d, i) => ({
-						x: i,
-						y0: d,
-						y1: d,
-					}))
-
-	const yScale = computed(() => {
-		return d3
-			.scaleLinear()
-			.domain([
-				0,
-				Math.max(...data.map((d) => d.y0).concat(data.map((d) => d.y1))) || 5,
-			])
-			.range([0, 0.5])
-	})
-
-	const areaStr = d3
-		.area<{ x: number; y0: number; y1: number }>()
-		.x((d) => d.x)
-		.y0((d) => yScale.value(d.y0))
-		.y1((d) => -yScale.value(d.y1))
-		.defined((d) => d.x >= 0 && d.x < hwDayCounts.value.length)
-		.curve(d3.curveMonotoneX)
-
-	const ret: Record<number, string> = {}
-	for (let year of years.value) {
-		const startOfYear = Date.UTC(year, 0, 1) // Jan 1 UTC
-		const endOfYear = Date.UTC(year + 1, 0, 1) // Jan 1 next year UTC
-
-		const startIdx = Math.max(
-			0,
-			Math.floor(
-				(startOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24),
-			) - 1,
-		)
-		const endIdx = Math.min(
-			data.length,
-			Math.floor((endOfYear - props.start.getTime()) / (1000 * 60 * 60 * 24)) +
-				1,
-		)
-
-		// We add 2 invisible moves to ensure that the centre of the object's bounding box is always at y=0
-		// That way when we apply a vertical gradient, it is always centered
-		ret[year] =
-			areaStr(data.slice(startIdx, endIdx)) + ` M0,${-2} l0,0 M0,${2} l0,0` ||
-			''
-	}
-	// console.timeEnd('getAreaString')
-	return ret
-}
-
 const scrollListener = () => {
 	const scrollTop = container.value!.scrollTop
 	const rowsDown = scrollTop / rowHeight.value
@@ -597,76 +517,62 @@ const scrollListener = () => {
 	setDate(newDate)
 }
 
-const cwDayCounts = ref<number[]>([])
-const hwDayCounts = ref<number[]>([])
+const timeReelWorker = new TimeReelWorker()
+timeReelWorker.onmessage = (e: MessageEvent) => {
+	const {
+		newDs,
+		eventBoxesForYear: newEventBoxes,
+		maxSimultaneousEvents: newMax,
+	} = e.data as {
+		newDs: Record<number, string>
+		eventBoxesForYear: Record<number, EventBox[]>
+		maxSimultaneousEvents: number
+	}
+	eventBoxesForYear.value = newEventBoxes
+	maxSimultaneousEvents.value = newMax
+	const yearsList = [...years.value].reverse()
+	const drawNextYear = () => {
+		if (!yearsList.length) {
+			return
+		}
+
+		const year = yearsList.shift()!
+		let currentPath = null
+		try {
+			currentPath = d3.select(`#events-line-${year}`).attr('d')
+		} catch (e) {
+			// Sometimes happens on first draw in race conditions
+		}
+		if (currentPath !== newDs[year]) {
+			// The line has changed, redraw it
+			d3.select(`#events-line-${year}`)
+				.transition()
+				.duration(0)
+				.attr('d', newDs[year])
+		}
+
+		// We can use this if it's blocking the UI, but the result will be a staggered draw,
+		// so should be avoided if possible. Same is true of setTimeout.
+		// requestAnimationFrame(drawNextYear)
+		drawNextYear()
+	}
+	requestAnimationFrame(drawNextYear)
+}
 watch(
 	() => props.events,
 	() => {
-		for (let year of years.value) {
-			const res = getEventBoxes(
-				props.events,
-				year,
-				props.eventType === 'hotcold',
-			)
-			eventBoxesForYear.value[year] = res.events
-		}
-
-		const totalDays = differenceInDays(props.end, props.start) + 1
-		const cwCounts = new Array(totalDays).fill(0)
-		const hwCounts = new Array(totalDays).fill(0)
-		// TODO - Allow the value to be something other than the event count
-		// e.g. total duration, or average duration, or peak value, etc. Pass in a valueFunc prop, and if it's null, use count
-		const cwValues = new Array(totalDays).fill(0)
-		const hwValues = new Array(totalDays).fill(0)
-		props.events.forEach((event) => {
-			event?.times.forEach((time, i) => {
-				const daysFromStart = differenceInDays(time, props.start)
-				if (event.event_type === 'cold') {
-					cwCounts[daysFromStart] += 1
-					cwValues[daysFromStart] += event.duration || 0
-				} else if (event.event_type === 'hot') {
-					hwCounts[daysFromStart] += 1
-					hwValues[daysFromStart] += event.duration || 0
-				}
-			})
+		timeReelWorker.postMessage({
+			events: props.events.map((e) => ({
+				id: e.id,
+				times: [...e.times],
+				event_type: e.event_type,
+				color: props.colorForEvent(e),
+			})),
+			years: years.value,
+			mixedEvents: props.eventType === 'hotcold',
+			start: props.start.getTime(),
+			end: props.end.getTime(),
 		})
-		cwDayCounts.value = cwCounts
-		// .map((d, i) => cwValues[i] / d || 0)
-		// .map((d) => (isNaN(d) ? 0 : d))
-		hwDayCounts.value = hwCounts
-		// .map((d, i) => hwValues[i] / d || 0)
-		// .map((d) => (isNaN(d) ? 0 : d))
-
-		const newD = getAreaString()
-		// console.timeEnd('update event boxes')
-		const yearsList = [...years.value].reverse()
-		const drawNextYear = () => {
-			if (!yearsList.length) {
-				return
-			}
-
-			const year = yearsList.shift()!
-			let currentPath = null
-			try {
-				currentPath = d3.select(`#events-line-${year}`).attr('d')
-			} catch (e) {
-				// Sometimes happens on first draw in race conditions
-			}
-			if (currentPath !== newD[year]) {
-				// The line has changed, redraw it
-				d3.select(`#events-line-${year}`)
-					.transition()
-					.duration(0)
-					.attr('d', newD[year])
-			}
-
-			// We can use this if it's blocking the UI, but the result will be a staggered draw,
-			// so should be avoided if possible. Same is true of setTimeout.
-			requestAnimationFrame(drawNextYear)
-			// drawNextYear()
-		}
-
-		requestAnimationFrame(drawNextYear)
 	},
 	{ immediate: true, deep: false },
 )
@@ -991,20 +897,20 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 										class="event-bar"
 										:data-id="`${box.startX}-${box.endX}`"
 										:class="{
-											[box.event.event_type]: true,
+											[box.type]: true,
 										}"
-										:fill="colorForEvent(box.event) || scssVars.c3sred"
+										:fill="box.color || scssVars.c3sred"
 										:x="-0.5 + box.startX - year * TOTAL_DAYS"
 										:width="box.endX - box.startX + 1"
-										:y="positionY(box.y, box.event.event_type)"
+										:y="positionY(box.y, box.type)"
 										:height="
 											props.eventType === 'hotcold'
 												? 0.5 * eventHeight
 												: eventHeight
 										"
-										:key="box.event.id"
+										:key="box.eventId"
 										vector-effect="non-scaling-stroke"
-										@click="$emit('eventSelected', box.event.id)"
+										@click="$emit('eventSelected', box.eventId)"
 									></rect>
 								</g>
 								<!-- Draw selected event on top. This ensures it is always visible even if overlapping other events -->
@@ -1017,18 +923,18 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 										"
 										v-for="(box, i) in dayBoxes(
 											eventBoxesForYear[year].filter(
-												(b) => b.event.id === props.selectedEvent?.id,
+												(b) => b.eventId === props.selectedEvent?.id,
 											),
 										)"
 										class="event-bar selected"
 										:data-id="`${box.startX}-${box.endX}`"
 										:class="{
-											[box.event.event_type]: true,
+											[box.type]: true,
 										}"
-										:fill="colorForEvent(box.event) || scssVars.c3sred"
+										:fill="box.color || scssVars.c3sred"
 										:x="-0.5 + box.startX - year * TOTAL_DAYS"
 										:width="box.endX - box.startX + 0.9"
-										:y="positionY(box.y, box.event.event_type)"
+										:y="positionY(box.y, box.type)"
 										:height="
 											isZoom
 												? props.eventType === 'hotcold'
@@ -1038,7 +944,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 													? 0.5 * eventHeight
 													: eventHeight
 										"
-										:key="`${box.event.id}-${i}`"
+										:key="`${box.eventId}-${i}`"
 										vector-effect="non-scaling-stroke"
 										@click="model = new Date(props.selectedEvent.times[i])"
 									></rect>
@@ -1071,7 +977,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			>
 				<div
 					class="needle"
-					:class="{ highlight: selectedEvent }"
+					:class="{ highlight: selectedEvent, indicator: selectedEvent && isTimeline }"
 					ref="needleRef"
 					v-if="isDefault || isZoom || selectedEvent"
 					:style="`left: calc(${needleOffset}% + 2px); pointer-events: none;`"
@@ -1145,15 +1051,6 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			display: none;
 		}
 	}
-	&.eventzoom {
-		.date-info {
-			// transform: translateX(-50%) translateY(100%);
-			// border-radius: $borderRadius;
-			// border-bottom-right-radius: $borderRadius;
-			// border-bottom-left-radius: $borderRadius;
-			// opacity: 0.8;
-		}
-	}
 	&.timeline {
 		.date-info {
 			display: none;
@@ -1195,10 +1092,6 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 				padding: 0;
 				justify-content: center;
 
-				&:disabled {
-					opacity: 0.5;
-					cursor: not-allowed;
-				}
 
 				&:first-child {
 					border-top-left-radius: 0.25rem;
@@ -1256,9 +1149,6 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					overflow: visible;
 					.background {
 						transition: all $transition;
-						&.oddyear {
-							// background-color: rgba($c3sblue, 0.1);
-						}
 					}
 				}
 			}
@@ -1300,9 +1190,6 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 						margin: 0 0.25rem;
 					}
 
-					&.last-year {
-						// padding-bottom: 1.5rem;
-					}
 				}
 				.clipper {
 					.events-svg {
@@ -1450,6 +1337,10 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 						background-color: var(--primary-active);
 						cursor: ew-resize;
 					}
+
+					&.indicator {
+						transition: all 1s ease-in-out;
+					}
 				}
 				.month-labels {
 					flex: 0 0 100%;
@@ -1457,6 +1348,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					user-select: none;
 					display: flex;
 					flex-direction: row;
+					color: var(--text-secondary);
 					p {
 						pointer-events: none;
 						user-select: none;
@@ -1517,10 +1409,11 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			background-color: transparent;
 
 			.background.month-bg {
-				fill: var(--panel-bg);
+				fill: transparent;
 
 				&.odd {
-					fill: var(--panel-bg-alt);
+
+					fill: var(--panel-hint);
 				}
 			}
 		}

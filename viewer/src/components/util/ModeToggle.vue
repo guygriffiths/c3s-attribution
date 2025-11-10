@@ -2,6 +2,7 @@
 import {
 	IconChartAreaLine,
 	IconLayersIntersect,
+	IconCalendarTime,
 	IconStack3,
 	IconStopwatch,
 } from '@tabler/icons-vue'
@@ -28,7 +29,7 @@ const ariaLabel = computed(() =>
 			:aria-pressed="mode === 'timemachine'"
 			role="switch"
 		>
-			<IconStopwatch
+			<IconCalendarTime
 				class="icon timeline-icon"
 				:class="{ active: mode === 'timemachine' }"
 				size="32"

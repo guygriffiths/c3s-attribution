@@ -15,7 +15,7 @@ import { binGradient } from '@/lib/utils'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
 	IconDimensions,
-	IconHourglassHigh,
+	IconStopwatch,
 	IconTemperature,
 } from '@tabler/icons-vue'
 
@@ -227,7 +227,7 @@ watch(
 
 <template>
 	<div ref="containerRef" class="histogram-root">
-		<IconHourglassHigh v-if="props.variable === 'duration'" />
+		<IconStopwatch v-if="props.variable === 'duration'" />
 		<IconDimensions v-else-if="props.variable === 'size'" />
 		<IconTemperature v-else-if="props.variable === 'intensity'" />
 		<svg class="histogram-svg" role="img">
