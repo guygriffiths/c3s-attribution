@@ -90,7 +90,7 @@ export const useStore = defineStore('events', {
 			durationRange: [3, 14],
 			heatIntensityRange: [0, 0],
 			coldIntensityRange: [0, 0],
-			eventTypeMode: 'cold',
+			eventTypeMode: 'hot',
 			sizeRange: [0, 100],
 			eventSetsLoaded: 0,
 			filters: {

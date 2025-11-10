@@ -442,7 +442,7 @@ const N = 200
 		display: flex;
 		justify-content: center;
 		padding: 0;
-		margin-top: 2px;
+		margin: 2px 0;
 		background-color: var(--primary-glass) !important;
 		backdrop-filter: none !important;
 

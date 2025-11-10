@@ -73,7 +73,7 @@ export const interpolateColorCold = (
 		const H = hcl.h + t * 10
 		const C = Math.pow(t, 1.2) * 70
 		const L = 90 - t * 65
-		return d3.hcl(H, C, L).formatRgb()
+		return d3.lch(L, C, H).formatRgb()
 	}
 }
 
