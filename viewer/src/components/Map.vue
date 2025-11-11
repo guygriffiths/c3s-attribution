@@ -97,14 +97,14 @@ const labelsOn = ref(false)
 const wmtsUrl = ref(
 	`https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${timeStore.isoDatetime}`,
 )
-const updateWmtsUrl = debounce((newVal: string) => {
-	console.log(
-		'Updating WMTS URL to:',
-		newVal,
-		' (nah, not really. You should probably uncomment the next line at some point)',
-	)
+// const updateWmtsUrl = debounce((newVal: string) => {
+	// console.log(
+	// 	'Updating WMTS URL to:',
+	// 	newVal,
+	// 	' (nah, not really. You should probably uncomment the next line at some point)',
+	// )
 	// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
-}, 500)
+// }, 500)
 
 watch(
 	() => store.filteringByRegion,
@@ -147,9 +147,7 @@ onGlobalEventsReady(() => {
 	// @ts-ignore
 	globalHeatmapEvents.value = getGlobalFilteredEvents()
 	try {
-		console.log('THIS LINE HERE SHOULD BE A MANUAL BG UPDATE?')
-		// @ts-ignore
-		heatmapRenderer._update()
+		manualHeatmapUpdate()
 	} catch (e) {
 		console.warn('Error updating heatmap renderer', e)
 	}
@@ -260,9 +258,9 @@ watch(
 	() => timeStore.selectedTime,
 	(newVal) => {
 		currentEvents.value = getCurrentEvents(newVal)
-		if (wmtsUrl.value) {
-			updateWmtsUrl(newVal.toISOString().split('T')[0])
-		}
+		// if (wmtsUrl.value) {
+		// 	updateWmtsUrl(newVal.toISOString().split('T')[0])
+		// }
 	},
 )
 
@@ -274,9 +272,7 @@ watch(
 		currentEvents.value = getCurrentEvents(timeStore.selectedTime)
 		if (store.viewMode === 'heatmap') {
 			try {
-				console.log('THIS LINE HERE SHOULD BE A MANUAL BG UPDATE?')
-				// @ts-ignore
-				heatmapRenderer._update()
+				manualHeatmapUpdate()
 			} catch (e) {
 				console.warn('Error updating heatmap renderer', e)
 			}
@@ -390,12 +386,10 @@ const addEventPanes = () => {
 	pane.style.zIndex = '380'
 
 	heatmapRenderer.addTo(map.value)
-	console.log('Added heatmap renderer at', performance.now(), heatmapRenderer)
 	// When leaflet triggers an update, re-remder the heatmap on the main thread
 	// Because we have already rendered this data once via the worker, GPU calculations
 	// should be cached and this should be *fast*
 	heatmapRenderer.on('update', () => {
-		console.log('Update fired at', performance.now())
 		// TODO - add pixel accurate method?
 		const canvasEl = (heatmapRenderer as any)._container
 		if (!canvasEl) return
@@ -687,13 +681,19 @@ const showMarker = computed(
 	// This matches the default map theme, so that it's white at the bottom
 	// to jut up against antarctica, grey at the top for arctic ocean
 	.leaflet-container {
-		background: linear-gradient(
-			to top,
-			rgb(249, 249, 249),
-			rgb(249, 249, 249) 49%,
-			rgb(195, 200, 202) 51%,
-			rgb(195, 200, 202)
-		);
+		background: rgb(95, 102, 110);
+	}
+
+	&.heatmap {
+		.leaflet-container {
+			background: linear-gradient(
+				to top,
+				rgb(249, 249, 249),
+				rgb(249, 249, 249) 49%,
+				rgb(195, 200, 202) 51%,
+				rgb(195, 200, 202)
+			);
+		}
 	}
 
 	.the-toggle {

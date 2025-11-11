@@ -296,6 +296,7 @@ const toggleMenu = () => {
 			id="multi-event-panel"
 			:events-of-interest="eventsOfInterest"
 			class="right"
+			:class="{ selected: eventStore.eventSelected }"
 			:active="store.showMultiEventPanel && store.viewMode !== 'timemachine'"
 		/>
 
@@ -323,6 +324,9 @@ const toggleMenu = () => {
 					:nbins="10"
 					:xmin="0"
 					:xmax="eventStore.intensityRange[1]"
+					:y-max-count="
+						0.75 * Math.max(...eventStore.selectedEvent.slices.map(s => s.length))
+					"
 					:labelFunc="(v: number) => v.toFixed(1)"
 					:units="'°C'"
 					:types="
@@ -574,6 +578,11 @@ const toggleMenu = () => {
 		background-color: var(--panel-bg-alt);
 		backdrop-filter: $frosty;
 		overflow: visible;
+		background-color: var(--panel-bg);
+
+		&.selected {
+			background-color: var(--panel-bg-dark);
+		}
 	}
 
 	#event-panel {

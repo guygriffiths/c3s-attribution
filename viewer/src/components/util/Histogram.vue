@@ -26,7 +26,7 @@ type Props = {
 	labelFunc?: (v: number) => string
 	units?: string | null
 	nbins?: number
-	yMaxPct?: number | null
+	yMaxCount?: number | null
 	highlightValue?: number | null
 	types?: ('hot' | 'cold')[]
 	variable?: 'duration' | 'size' | 'intensity'
@@ -137,18 +137,18 @@ const bins = computed(() => {
 // y values expressed as percentage of total data count
 const counts = computed(() => bins.value.map((b) => b.length))
 const totalCount = computed(() => Math.max(1, props.data?.length ?? 0))
-const countsPct = computed(() =>
-	counts.value.map((c) => (c / totalCount.value) * 100),
-)
+// const countsPct = computed(() =>
+// 	counts.value.map((c) => (c / totalCount.value) * 100),
+// )
 
 // y scale domain: 0 -> auto max or fixed yMaxPct prop
-const maxPctAuto = computed(() =>
-	countsPct.value.length ? Math.max(...countsPct.value) : 0,
+const maxCountAuto = computed(() =>
+	counts.value.length ? Math.max(...counts.value) : 0,
 )
-const yPctMax = computed(() => {
-	if (props.yMaxPct != null) return Math.max(props.yMaxPct, maxPctAuto.value)
+const yMax = computed(() => {
+	if (props.yMaxCount != null) return Math.max(props.yMaxCount, maxCountAuto.value)
 	// give a little headroom so bars don't touch top
-	return Math.max(1, Math.ceil(maxPctAuto.value * 1.08))
+	return Math.max(1, Math.ceil(maxCountAuto.value * 1.08))
 })
 
 // margins + inner dims
@@ -165,7 +165,7 @@ const xScale = computed(() =>
 	d3.scaleLinear().domain(domain.value).range([0, innerWidth.value]),
 )
 const yScale = computed(() =>
-	d3.scaleLinear().domain([0, yPctMax.value]).range([innerHeight.value, 0]),
+	d3.scaleLinear().domain([0, yMax.value]).range([innerHeight.value, 0]),
 )
 
 // x-axis tick formatting
@@ -190,8 +190,8 @@ const bars = computed(() => {
 		const x = xScale.value(b.x0 as number)
 		const x1p = xScale.value(b.x1 as number)
 		const w = Math.max(0, x1p - x)
-		const pct = countsPct.value[idx] ?? 0
-		const y = Math.max(0, yScale.value(pct))
+		const count = counts.value[idx] ?? 0
+		const y = Math.max(0, yScale.value(count))
 		const h = Math.max(0, innerHeight.value - y)
 		return {
 			idx,
@@ -199,7 +199,7 @@ const bars = computed(() => {
 			w,
 			y,
 			h,
-			pct,
+			pct: (count / totalCount.value) * 100,
 			count: counts.value[idx],
 			bin0: b.x0,
 			bin1: b.x1,
@@ -337,14 +337,14 @@ watch(
 	font-size: 11px;
 }
 
+$rate: 0s;//0.5 * $animTime;
 /* bars */
 .bars .bar-group {
 	transition:
-		transform 300ms ease,
-		opacity 200ms ease;
+		transform $rate ease,
+		opacity $rate ease;
 }
 
-$rate: 0.5 * $animTime;
 
 .bar-rect {
 	// stroke: black;

@@ -53,6 +53,21 @@ watch(
 	},
 )
 
+const expandRow = ref<'histogram' | 'scatter' | 'ts' | null>(null)
+const expandVar = ref<'duration' | 'size' | 'intensity' | null>(null)
+const expand = (
+	type: 'histogram' | 'scatter' | 'ts',
+	variable: 'duration' | 'size' | 'intensity',
+) => {
+	if(expandRow.value === type && expandVar.value === variable) {
+		expandRow.value = null
+		expandVar.value = null
+		return
+	}
+	expandRow.value = type
+	expandVar.value = variable
+}
+
 const N = 200
 </script>
 <template>
@@ -100,7 +115,13 @@ const N = 200
 					:topN="200"
 				/>
 			</div>
-			<div class="histogram-subpanel subpanel">
+			<div
+				class="histogram-subpanel subpanel"
+				:class="{
+					expanded: expandRow === 'histogram',
+					contracted: expandRow && expandRow !== 'histogram',
+				}"
+			>
 				<Histogram
 					:data="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
 					:nbins="10"
@@ -122,6 +143,11 @@ const N = 200
 					"
 					:types="eventsOfInterest.map((e) => e.event_type)"
 					variable="duration"
+					:class="{
+						expanded: expandVar === 'duration',
+						contracted: expandVar && expandVar !== 'duration',
+					}"
+					@click="expand('histogram', 'duration')"
 				/>
 				<Histogram
 					:data="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
@@ -144,6 +170,11 @@ const N = 200
 					"
 					:types="eventsOfInterest.map((e) => e.event_type)"
 					variable="size"
+					:class="{
+						expanded: expandVar === 'size',
+						contracted: expandVar && expandVar !== 'size',
+					}"
+					@click="expand('histogram', 'size')"
 				/>
 				<Histogram
 					:data="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
@@ -166,9 +197,21 @@ const N = 200
 					"
 					:types="eventsOfInterest.map((e) => e.event_type)"
 					variable="intensity"
+					:class="{
+						expanded: expandVar === 'intensity',
+						contracted: expandVar && expandVar !== 'intensity',
+					}"
+					@click="expand('histogram', 'intensity')"
 				/>
 			</div>
-			<div class="scatter-subpanel subpanel" ref="scatterSubRef">
+			<div
+				class="scatter-subpanel subpanel"
+				:class="{
+					expanded: expandRow === 'scatter',
+					contracted: expandRow && expandRow !== 'scatter',
+				}"
+				ref="scatterSubRef"
+			>
 				<ScatterPlot
 					:xdata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
 					:ydata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
@@ -195,6 +238,11 @@ const N = 200
 					:highlightId="eventStore.selectedEventId"
 					xvar="duration"
 					yvar="intensity"
+					:class="{
+						expanded: expandVar === 'duration',
+						contracted: expandVar && expandVar !== 'duration',
+					}"
+					@click="expand('scatter', 'duration')"
 				/>
 				<ScatterPlot
 					:xdata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
@@ -222,6 +270,11 @@ const N = 200
 					:highlightId="eventStore.selectedEventId"
 					xvar="size"
 					yvar="duration"
+					:class="{
+						expanded: expandVar === 'size',
+						contracted: expandVar && expandVar !== 'size',
+					}"
+					@click="expand('scatter', 'size')"
 				/>
 				<ScatterPlot
 					:xdata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
@@ -249,9 +302,20 @@ const N = 200
 					:highlightId="eventStore.selectedEventId"
 					xvar="intensity"
 					yvar="size"
+					:class="{
+						expanded: expandVar === 'intensity',
+						contracted: expandVar && expandVar !== 'intensity',
+					}"
+					@click="expand('scatter', 'intensity')"
 				/>
 			</div>
-			<div class="ts-subpanel subpanel">
+			<div
+				class="ts-subpanel subpanel"
+				:class="{
+					expanded: expandRow === 'ts',
+					contracted: expandRow && expandRow !== 'ts',
+				}"
+			>
 				<ScatterPlot
 					:xdata="eventsOfInterest.map((e) => e.times[0])"
 					:ydata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
@@ -271,6 +335,11 @@ const N = 200
 					:highlightId="eventStore.selectedEventId"
 					xvar="time"
 					yvar="duration"
+					:class="{
+						expanded: expandVar === 'duration',
+						contracted: expandVar && expandVar !== 'duration',
+					}"
+					@click="expand('ts', 'duration')"
 				/>
 				<ScatterPlot
 					:xdata="eventsOfInterest.map((e) => e.times[0])"
@@ -291,6 +360,11 @@ const N = 200
 					:highlightId="eventStore.selectedEventId"
 					xvar="time"
 					yvar="size"
+					:class="{
+						expanded: expandVar === 'size',
+						contracted: expandVar && expandVar !== 'size',
+					}"
+					@click="expand('ts', 'size')"
 				/>
 				<ScatterPlot
 					:xdata="eventsOfInterest.map((e) => e.times[0])"
@@ -309,8 +383,13 @@ const N = 200
 					"
 					:ids="eventsOfInterest.map((e) => e.id)"
 					:highlightId="eventStore.selectedEventId"
+					:class="{
+						expanded: expandVar === 'intensity',
+						contracted: expandVar && expandVar !== 'intensity',
+					}"
 					xvar="time"
 					yvar="intensity"
+					@click="expand('ts', 'intensity')"
 				/>
 			</div>
 		</div>
@@ -383,6 +462,7 @@ const N = 200
 
 	.scroller {
 		height: 100%;
+		width: 100%;
 		flex: 1 1 auto;
 		display: flex;
 		flex-direction: column;
@@ -404,7 +484,20 @@ const N = 200
 		}
 
 		.subpanel {
+			// $transition: 3s ease;
 			flex: 0 0 calc(33.33333% - 0.5rem);
+			height: calc(33.33333% - 0.5rem);
+			transition: all $transition;
+			&.expanded {
+				flex: 0 0 calc(100% - 1.5rem);
+				height: calc(100% - 1.5rem);
+			}
+			&.contracted {
+				flex: 0 0 0;
+				opacity: 0.25;
+				height: 0;
+			}
+
 			width: 100%;
 			display: flex;
 			flex-direction: row;
@@ -415,6 +508,17 @@ const N = 200
 			.event-ranker-root,
 			.histogram-root,
 			.scatter-root {
+				flex: 0 0 calc(33.33333% - 0.5rem);
+				transition: all $transition;
+
+				&.expanded {
+					flex: 0 0 calc(100% - 1.5rem);
+				}
+				&.contracted {
+					flex: 0 0 0;
+					opacity: 0.25;
+				}
+
 				background-color: var(--panel-hint);
 				backdrop-filter: $frosty;
 				// margin: 0 0.25rem;
@@ -425,6 +529,8 @@ const N = 200
 				&:hover {
 					cursor: pointer;
 					filter: brightness(1.05);
+					transform: scale(1.01);
+					transition: all $transition;
 				}
 			}
 

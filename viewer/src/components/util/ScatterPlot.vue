@@ -34,11 +34,18 @@ const resizeObserver = ref<ResizeObserver | null>(null)
 
 onMounted(() => {
 	if (!containerRef.value) return
+	let resizeTimeout: ReturnType<typeof setTimeout> | null = null
 	resizeObserver.value = new ResizeObserver((entries) => {
 		for (const entry of entries) {
 			if (entry.contentRect) {
-				width.value = Math.floor(entry.contentRect.width)
-				height.value = Math.floor(entry.contentRect.height)
+				// This works nicely with resizing.
+				if (resizeTimeout) {
+					clearTimeout(resizeTimeout)
+				}
+				resizeTimeout = setTimeout(() => {
+					width.value = Math.floor(entry.contentRect.width)
+					height.value = Math.floor(entry.contentRect.height)
+				}, 0) 
 			}
 		}
 	})
@@ -131,7 +138,7 @@ const pointStates = new Map<
 const fadeDuration = 50 // ms
 
 const computeOpacity = (n: number, maxOpacity = 0.5) =>
-	Math.min(maxOpacity, maxOpacity * Math.pow(n, -0.2))
+	Math.min(maxOpacity, maxOpacity * Math.pow(n, -0.3))
 
 watch(xyData, (newPts) => {
 	const now = performance.now()
@@ -213,6 +220,7 @@ function draw() {
 			ctx.stroke()
 		}
 	}
+	ctx.globalCompositeOperation = 'source-over'
 	for (const st of highlights) {
 		const cx = xScale.value(st.x)
 		const cy = yScale.value(st.y)

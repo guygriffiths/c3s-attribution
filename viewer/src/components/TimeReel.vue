@@ -401,7 +401,7 @@ const eventClicked = (id: string) => {
 
 const needleOffset = computed(() => {
 	if (isDefault.value || isOverview.value) {
-		const offset = ((selectedDay.value + 2) / TOTAL_DAYS) * 100
+		const offset = ((selectedDay.value) / TOTAL_DAYS) * 100
 		return Math.max(Math.min(offset, 100), 0)
 	} else if (isTimeline.value) {
 		const totalDays = differenceInDays(props.end, props.start) + 1
@@ -416,7 +416,7 @@ const needleOffset = computed(() => {
 				props.selectedEvent.times[props.selectedEvent.times.length - 1],
 			)
 			const totalZoomedDays = (eventEnd - eventStart + 2) * xScaleFactor.value
-			const offset = selectedDay - eventStart + 1
+			const offset = selectedDay - eventStart + 0.5
 			if (localNeedleOffset.value !== null) {
 				return Math.max(
 					Math.min(
@@ -528,6 +528,8 @@ timeReelWorker.onmessage = (e: MessageEvent) => {
 		eventBoxesForYear: Record<number, EventBox[]>
 		maxSimultaneousEvents: number
 	}
+
+	console.log('TimeReel: received worker data, maxSimultaneousEvents=', newMax)
 	eventBoxesForYear.value = newEventBoxes
 	maxSimultaneousEvents.value = newMax
 	const yearsList = [...years.value].reverse()
@@ -637,8 +639,8 @@ const lineTransform = computed(() => {
 		isTimeline.value
 			? `translate(0,${selectedYear.value - year}) scale(${1.0 / years.value.length}, 1)`
 			: isOverview.value
-				? `translate(${0.5 - differenceInDays(new Date(Date.UTC(year, 0, 1)), props.start)},0) scale(1,1.5)`
-				: `translate(${0.5 - differenceInDays(new Date(Date.UTC(year, 0, 1)), props.start)},0)`
+				? `translate(${1 - differenceInDays(new Date(Date.UTC(year, 0, 1)), props.start)},0) scale(1,1.5)`
+				: `translate(${1 - differenceInDays(new Date(Date.UTC(year, 0, 1)), props.start)},0)`
 })
 
 const yearTransform = computed(() => {
@@ -900,7 +902,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 											[box.type]: true,
 										}"
 										:fill="box.color || scssVars.c3sred"
-										:x="-0.5 + box.startX - year * TOTAL_DAYS"
+										:x="-0.5+box.startX - year * TOTAL_DAYS"
 										:width="box.endX - box.startX + 1"
 										:y="positionY(box.y, box.type)"
 										:height="
@@ -977,7 +979,10 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			>
 				<div
 					class="needle"
-					:class="{ highlight: selectedEvent, indicator: selectedEvent && isTimeline }"
+					:class="{
+						highlight: selectedEvent,
+						indicator: selectedEvent && isTimeline,
+					}"
 					ref="needleRef"
 					v-if="isDefault || isZoom || selectedEvent"
 					:style="`left: calc(${needleOffset}% + 2px); pointer-events: none;`"
@@ -1092,7 +1097,6 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 				padding: 0;
 				justify-content: center;
 
-
 				&:first-child {
 					border-top-left-radius: 0.25rem;
 					border-bottom-left-radius: 0.25rem;
@@ -1189,7 +1193,6 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 						font-size: 0.75rem !important;
 						margin: 0 0.25rem;
 					}
-
 				}
 				.clipper {
 					.events-svg {
@@ -1412,7 +1415,6 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 				fill: transparent;
 
 				&.odd {
-
 					fill: var(--panel-hint);
 				}
 			}

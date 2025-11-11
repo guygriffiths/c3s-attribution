@@ -52,15 +52,15 @@ export const toPx = (value: string): number => {
 // 	return (t: number) => d3.hsl(hsl.h, hsl.s, (1 - t) * 0.7 + 0.2).toString()
 // }
 
-export const interpolateColorHot = (
-	baseColor: string = 'rgb(224, 192, 233)',
-) => {
+export const interpolateColorHot = (baseColor: string = 'rgb(151, 24, 65)') => {
 	const hcl = d3.lch(baseColor)
 	const retfunc = (t: number) => {
-		const H = hcl.h - (((t - 1) * 20) % 360)
-		const C = hcl.c + (Math.pow(t, 1.2) - 0.5) * 125
-		const L = hcl.l + (0.2 + 0.8 * (t - 0.4)) * 110
-		return d3.lch(L, C, H).formatRgb()
+		const tadj = t - 0.05
+		const H = hcl.h + 27 * Math.pow(Math.max(0, 2 * t - 1), 2)
+		const C = hcl.c + 106 * (t - 0.5)
+		const L = hcl.l - 8 + 148 * tadj * tadj - 30 * tadj
+
+		return d3.lch(L, C, H % 360).formatRgb()
 	}
 	return retfunc
 }
@@ -70,9 +70,9 @@ export const interpolateColorCold = (
 ) => {
 	const hcl = d3.lch(baseColor)
 	return (t: number) => {
-		const H = hcl.h + t * 10
-		const C = Math.pow(t, 1.2) * 70
-		const L = 90 - t * 65
+		const H = hcl.h + Math.pow(t, 2) * 30
+		const C = Math.pow(t, 2) * 75
+		const L = 80 - t * 60
 		return d3.lch(L, C, H).formatRgb()
 	}
 }
@@ -99,9 +99,9 @@ export const setTheme = (themeName: 'hot' | 'cold' | 'hotcold') => {
 	console.time(`Setting theme to ${themeName}`)
 	const root = document.documentElement
 	const themePrefix = `--theme-${themeName}-`
-	
+
 	const styles: any = getComputedStyle(root)
-	
+
 	// Loop over all computed properties instead
 	for (const prop of styles) {
 		if (prop.startsWith(themePrefix)) {

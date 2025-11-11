@@ -34,43 +34,46 @@
 			function interpolateColorRev(baseColor = 'rgb(151, 24, 65)') {
 				const hcl = d3.lch(baseColor)
 				const retfunc = (t) => {
-					const H = hcl.h - (((t - 0.5) * 50) % 360)
-					const C = hcl.c + (t - 0.5) * 240
-					const L = hcl.l + (t - 0.5) * 40
-					return d3.lch(L, C, H).formatRgb()
+					const tadj = t - 0.05
+					const H = hcl.h + 27 * Math.pow(Math.max(0, 2 * t - 1), 2)
+					const C = hcl.c + 106 * (Math.pow(t, 1.5) - 0.5)
+					const L = hcl.l - 8 + 148 * tadj * tadj - 30 * tadj
+
+					return d3.lch(L, C, H % 360).formatRgb()
 				}
 				return retfunc
 			}
 
-			function interpolateColorRev1(baseColor = 'rgb(244, 102, 162)') {
+			function interpolateColorRev1(baseColor = 'rgb(151, 24, 65)') {
 				const hcl = d3.lch(baseColor)
-				const retfunc = (t) => {
-					const H = hcl.h - (((t) * 5) % 360)
-					const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 150
-					const L = hcl.l + (0.5 + 0.6 * (t - 0.5) * 70)
+				console.log(hcl)
+				return (t) => {
+					const H = hcl.h + Math.pow(t, 2) * 30
+					const C = Math.pow(t, 2) * 75
+					const L = 80 - t * 60
 					return d3.lch(L, C, H).formatRgb()
 				}
-				return retfunc
 			}
 
-			function interpolateColorRev2(baseColor = 'rgb(244, 102, 162)') {
+			function interpolateColorRev2(baseColor = 'rgb(151, 24, 65)') {
 				const hcl = d3.lch(baseColor)
-				const retfunc = (t) => {
-					const H = hcl.h - (((t-1) * 10) % 360)
-					const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 100
-					const L = hcl.l + (0.2 + 0.8 * (t - 0.5) * 70)
+				return (t) => {
+					const H = hcl.h + t * 10
+					const C = Math.pow(t, 1.2) * 70
+					const L = 90 - t * 65
 					return d3.lch(L, C, H).formatRgb()
 				}
-				return retfunc
 			}
 
 			function interpolateColorRev3(baseColor = 'rgb(151, 24, 65)') {
 				const hcl = d3.lch(baseColor)
 				const retfunc = (t) => {
-					const H = hcl.h - (((t-1) * 10) % 360)
-					const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 100
-					const L = hcl.l + (0.2 + 0.8 * (t - 0.5)) * 70
-					return d3.lch(L, C, H).formatRgb()
+					const tadj = t - 0.05
+					const H = hcl.h + 27 * Math.pow(Math.max(0, 2 * t - 1), 2)
+					const C = 200 * t
+					const L = hcl.l - 8 + 148 * tadj * tadj - 30 * tadj
+
+					return d3.lch(L, C, H % 360).formatRgb()
 				}
 				return retfunc
 			}
@@ -78,7 +81,7 @@
 			function interpolateColorRev4(baseColor = 'rgb(151, 24, 65)') {
 				const hcl = d3.lch(baseColor)
 				const retfunc = (t) => {
-					const H = hcl.h - (((t-1) * 10) % 360)
+					const H = hcl.h - (((t - 1) * 10) % 360)
 					const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 100
 					const L = hcl.l + (0.15 + 0.85 * (t - 0.5)) * 90
 					return d3.lch(L, C, H).formatRgb()
@@ -98,19 +101,19 @@
 
 			// Apply gradients
 			document.getElementById('div1').style.background = makeGradient(
-				interpolateColorRev(), //'rgb(44,102,162)'),
+				interpolateColorRev('rgb(44,102,162)'),
 			)
 			document.getElementById('div2').style.background = makeGradient(
-				interpolateColorRev1(), //'rgb(44,102,162)'),
+				interpolateColorRev1('rgb(44,102,162)'),
 			)
 			document.getElementById('div3').style.background = makeGradient(
-				interpolateColorRev2(), //'rgb(44,102,162)'),
+				interpolateColorRev2('rgb(44,102,162)'),
 			)
 			document.getElementById('div4').style.background = makeGradient(
-				interpolateColorRev3(), //'rgb(44,102,162)'),
+				interpolateColorRev3('rgb(44,102,162)'),
 			)
 			document.getElementById('div5').style.background = makeGradient(
-				interpolateColorRev4(), //'rgb(44,102,162)'),
+				interpolateColorRev4('rgb(44,102,162)'),
 			)
 		</script>
 	</body>
