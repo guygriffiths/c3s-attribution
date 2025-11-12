@@ -416,7 +416,7 @@ const needleOffset = computed(() => {
 				props.selectedEvent.times[props.selectedEvent.times.length - 1],
 			)
 			const totalZoomedDays = (eventEnd - eventStart + 2) * xScaleFactor.value
-			const offset = selectedDay - eventStart + 0.5
+			const offset = selectedDay - eventStart + 1
 			if (localNeedleOffset.value !== null) {
 				return Math.max(
 					Math.min(

@@ -360,7 +360,7 @@ const toggleMenu = () => {
 			:class="{
 				eventPanelOn:
 					eventStore.selectedEvent !== null && store.viewMode === 'timemachine',
-				multiEventPanelOn: store.showMultiEventPanel,
+				multiEventPanelOn: store.viewMode === 'heatmap',
 			}"
 		/>
 	</div>
@@ -442,7 +442,7 @@ const toggleMenu = () => {
 		width: calc(100% - 2 * $panelMargin);
 		right: $panelMargin;
 		bottom: $panelMargin;
-		height: 40%;
+		height: $timePanelHeight;
 		z-index: 20;
 		transition: all $transition;
 		border-radius: $borderRadius;
@@ -551,18 +551,20 @@ const toggleMenu = () => {
 		top: $panelMargin;
 		left: $panelMargin;
 		width: calc(100% - 2 * $panelMargin);
-		height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
+		height: calc(100% - 2 * $panelMargin - $timePanelHeight);
 		pointer-events: none;
 		z-index: 10000;
-
+		
 		// background-color: rgba(0,255,0,0.1);
-
+		
 		&.eventPanelOn {
 			left: calc($panelMargin + $eventPanelWidth);
 			width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
+			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 		}
-
+		
 		&.multiEventPanelOn {
+			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 			width: calc(100% - $multiEventPanelWidth - $panelMargin);
 			&.eventPanelOn {
 				width: calc(100% - $eventPanelWidth - 2 * $panelMargin);

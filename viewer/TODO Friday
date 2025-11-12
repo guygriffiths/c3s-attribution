@@ -11,6 +11,10 @@ Olde-world version of data - need to generate and make selectable from the hambu
 
 Optimisation - pre-render all the grid tiles when the first one gets triggered for an event. Cache: key+event -> event-times -> ImageBitmap, then drawImage(ImageBitmap) is GPU-bound
 
+A zoom-to-event button which cycles the view between all current events
+
+When zoomed in on event on timeline, add next years event bars if required (or just anyway?)
+
 July 11th 2023 - good example for research (over USA)
 
 
@@ -18,9 +22,15 @@ BUG ALERT!!!!
 If event has days with 100% ocean, they get removed and times.length doesn't match slices
 
 
-Put some filters back!
 
 More hamburger menu items:
     Variable definitions - various for intensity
+    Put some filters back!
+    Animation speed controls
+    Saved settings
 
 Zoom controls - zoom in, out, reset
+
+Scatter plot export
+
+Scatter plot explore nearby points

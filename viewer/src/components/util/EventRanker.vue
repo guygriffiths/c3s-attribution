@@ -54,8 +54,7 @@ const rankedEvents = ref<ExtremeEvent[]>([])
 watch(
 	() => props.events,
 	() => {
-		rankedEvents.value = [...(props.events || [])]
-		.sort(props.sortFunc)
+		rankedEvents.value = [...(props.events || [])].sort(props.sortFunc)
 		// console.log('Ranked events:', [...rankedEvents.value].splice(0, 10).map((e) => `events/event-${e.id}.json`).join(' '))
 	},
 	{ deep: false },
@@ -80,7 +79,7 @@ watch(
 			// Ensure the selected event is in view
 			const idx = rankedEvents.value.findIndex((e) => e.id === newVal)
 			const scroller = scrollerRef.value
-			if (scroller && idx >= 0) {
+			if (scroller && idx >= 0 && idx <= props.topN) {
 				const rankElement = scroller.children[0].children[idx]
 				if (rankElement) {
 					// console.log('rankElement', rankElement)
@@ -93,9 +92,9 @@ watch(
 					})
 				}
 				selectFinal.value = false
-			} else if (idx < 0) {
+			} else if (idx < 0 || idx > props.topN) {
 				// If the selected event is not in the ranked list, scroll to the very bottom
-				scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+				scroller?.scrollTo({ top: scroller.scrollHeight + ROW_SIZE * 2, behavior: 'smooth' })
 				selectFinal.value = true
 			}
 		}
@@ -106,7 +105,9 @@ const eventsInRanker = computed(() => Math.min(props.topN, props.events.length))
 
 const selectedIndex = computed(() => {
 	if (!eventStore.selectedEvent) return -1
-	return props.events.findIndex((e) => e.id === eventStore.selectedEventId) + 1
+	return (
+		rankedEvents.value.findIndex((e) => e.id === eventStore.selectedEventId) + 1
+	)
 })
 </script>
 
@@ -127,18 +128,12 @@ const selectedIndex = computed(() => {
 					:title="`Duration: ${eventStore.durationForEvent(rankedEvents[i - 1])} days\nSize: ${eventStore.sizeForEvent(rankedEvents[i - 1]).toFixed(2)} km²\nIntensity: ${eventStore.intensityForEvent(rankedEvents[i - 1]).toFixed(2)}`"
 				></div>
 				<div
-					v-if="
-						eventsInRanker < props.events.length && eventStore.selectedEvent
-					"
 					class="rank"
 					:class="{
 						odd: topN % 2 === 1,
 					}"
 				></div>
 				<div
-					v-if="
-						eventsInRanker < props.events.length && eventStore.selectedEvent
-					"
 					class="rank"
 					:class="{
 						odd: topN % 2 === 0,
@@ -155,7 +150,8 @@ const selectedIndex = computed(() => {
 					ref="eventRankerSvgRef"
 					:height="
 						ROW_SIZE *
-						(eventsInRanker < props.events.length
+						((selectedIndex < 0 || selectedIndex > props.topN) &&
+						eventStore.selectedEvent
 							? eventsInRanker + 2
 							: eventsInRanker)
 					"
@@ -223,7 +219,8 @@ const selectedIndex = computed(() => {
 					</text>
 					<text
 						v-if="
-							eventsInRanker < props.events.length && eventStore.selectedEvent
+							(selectedIndex < 0 || selectedIndex > props.topN) &&
+							eventStore.selectedEvent
 						"
 						class="ranked-event"
 						:class="eventStore.selectedEvent?.event_type || 'mixed'"
@@ -236,7 +233,8 @@ const selectedIndex = computed(() => {
 					</text>
 					<text
 						v-if="
-							eventsInRanker < props.events.length && eventStore.selectedEvent
+							(selectedIndex < 0 || selectedIndex > props.topN) &&
+							eventStore.selectedEvent
 						"
 						class="ranked-event"
 						:class="eventStore.selectedEvent?.event_type || 'mixed'"

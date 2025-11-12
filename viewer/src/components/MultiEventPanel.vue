@@ -469,6 +469,7 @@ const N = 200
 		overflow-y: hidden;
 		overflow-x: visible;
 		gap: 0.25rem;
+		// margin-bottom: 0.25rem;
 		justify-content: space-between;
 
 		.label {
@@ -485,12 +486,12 @@ const N = 200
 
 		.subpanel {
 			// $transition: 3s ease;
-			flex: 0 0 calc(33.33333% - 0.5rem);
-			height: calc(33.33333% - 0.5rem);
+			flex: 0 0 calc(33.33333%);
+			height: calc(33.33333%);
 			transition: all $transition;
 			&.expanded {
-				flex: 0 0 calc(100% - 1.5rem);
-				height: calc(100% - 1.5rem);
+				flex: 0 0 calc(100% - 1rem);
+				height: calc(100% - 1rem);
 			}
 			&.contracted {
 				flex: 0 0 0;
@@ -512,7 +513,7 @@ const N = 200
 				transition: all $transition;
 
 				&.expanded {
-					flex: 0 0 calc(100% - 1.5rem);
+					flex: 0 0 calc(100% - 1rem);
 				}
 				&.contracted {
 					flex: 0 0 0;
@@ -537,7 +538,7 @@ const N = 200
 			// padding: 0.25rem;
 
 			&.medals-subpanel {
-				height: calc(66.66666% - 1rem);
+				height: calc(66.66666%);
 			}
 		}
 	}

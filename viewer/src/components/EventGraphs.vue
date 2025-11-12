@@ -90,6 +90,7 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 				</filter>
 			</defs>
 			<rect
+				v-if="selectedIndex >= 0"
 				:x="xScale(selectedIndex.toString())"
 				:y="0"
 				:width="xScale.bandwidth()"

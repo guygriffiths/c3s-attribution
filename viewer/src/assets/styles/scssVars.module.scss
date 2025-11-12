@@ -19,7 +19,10 @@ $headerHeight: 4rem;
 $gap: 0.5rem;
 $footerHeight: 2.25rem;
 
+$panelMargin: 1rem;
+
 $smallTimePanelHeight: max(6rem, 20%);
+$timePanelHeight: max(10rem, 40%);
 $eventPanelWidth: min(400px, 33%);
 $multiEventPanelWidth: 40%;
 $smallMultiScale: 0.6;
@@ -29,7 +32,6 @@ $modeButtonWidth: 6rem;
 $frameBorderRadius: 0.5rem;
 
 $frameBorderWidth: 1.5rem;
-$panelMargin: 1rem;
 
 $borderRadius: 7px;
 

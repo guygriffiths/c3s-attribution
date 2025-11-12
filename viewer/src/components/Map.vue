@@ -51,6 +51,7 @@ import {
 	onGlobalEventsReady,
 	onCurrentEventsReady,
 } from '@/lib/eventsDB'
+import { IconZoomIn, IconZoomOut, IconMapPin2 } from '@tabler/icons-vue'
 
 const store = useStore()
 const timeStore = useTimeStore()
@@ -98,12 +99,12 @@ const wmtsUrl = ref(
 	`https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${timeStore.isoDatetime}`,
 )
 // const updateWmtsUrl = debounce((newVal: string) => {
-	// console.log(
-	// 	'Updating WMTS URL to:',
-	// 	newVal,
-	// 	' (nah, not really. You should probably uncomment the next line at some point)',
-	// )
-	// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
+// console.log(
+// 	'Updating WMTS URL to:',
+// 	newVal,
+// 	' (nah, not really. You should probably uncomment the next line at some point)',
+// )
+// wmtsUrl.value = `https://cadl2-wmts.lobelia.earth/teroWmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&FORMAT=image/png&LAYER=reanalysis_era5_single_levels/sfc/t2m&STYLE=cmap:magma&TILEMATRIXSET=EPSG:3857@2x&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&TIME=${newVal}`
 // }, 500)
 
 watch(
@@ -511,6 +512,8 @@ heatmapWorker.onmessage = (e) => {
 			ctxEl.clearRect(0, 0, canvasEl.width, canvasEl.height)
 			ctxEl.drawImage(e.data.bitmap, 0, 0)
 		}
+		// @ts-ignore
+		heatmapRenderer._update()
 	}
 }
 
@@ -530,6 +533,24 @@ const showMarker = computed(
 // 	},
 // 	{ immediate: true },
 // )
+
+const zoomIn = () => {
+	if (map.value) {
+		map.value.zoomIn()
+	}
+}
+const zoomOut = () => {
+	if (map.value) {
+		map.value.zoomOut()
+	}
+}
+const resetZoom = () => {
+	fitBoundsToDiv(
+		mapRef.value!.leafletObject as L.Map,
+		document.getElementById('event-window')!,
+		[-85, -180, 85, 180],
+	)
+}
 </script>
 
 <template>
@@ -601,7 +622,7 @@ const showMarker = computed(
 			>
 			</LPolygon>
 			<!-- Heatmap and fast filter events have now moved to their own renderers. They are blisteringly fast -->
-			<!-- They were previously loops of LPolygon components, like this, but it proved too slo -->
+			<!-- They were previously loops of LPolygon components, like this, but it proved too slow for interactive use -->
 
 			<!-- Event pixel values -->
 			<!-- Uses a custom grid layer to render event pixels otherwise it's too slow -->
@@ -652,6 +673,31 @@ const showMarker = computed(
 			</div>
 
 			<!-- Controls -->
+			<LControl position="topleft" class="zoom-control">
+				<div class="zoom-buttons" :class="{ hidden: eventStore.selectedEvent !== null }">
+					<button
+						class="zoom-button glassy"
+						@click="zoomOut()"
+						:disabled="zoom <= 2"
+					>
+						<IconZoomOut />
+					</button>
+					<button
+						class="zoom-button glassy"
+						@click="resetZoom()"
+						title="Reset zoom"
+					>
+						<IconMapPin2 />
+					</button>
+					<button
+						class="zoom-button glassy"
+						@click="zoomIn()"
+						:disabled="zoom >= 12"
+					>
+						<IconZoomIn />
+					</button>
+				</div>
+			</LControl>
 			<LControl position="topleft" class="region-control">
 				<RegionControl
 					:class="{
@@ -664,7 +710,7 @@ const showMarker = computed(
 				:max-width="200"
 				:metric="true"
 				:imperial="false"
-				position="bottomright"
+				position="bottomleft"
 				class="map-scale"
 			></LControlScale>
 		</LMap>
@@ -709,8 +755,59 @@ const showMarker = computed(
 	}
 
 	.region-control {
+		transform: translateY(-$panelMargin);
 		&.hidden {
-			transform: translateY(-250%);
+			transform: translateX(-250%);
+		}
+	}
+
+	.zoom-control {
+		margin: $panelMargin;
+		.zoom-buttons {
+			display: flex;
+			flex-direction: row;
+			gap: 0;
+
+			&.hidden {
+				transform: translateX(-250%);
+			}
+		}
+
+		.zoom-button {
+			// width: 2.5rem;
+			// height: 2.5rem;
+			// padding: 0.5rem;
+			// display: flex;
+			// align-items: center;
+			// justify-content: center;
+			// svg {
+			// 	width: 1.5rem;
+			// 	height: 1.5rem;
+			// }
+
+			border-radius: 0;
+			&:first-child {
+				border-top-left-radius: $borderRadius;
+				border-bottom-left-radius: $borderRadius;
+			}
+			&:last-child {
+				border-top-right-radius: $borderRadius;
+				border-bottom-right-radius: $borderRadius;
+			}
+		}
+	}
+
+	:deep(.leaflet-control-scale) {
+		transform: translate(-2px, 2px);
+		margin: 0;
+	}
+	:deep(.leaflet-control-attribution),
+	:deep(.leaflet-control-scale) {
+		background: var(--panel-bg-alt);
+		backdrop-filter: $frosty;
+
+		div {
+			background: transparent;
 		}
 	}
 

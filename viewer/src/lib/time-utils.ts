@@ -72,7 +72,7 @@ export function getEventBoxes(
 		let startX = getDayOfYear(first) + first.getUTCFullYear() * TOTAL_DAYS
 		let endX = getDayOfYear(last) + last.getUTCFullYear() * TOTAL_DAYS
 
-		eventBars.push({ eventId: e.id, startX: startX - 0.5, endX: endX + 0.5, y: 0, type: e.event_type, color: e.color })
+		eventBars.push({ eventId: e.id, startX: startX, endX: endX, y: 0, type: e.event_type, color: e.color })
 	}
 
 	// Step 2: Assign y-positions using a greedy row-packing algorithm
