@@ -1,7 +1,6 @@
 TODO Friday
 
-Make event bars clickable
-Don't allow region dragging etc. when event selected
+
 Time scrubber
 Single event histogram - lock the y-scale to the max event value - add caching of all histogram data while you're at it?
 
@@ -31,7 +30,6 @@ More hamburger menu items:
     Animation speed controls
     Saved settings
 
-Zoom controls - zoom in, out, reset
 
 Scatter plot export
 

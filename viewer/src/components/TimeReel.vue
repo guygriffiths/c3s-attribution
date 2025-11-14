@@ -29,6 +29,7 @@ import {
 import {
 	computed,
 	defineModel,
+	nextTick,
 	onBeforeUnmount,
 	onMounted,
 	onUnmounted,
@@ -96,6 +97,7 @@ const setDate = (dateVal: number) => {
 		model.value = date
 	}
 }
+const autoScrolling = ref(false)
 const scrollToYear = (year: number) => {
 	if (container.value) {
 		// Snap to top of specified year
@@ -112,9 +114,12 @@ const nextDay = () => {
 	const newVal = addHours(model.value, 24)
 	if (newVal.getUTCFullYear() <= endYear.value) {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
-			console.log('nextDay year change to', newVal.getUTCFullYear())
+			autoScrolling.value = true
 			model.value = newVal
-			// scrollToYear(newVal.getUTCFullYear() + 1)
+			scrollToYear(newVal.getUTCFullYear() - 1)
+			nextTick(() => {
+				autoScrolling.value = false
+			})
 		} else {
 			model.value = newVal
 		}
@@ -124,9 +129,12 @@ const prevDay = () => {
 	const newVal = subHours(model.value, 24)
 	if (newVal.getUTCFullYear() >= startYear.value) {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
-			console.log('prevDay year change to', newVal.getUTCFullYear())
-			// scrollToYear(newVal.getUTCFullYear()-0.5)
+			autoScrolling.value = true
 			model.value = newVal
+			scrollToYear(newVal.getUTCFullYear() - 1)
+			nextTick(() => {
+				autoScrolling.value = false
+			})
 		} else {
 			model.value = newVal
 		}
@@ -155,8 +163,8 @@ const endOfYear = () => {
 
 const playing = ref(false)
 const frameInterval = computed(() => {
-	let FPS = 30
-	if (isZoom) FPS = 10
+	let FPS = 60
+	if (isZoom.value) FPS = 3
 	return 1000 / FPS
 })
 
@@ -510,7 +518,8 @@ const highlightRowHeight = computed(() =>
 )
 
 const scrollListener = () => {
-	const scrollTop = container.value!.scrollTop
+	if(autoScrolling.value || !container.value) return
+	const scrollTop = container.value.scrollTop
 	const rowsDown = scrollTop / rowHeight.value
 	const newYear = Math.round(startYear.value + rowsDown)
 	const newDate = Date.UTC(newYear, 0, getDayOfYear(model.value))
