@@ -2,14 +2,11 @@
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { useLabels } from '@/lib/labels'
-import { IconLayersSelected, IconMapPin, IconPencil, IconWorld } from '@tabler/icons-vue'
+import { IconLayersSelected, IconMapPin, IconPolygon, IconWorld } from '@tabler/icons-vue'
 import { ref } from 'vue'
 
 const store = useStore()
-const eventStore = useEventStore()
-const $l = useLabels()
 
-const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
 const setSelectingPoint = () => {
 	if (store.filteringByPoint) {
 		// Turn off point filtering and go back to global
@@ -18,7 +15,6 @@ const setSelectingPoint = () => {
 		store.filteringByRegion = false
 		return
 	}
-	store.setLoading() // start loading immediately
 	store.filteringByPoint = true
 	store.regionFilterReady = false
 	store.filteringByRegion = false
@@ -79,7 +75,7 @@ const ready = ref(true)
 				:disabled="!ready"
 				@click="setDrawingRegion"
 			>
-				<IconPencil class="icon" />
+				<IconPolygon class="icon" />
 			</button>
 			<button
 				class="glassy"

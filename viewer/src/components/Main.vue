@@ -11,8 +11,8 @@ import EventTypeToggle from './util/EventTypeToggle.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
 import EventInfo from './EventInfo.vue'
+import FilterPanel from './FilterPanel.vue'
 import FocusFrame from './util/FocusFrame.vue'
-import EventRanker from './util/EventRanker.vue'
 import ModeToggle from './util/ModeToggle.vue'
 import {
 	clearFilter,
@@ -27,10 +27,8 @@ import {
 import { differenceInDays } from 'date-fns'
 import MultiEventPanel from './MultiEventPanel.vue'
 import {
-	IconArrowRightSquare,
 	IconCalendarWeek,
 	IconChartBar,
-	IconChartInfographic,
 	IconMenu2,
 	IconX,
 } from '@tabler/icons-vue'
@@ -67,10 +65,10 @@ const globalFilteredEvents = ref([] as ExtremeEvent[])
 const eventsOfInterest = ref([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
 	globalFilteredEvents.value = getGlobalFilteredEvents()
-	console.log(
-		'global events ready - Main.vue',
-		globalFilteredEvents.value.length,
-	)
+	// console.log(
+	// 	'global events ready - Main.vue',
+	// 	globalFilteredEvents.value.length,
+	// )
 	if (globalEventsOfInterest.value) {
 		eventsOfInterest.value = globalFilteredEvents.value
 	}
@@ -162,7 +160,11 @@ const mode = computed((): TimeReelMode => {
 })
 
 const selectedDayIdx = computed((): number | null => {
-	if (!eventStore.selectedEvent) return null
+	if (
+		!eventStore.selectedEvent ||
+		!eventStore.selectedEvent.hasOwnProperty('pixel_max_values')
+	)
+		return null
 	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent)
 	const selectedDay = differenceInDays(
 		timeStore.selectedTime,
@@ -207,6 +209,7 @@ const toggleMenu = () => {
 		</button>
 		<Panel id="hamburger-menu" class="right" :active="store.hamburgerMenuOpen">
 			<EventTypeToggle v-model="eventStore.eventTypeMode" />
+			<FilterPanel v-model="eventStore.filters" />
 			<!-- <h1>Filters</h1>
 			<h1>Animation speed</h1> -->
 		</Panel>
@@ -278,7 +281,7 @@ const toggleMenu = () => {
 		</Panel>
 
 		<!-- Event Info Panel -->
-		<!-- This is the event information at the top center of the screen -->
+		<!-- This is the event information at the bottom center of the screen -->
 		<Panel
 			id="event-info-panel"
 			class="top"
@@ -324,18 +327,18 @@ const toggleMenu = () => {
 					:nbins="10"
 					:xmin="0"
 					:xmax="eventStore.intensityRange[1]"
-					:y-max-count="
-						0.75 * Math.max(...eventStore.selectedEvent.slices.map(s => s.length))
+					:y-max-count="eventStore.selectedEvent.slices ?
+						0.75 *
+						Math.max(
+							...eventStore.selectedEvent?.slices.map((s) => s.length),
+							): 1
 					"
 					:labelFunc="(v: number) => v.toFixed(1)"
 					:units="'°C'"
 					:types="
-						eventStore
-							.intensitiesForEventStep(
-								eventStore.selectedEvent,
-								timeStore.selectedTime,
-							)
-							.map(() => eventStore.selectedEvent?.event_type || 'hot')
+						eventStore.selectedEvent.times.map(
+							() => eventStore.selectedEvent?.event_type || 'hot',
+						)
 					"
 					variable="intensity"
 				/>
@@ -349,6 +352,7 @@ const toggleMenu = () => {
 				<EventGraphs
 					:selected-event="eventStore.selectedEvent"
 					:event-store="eventStore"
+					id="event-graphs"
 				/>
 			</div>
 		</Panel>
@@ -368,6 +372,11 @@ const toggleMenu = () => {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/scssVars.module.scss' as *;
+
+#event-graphs {
+	width: 100%;
+	height: 100%;
+}
 
 .main {
 	display: flex;
@@ -400,12 +409,15 @@ const toggleMenu = () => {
 		backdrop-filter: $frosty;
 		top: 2 * $panelMargin;
 		right: 2 * $panelMargin;
-		padding: 1rem;
+		padding: $panelMargin;
+		display: flex;
+		flex-direction: column;
+		gap: $panelMargin;
 	}
 
 	.focus-frame {
 		overflow: hidden;
-		transition: all $settleTime ease-in-out;
+		transition: all $transition;
 		z-index: 200;
 		position: absolute;
 	}
@@ -434,6 +446,7 @@ const toggleMenu = () => {
 		z-index: 250;
 		transform: translateX(-50%) translateY(-1rem);
 		transition: transform $transition;
+		box-shadow: unset !important;
 		&.hidden {
 			transform: translateX(-50%) translateY(-150%);
 		}
@@ -554,15 +567,15 @@ const toggleMenu = () => {
 		height: calc(100% - 2 * $panelMargin - $timePanelHeight);
 		pointer-events: none;
 		z-index: 10000;
-		
+
 		// background-color: rgba(0,255,0,0.1);
-		
+
 		&.eventPanelOn {
 			left: calc($panelMargin + $eventPanelWidth);
 			width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
 			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 		}
-		
+
 		&.multiEventPanelOn {
 			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 			width: calc(100% - $multiEventPanelWidth - $panelMargin);

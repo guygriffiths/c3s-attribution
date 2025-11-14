@@ -129,7 +129,7 @@ const tileImageCache = new Map<string, HTMLCanvasElement>()
 
 export const getCanvasFromCache = (
 	key: EventTileKey,
-	selectedEvent: ExtremeEventFull | null,
+	selectedEvent: ExtremeEvent | ExtremeEventFull | null,
 	selectedTime: Date,
 	viewMode: ViewMode,
 	eventHeatmapRef: any | null,
@@ -148,6 +148,11 @@ export const getCanvasFromCache = (
 		console.error('Failed to get canvas context')
 		return canvas
 	}
+	if(selectedEvent === null || !selectedEvent.hasOwnProperty('pixel_max_values')) {
+		// We have an empty event, or not a full event
+		return canvas
+	}
+	selectedEvent = selectedEvent as ExtremeEventFull
 
 	const layer = eventHeatmapRef
 	if (layer?.leafletObject == undefined) {

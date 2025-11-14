@@ -4,7 +4,7 @@ import {
 	latLngToLayerPoint,
 	renderToContext,
 } from '@/lib/worker/heatmapRenderWorker'
-import { debounce } from '@/lib/utils'
+import { debounce, ECMWF_BONN } from '@/lib/utils'
 import { useStore } from '@/store/store'
 import {
 	colorForValue,
@@ -164,9 +164,9 @@ const drawRegion = () => {
 		// map.value.setView(store.mapCentre as any as LatLng, zoom.value)
 	})
 	// @ts-ignore
-	map.value.once(L.Draw.Event.CREATED, (event: any) => {
+	map.value.once(L.Draw.Event.CREATED, async (event: any) => {
 		// This is if this shape was created
-		store.setLoading()
+		await store.setLoading('Applying region filter...')
 		const layer = event.layer
 		eventRegionFilter.value = layer.toGeoJSON() as Feature<
 			Polygon | MultiPolygon
@@ -185,7 +185,6 @@ const cancelDrawRegion = () => {
 
 const pointSelectorAdded = (event: any) => {
 	console.log('Setting point filter', store.filteringByPoint)
-	store.setLoadingDone()
 	const { lat, lng } = (event.target as L.Marker).getLatLng()
 	console.log('Setting point filter to', lat, lng)
 	regionFilteredEvents = setFilterToPoint(lat, lng)
@@ -310,9 +309,9 @@ watch(
 	(oldVal, newVal) => {
 		// Check if the event has changed from null, in which case set lastBbox
 		// TODO - is this definitely the behaviour we want?
-		if (oldVal[0] === null && newVal[0] !== null) {
-			lastBbox.value = (newVal[0] as ExtremeEventFull).bbox
-		}
+		// if (oldVal[0] === null && newVal[0] !== null) {
+		// 	lastBbox.value = (newVal[0] as ExtremeEventFull).bbox
+		// }
 
 		const el = document.getElementById('event-window')
 		if (!el) {
@@ -618,7 +617,7 @@ const resetZoom = () => {
 						: eventStore.colorForEvent(event)
 				"
 				:fill-color="eventStore.colorForEvent(event)"
-				@click="eventStore.selectEvent(event.id)"
+				@click="eventStore.selectEvent(event)"
 			>
 			</LPolygon>
 			<!-- Heatmap and fast filter events have now moved to their own renderers. They are blisteringly fast -->
@@ -658,7 +657,7 @@ const resetZoom = () => {
 			<div v-if="store.filteringByPoint && store.viewMode === 'heatmap'">
 				<LMarker
 					ref="markerRef"
-					:lat-lng="eventPointFilter || store.lastPoint || [50.70636, 7.138647]"
+					:lat-lng="eventPointFilter || store.lastPoint || ECMWF_BONN"
 					:draggable="true"
 					:icon="
 						(eventStore.eventTypeMode === 'cold'
@@ -815,7 +814,7 @@ const resetZoom = () => {
 	:deep(.leaflet-bottom),
 	:deep(.leaflet-left),
 	:deep(.leaflet-right) {
-		transition: padding $animTime ease-in-out;
+		transition: padding $transition;
 	}
 
 	&.focussed {
@@ -838,7 +837,7 @@ const resetZoom = () => {
 	}
 	:deep(.leaflet-event-pane) {
 		opacity: 0;
-		transition: opacity $animTime ease-in-out;
+		transition: opacity $transition;
 	}
 
 	&.heatmap {
@@ -902,7 +901,7 @@ const resetZoom = () => {
 	&.focussed {
 		:deep(.frost-pane) {
 			background-color: rgba(200, 200, 200, 0.5);
-			backdrop-filter: blur(4px);
+			backdrop-filter: blur(2px);
 
 			pointer-events: none;
 			position: fixed;

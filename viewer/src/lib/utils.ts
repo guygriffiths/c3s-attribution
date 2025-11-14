@@ -1,6 +1,7 @@
 import * as d3 from 'd3'
 
 export const DATA_ROOT = `${import.meta.env.X_PUBLIC_PATH || ''}data/`
+export const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
 
 export const debounce = (func: (...args: any[]) => void, delay: number) => {
 	let timeout: ReturnType<typeof setTimeout> | null = null

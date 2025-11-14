@@ -7,12 +7,15 @@ type LayerDetails = any
 
 interface State {
 	lang: Language
+	// Loading count + message for main blocking indicator
 	loadingCount: number
 	loadingMessage: string | null
+	// Soft loading counts for non-blocking indicators
+	mapSoftLoadingCount: number
+	eventSoftLoadingCount: number
+
 	viewMode: ViewMode
 	mapCentre: Point
-
-	layerDetails: LayerDetails | null
 
 	lat2Index?: (lat: number) => number
 	lon2Index?: (lon: number) => number
@@ -39,10 +42,10 @@ export const useStore = defineStore('main', {
 			lang: 'en',
 			loadingCount: 0,
 			loadingMessage: null,
+			mapSoftLoadingCount: 0,
+			eventSoftLoadingCount: 0,
 			viewMode: 'timemachine', // 'timemachine' or 'heatmap'
 			mapCentre: new LatLng(-20, 0) as unknown as Point, // Default center point for the map
-
-			layerDetails: null,
 
 			lat2Index: d3
 				.scaleLinear()
@@ -87,23 +90,35 @@ export const useStore = defineStore('main', {
 		async setLoading(message: string | null = null) {
 			this.loadingCount++
 			this.loadingMessage = message
-			if (this.loadingCount > 0) {
+			console.log('Set loading, count =', this.loadingCount, 'message=', message)
+			if (this.loadingCount === 1) {
 				const loadingOverlay = document.getElementById('loading-overlay')
-				if (loadingOverlay){
+				if (loadingOverlay) {
 					loadingOverlay.style.display = 'flex'
-					await new Promise((resolve) => setTimeout(resolve, 0))
+
+					// FORCE immediate paint before returning
+					void loadingOverlay.offsetHeight // Trigger reflow
 				}
 			}
+			await new Promise((resolve) => requestAnimationFrame(resolve))
+			await new Promise((resolve) => requestAnimationFrame(resolve))
 		},
 		async setLoadingDone() {
 			this.loadingCount--
-			if (this.loadingCount < 1) {
+			console.log('Set loading done, count =', this.loadingCount)
+			if (this.loadingCount === 0) {
 				const loadingOverlay = document.getElementById('loading-overlay')
 				if (loadingOverlay) loadingOverlay.style.display = 'none'
 				this.loadingMessage = null
 			}
 		},
-	},
+		setEventLoading() {
+			this.eventSoftLoadingCount++
+		},
+		setEventLoadingDone() {
+			this.eventSoftLoadingCount--
+		},
+	}
 })
 
 export type MainStore = ReturnType<typeof useStore>

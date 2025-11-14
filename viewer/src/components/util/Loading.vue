@@ -46,9 +46,6 @@ defineProps({
 <style scoped lang="scss">
 @use '@/assets/styles/scssVars.module.scss' as *;
 
-.loading-overlay {
-}
-
 .loading-content {
 	inset: 0;
 	z-index: 9999;
@@ -58,52 +55,17 @@ defineProps({
 	justify-content: center;
 	cursor: wait;
 	padding: 2rem 2.5rem;
-	border-radius: 1rem;
-	background: var(--panel-solid);
-	backdrop-filter: $frosty;
+	background: linear-gradient(
+		135deg,
+		rgba(255, 255, 255, 0.2) 0%,
+		rgba(255, 255, 240, 0.3) 15%,
+		rgba(255, 240, 255, 0.4) 40%,
+		rgba(240, 255, 255, 0.3) 65%,
+		rgba(255, 255, 255, 0.2) 100%
+	);
+	background: rgba(255, 255, 255, 0.5);
+	backdrop-filter: blur(6px);
 	border-radius: 0;
-}
-
-.spinner-container {
-	position: relative;
-	width: 64px;
-	height: 64px;
-	margin: 0 auto 1.5rem;
-}
-
-.spinner-ring {
-	position: absolute;
-	inset: 0;
-	border: 4px solid var(--text-on-primary);
-	border-radius: 50%;
-}
-
-.spinner-ring::after {
-	content: '';
-	position: absolute;
-	inset: 0;
-	border: 4px solid transparent;
-	border-top-color: rgba($c3sred, 0.5);
-	border-radius: 50%;
-	animation: spin 1s linear infinite;
-}
-
-.spinner-ring-inner {
-	position: absolute;
-	inset: 8px;
-	border: 4px solid transparent;
-	border-top-color: rgba($c3sblue, 0.5);
-	border-radius: 50%;
-	animation: spin 1.5s linear infinite reverse;
-}
-
-@keyframes spin {
-	0% {
-		transform: rotate(0deg);
-	}
-	100% {
-		transform: rotate(360deg);
-	}
 }
 
 .loading-message {

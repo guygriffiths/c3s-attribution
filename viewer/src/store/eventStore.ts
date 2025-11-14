@@ -30,11 +30,7 @@ interface State {
 
 	eventSetsLoaded: number
 
-	filters: {
-		duration: number
-		intensity: number
-		size: number
-	}
+	filters: Filters
 	firstEventSetLoaded: boolean
 }
 
@@ -94,9 +90,26 @@ export const useStore = defineStore('events', {
 			sizeRange: [0, 100],
 			eventSetsLoaded: 0,
 			filters: {
-				duration: 3,
-				intensity: 0,
-				size: 0,
+				duration: {
+					minimum: true,
+					value: 3,
+				},
+				size: {
+					minimum: true,
+					value: 0,
+				},
+				heatIntensity: {
+					minimum: true,
+					type: 'max',
+					value: 28,
+					active: true,
+				},
+				coldIntensity: {
+					minimum: false,
+					type: 'mean',
+					value: 2,
+					active: false,
+				},
 			},
 			firstEventSetLoaded: false,
 		}
@@ -170,8 +183,9 @@ export const useStore = defineStore('events', {
 			}
 		},
 		intensitiesForEvent: (state: State) => {
-			return (event: ExtremeEventFull | null) => {
-				if (!event) return []
+			return (event: ExtremeEvent | ExtremeEventFull | null) => {
+				if (!event || !event.hasOwnProperty('max_values')) return []
+				event = event as ExtremeEventFull
 				if (event.event_type === 'hot') {
 					return event.max_values.map((v) => intensityForValue(v, true))
 				} else {
@@ -180,8 +194,9 @@ export const useStore = defineStore('events', {
 			}
 		},
 		intensitiesForEventStep: (state: State) => {
-			return (event: ExtremeEventFull | null, time: Date) => {
-				if (!event) return []
+			return (event: ExtremeEvent | ExtremeEventFull | null, time: Date) => {
+				if (!event || !event.hasOwnProperty('values')) return []
+				event = event as ExtremeEventFull
 				const idx = event.times.findIndex((t) => t === time.getTime())
 				if (idx === -1) return []
 				if (event.event_type === 'hot') {
@@ -202,44 +217,58 @@ export const useStore = defineStore('events', {
 		},
 	},
 	actions: {
-		async selectEvent(id: string | null) {
+		async selectEvent(event: ExtremeEvent | ExtremeEventFull | null, waitForFullLoad = false) {
+			// console.log('EventStore: selecting event', id)
 			const mainStore = useMainStore()
 			const timeStore = useTimeStore()
-			if (id === null) {
+			if (event === null) {
 				this.selectedEvent = null
 				this.selectedEventId = null
 				return
 			}
+			await mainStore.setLoading('Selecting event...')
+			mainStore.setEventLoading()
 			// if (this.selectedEvent?.id === id) {
-			if (this.selectedEventId === id) {
+			if (this.selectedEventId === event.id) {
 				this.selectedEvent = null
 				this.selectedEventId = null
+				mainStore.setLoadingDone()
 			} else {
 				// mainStore.setLoading()
-				this.selectedEventId = id
-				console.log('setting selected event to', id)
-				let path = `${DATA_ROOT}events/event-${id}.json`
+				this.selectedEventId = event.id
+				this.selectedEvent = event as ExtremeEventFull
+				console.log('Selected event is now', this.selectedEvent, JSON.stringify(event))
+				if(!waitForFullLoad) {
+					mainStore.setLoadingDone()
+				} else {
+					mainStore.loadingMessage = 'Downloading event data...'
+				}
+
+				// console.log('setting selected event to', id)
+				let path = `${DATA_ROOT}events/event-${this.selectedEventId}.json`
 				const resp = await fetch(path)
-				const event = await resp.json()
-				// // This should always be the case...
-				event.id = id
-				event.times = event.times.map((time: string) =>
+				const eventJson = await resp.json()
+				eventJson.id = event.id
+				eventJson.times = eventJson.times.map((time: string) =>
 					new Date(time).getTime(),
 				)
-				this.selectedEvent = event as ExtremeEventFull
+				this.selectedEvent = eventJson as ExtremeEventFull
 				if (
-					timeStore.selectedTime < event.times[0] ||
-					timeStore.selectedTime > event.times[event.times.length - 1]
+					timeStore.selectedTime < eventJson.times[0] ||
+					timeStore.selectedTime > eventJson.times[event.times.length - 1]
 				) {
 					timeStore.selectedTime = new Date(event.times[0])
 				}
-				// mainStore.setLoadingDone()
+				if(waitForFullLoad) {
+					mainStore.setLoadingDone()
+				}
+				mainStore.setEventLoadingDone()
 			}
 		},
 		async runFilters() {
-			console.log('Running event filters')
+			// console.log('Running event filters')
 			const mainStore = useMainStore()
-			mainStore.setLoading()
+			await mainStore.setLoading()
 
 			setPostFilters(
 				this.filters,
@@ -250,75 +279,6 @@ export const useStore = defineStore('events', {
 			// This needs to get set by the leaflet layers
 			mainStore.setLoadingDone()
 		},
-		// async addEvents(data: ExtremeEvent[], final: boolean = false) {
-		// 	const mainStore = useMainStore()
-		// 	// console.log(
-		// 	// 	'Setting events, count:',
-		// 	// 	data.length,
-		// 	// 	data.filter((e) => e.event_type === 'hot').length,
-		// 	// 	data.filter((e) => e.event_type === 'cold').length,
-		// 	// )
-		// 	// Throw away the top x% of values for setting the range on colour scales, histograms etc
-		// 	// const N = Math.ceil(data.length * 0.025)
-
-		// 	data.forEach((e) => {
-		// 		const duration = this.durationForEvent(e)
-		// 		if (duration < this.durationRange[0]) {
-		// 			this.durationRange[0] = duration
-		// 		}
-		// 		if (duration > this.durationRange[1]) {
-		// 			this.durationRange[1] = duration
-		// 		}
-
-		// 		const size = this.sizeForEvent(e)
-		// 		if (size < this.sizeRange[0]) {
-		// 			this.sizeRange[0] = size
-		// 		}
-		// 		if (size > this.sizeRange[1]) {
-		// 			this.sizeRange[1] = size
-		// 		}
-
-		// 		const intensity = intensityForValue(
-		// 			e.event_type === 'hot' ? e.max_value : e.mean_value,
-		// 			e.event_type === 'hot',
-		// 		)
-		// 		if (e.event_type === 'hot') {
-		// 			if (intensity < this.heatIntensityRange[0]) {
-		// 				this.heatIntensityRange[0] = intensity
-		// 			}
-		// 			if (intensity > this.heatIntensityRange[1]) {
-		// 				this.heatIntensityRange[1] = intensity
-		// 			}
-		// 		} else if (e.event_type === 'cold') {
-		// 			if (intensity < this.coldIntensityRange[0]) {
-		// 				this.coldIntensityRange[0] = intensity
-		// 			}
-		// 			if (intensity > this.coldIntensityRange[1]) {
-		// 				this.coldIntensityRange[1] = intensity
-		// 			}
-		// 		}
-		// 	})
-
-		// 	console.time('ES:buildEventFilters')
-		// 	buildEventFilters(data) // Kick off building the pixel index
-		// 	console.timeEnd('ES:buildEventFilters')
-		// 	this.eventSetsLoaded += 1
-		// 	if (this.eventSetsLoaded === 1) {
-		// 		mainStore.setLoadingDone()
-		// 	}
-		// 	if (
-		// 		this.eventSetsLoaded <= 3 ||
-		// 		this.eventSetsLoaded === 5 ||
-		// 		this.eventSetsLoaded % 10 === 0 ||
-		// 		final
-		// 	) {
-		// 		// console.log('Manually triggering global events ready callback after', this.eventSetsLoaded, 'sets loaded')
-		// 		// Trigger a global events ready callback at various points during loading
-		// 		// This allows a good balance between early rendering and processing speed
-		// 		// (rendering after every year is slow, particularly compared with data loads from cache)
-		// 		manualGlobalTrigger()
-		// 	}
-		// },
 		async init() {
 			this.firstEventSetLoaded = false
 			const mainStore = useMainStore()
@@ -343,7 +303,7 @@ export const useStore = defineStore('events', {
 						console.log('First event set loaded, clearing loading state')
 						mainStore.setLoadingDone()
 					} else {
-						console.log('Setting loading...')
+						// console.log('Setting loading...')
 						// mainStore.setLoading()
 					}
 				}

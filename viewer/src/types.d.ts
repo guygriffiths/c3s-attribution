@@ -50,6 +50,29 @@ declare global {
 		startX: number
 		endX: number
 	}
+
+	interface Filters {
+		duration: {
+			minimum: boolean
+			value: number
+		}
+		size: {
+			minimum: boolean
+			value: number
+		}
+		heatIntensity: {
+			minimum: boolean
+			type: 'intensity' | 'min' | 'mean' | 'max'
+			value: number
+			active: boolean
+		}
+		coldIntensity: {
+			minimum: boolean
+			type: 'intensity' | 'min' | 'mean' | 'max'
+			value: number
+			active: boolean
+		}
+	}
 }
 
 export { }

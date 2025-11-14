@@ -81,7 +81,7 @@ const selectedDay = computed(() => getDayOfYear(model.value))
 const selectedYear = computed(() => model.value.getUTCFullYear())
 
 const emits = defineEmits<{
-	(event: 'eventSelected', id: string): void
+	(event: 'eventSelected', ev: ExtremeEvent | null): void
 }>()
 
 ////////////////////
@@ -114,7 +114,7 @@ const nextDay = () => {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
 			console.log('nextDay year change to', newVal.getUTCFullYear())
 			model.value = newVal
-			scrollToYear(newVal.getUTCFullYear() - 1)
+			// scrollToYear(newVal.getUTCFullYear() + 1)
 		} else {
 			model.value = newVal
 		}
@@ -125,8 +125,8 @@ const prevDay = () => {
 	if (newVal.getUTCFullYear() >= startYear.value) {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
 			console.log('prevDay year change to', newVal.getUTCFullYear())
+			// scrollToYear(newVal.getUTCFullYear()-0.5)
 			model.value = newVal
-			scrollToYear(newVal.getUTCFullYear())
 		} else {
 			model.value = newVal
 		}
@@ -395,8 +395,8 @@ const handleDrag = (event: MouseEvent) => {
 	}
 }
 
-const eventClicked = (id: string) => {
-	emits('eventSelected', id)
+const eventClicked = (box: EventBox) => {
+	emits('eventSelected', props.events.find((e) => e.id === box.eventId) || null)
 }
 
 const needleOffset = computed(() => {
@@ -437,7 +437,7 @@ const needleOffset = computed(() => {
 const eventBoxesForYear = ref<Record<number, EventBox[]>>({})
 const positionY = (y: number, eventType: 'hot' | 'cold') => {
 	if (props.eventType === 'hotcold') {
-		return (0.5 + y) * 0.5 * eventHeight.value * (eventType === 'hot' ? -1 : 1)
+		return (0.5 + y) * eventHeight.value * (eventType === 'hot' ? -1 : 1)
 	} else {
 		if (y % 2 !== 0) {
 			return 0.5 * y * eventHeight.value
@@ -529,7 +529,7 @@ timeReelWorker.onmessage = (e: MessageEvent) => {
 		maxSimultaneousEvents: number
 	}
 
-	console.log('TimeReel: received worker data, maxSimultaneousEvents=', newMax)
+	// console.log('TimeReel: received worker data, maxSimultaneousEvents=', newMax)
 	eventBoxesForYear.value = newEventBoxes
 	maxSimultaneousEvents.value = newMax
 	const yearsList = [...years.value].reverse()
@@ -549,7 +549,7 @@ timeReelWorker.onmessage = (e: MessageEvent) => {
 			// The line has changed, redraw it
 			d3.select(`#events-line-${year}`)
 				.transition()
-				.duration(0)
+				.duration(intervalToMs(scssVars.animTime))
 				.attr('d', newDs[year])
 		}
 
@@ -595,7 +595,7 @@ watch(
 			const scrollOffset = 0.5 * (yearsOffset * 2)
 			container.value.scrollTo({
 				top: scrollOffset * rowHeight.value,
-				behavior: isTimeline.value ? 'auto' : 'smooth',
+				behavior: 'auto',
 			})
 		}
 	},
@@ -905,14 +905,10 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 										:x="-0.5+box.startX - year * TOTAL_DAYS"
 										:width="box.endX - box.startX + 1"
 										:y="positionY(box.y, box.type)"
-										:height="
-											props.eventType === 'hotcold'
-												? 0.5 * eventHeight
-												: eventHeight
-										"
+										:height="eventHeight"
 										:key="box.eventId"
 										vector-effect="non-scaling-stroke"
-										@click="$emit('eventSelected', box.eventId)"
+										@click="eventClicked(box)"
 									></rect>
 								</g>
 								<!-- Draw selected event on top. This ensures it is always visible even if overlapping other events -->
@@ -965,6 +961,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 				timeline: isTimeline,
 				overview: isOverview,
 				eventzoom: isZoom,
+				showbars: showBars,
 			}"
 		>
 			<div
@@ -985,7 +982,8 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					}"
 					ref="needleRef"
 					v-if="isDefault || isZoom || selectedEvent"
-					:style="`left: calc(${needleOffset}% + 2px); pointer-events: none;`"
+					:style="`left: calc(${needleOffset}% + 2px);`"
+					@mousedown="startDrag"
 				>
 					<div class="line" />
 				</div>
@@ -1121,6 +1119,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 		scroll-snap-type: y mandatory;
 		display: block;
 		background-color: transparent;
+		z-index: 1;
 
 		&.eventzoom,
 		&.timeline {
@@ -1189,6 +1188,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 			.scrollee {
 				.year {
 					align-items: center;
+					user-select: none;
 					.label {
 						font-size: 0.75rem !important;
 						margin: 0 0.25rem;
@@ -1239,17 +1239,14 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 	}
 
 	.year-highlights {
+		pointer-events: none;
 		position: absolute;
 		top: 0;
 		left: 0;
 		width: 100%;
 		height: 100%;
-		// display: flex;
-		// flex-direction: column;
-		// justify-content: space-between;
 		display: block;
 		z-index: 2;
-		pointer-events: none;
 		transition: all $transition;
 		border: none;
 		overflow: hidden;
@@ -1265,6 +1262,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 		.highlight-row {
 			transition: all $transition;
 			overflow: hidden;
+			pointer-events: none;
 
 			&.fade-top {
 				border-top-left-radius: $borderRadius;
@@ -1314,7 +1312,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 				pointer-events: none;
 
 				.needle {
-					// pointer-events: none;
+					pointer-events: auto;
 					display: block;
 					position: absolute;
 					top: 0;
@@ -1342,7 +1340,7 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 					}
 
 					&.indicator {
-						transition: all 1s ease-in-out;
+						transition: all $transition;
 					}
 				}
 				.month-labels {
@@ -1426,8 +1424,8 @@ const dayBoxes = (boxes: EventBox[]): EventBox[] => {
 		}
 
 		.event-bar {
-			pointer-events: none;
-			transition: all 0.25 * $animTime linear;
+			cursor: pointer;
+			transition: all $transition;
 			stroke-width: 0.5;
 			opacity: 1 !important;
 

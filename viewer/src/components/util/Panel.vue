@@ -21,10 +21,10 @@ const classes = computed(() => ['panel', { active: props.active }])
 .panel {
 	position: absolute;
 	transition:
-		transform $animTime ease,
-		left $animTime ease,
-		right $animTime ease,
-		bottom $animTime ease;
+		transform $transition,
+		left $transition,
+		right $transition,
+		bottom $transition;
 	z-index: 10;
 }
 .panel.left {

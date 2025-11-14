@@ -34,6 +34,7 @@
 		"@tabler/icons-vue": "^3.35.0",
 		"@turf/turf": "^7.2.0",
 		"@vue-leaflet/vue-leaflet": "^0.10.1",
+		"@vueuse/core": "^14.0.0",
 		"d3": "^7.9.0",
 		"date-fns": "^4.1.0",
 		"flatbush": "^4.4.1",

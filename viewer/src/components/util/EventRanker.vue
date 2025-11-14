@@ -67,7 +67,7 @@ watch(rankedEvents, (newVal) => {
 
 const selectEvent = (event: ExtremeEvent | null) => {
 	if (event) {
-		eventStore.selectEvent(event.id)
+		eventStore.selectEvent(event, true)
 	}
 }
 
@@ -75,10 +75,10 @@ const selectFinal = ref(false)
 watch(
 	() => eventStore.selectedEventId,
 	(newVal) => {
+		const scroller = scrollerRef.value
 		if (newVal) {
 			// Ensure the selected event is in view
 			const idx = rankedEvents.value.findIndex((e) => e.id === newVal)
-			const scroller = scrollerRef.value
 			if (scroller && idx >= 0 && idx <= props.topN) {
 				const rankElement = scroller.children[0].children[idx]
 				if (rankElement) {
@@ -97,6 +97,9 @@ watch(
 				scroller?.scrollTo({ top: scroller.scrollHeight + ROW_SIZE * 2, behavior: 'smooth' })
 				selectFinal.value = true
 			}
+		} else {
+			scroller?.scrollTo({ top: 0, behavior: 'smooth' })
+			selectFinal.value = false
 		}
 	},
 )
@@ -283,8 +286,9 @@ const selectedIndex = computed(() => {
 			cursor: pointer;
 			background-color: transparent;
 
+			background-color: var(--panel-hint);
 			&.odd {
-				background-color: var(--panel-hint);
+				background-color: var(--panel-hint2);
 			}
 
 			&.hovering,

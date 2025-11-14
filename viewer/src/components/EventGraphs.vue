@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, ComputedRef, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, watch, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as d3 from 'd3'
 
+import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { IconDimensions, IconTemperature } from '@tabler/icons-vue'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 
+const store = useStore()
 const eventStore = useEventStore()
 const timeStore = useTimeStore()
 const props = defineProps<{ selectedEvent: ExtremeEventFull | null }>()
@@ -16,15 +18,20 @@ const emits = defineEmits<{
 
 const days = computed(() => props.selectedEvent?.times || [])
 const areaData = computed(() => eventStore.sizesForEvent(props.selectedEvent))
-const intensityData = computed(() =>
-	eventStore.intensitiesForEvent(props.selectedEvent),
-)
+const intensityData = computed(() => {
+	console.log(
+		'Intensity data for event',
+		props.selectedEvent,
+		eventStore.intensitiesForEvent(props.selectedEvent),
+	)
+	return eventStore.intensitiesForEvent(props.selectedEvent)
+})
 
 const chartTopMargin = 20
 
 const svgRef = ref<SVGSVGElement | null>(null)
-const width = ref(800)
-const height = ref(400)
+const width = ref(400)
+const height = ref(200)
 
 // Scales
 const xScale = computed(() => {
@@ -58,24 +65,38 @@ const selectedIndex = computed(() => {
 })
 
 onMounted(() => {
-	if (!svgRef.value) return
-
 	const observer = new ResizeObserver((entries) => {
 		for (const entry of entries) {
 			width.value = entry.contentRect.width
 			height.value = entry.contentRect.height
 		}
 	})
+	if (!svgRef.value) return
 	observer.observe(svgRef.value)
 
 	onBeforeUnmount(() => observer.disconnect())
 })
 
+watch(
+	() => props.selectedEvent,
+	() => {
+		// Reset scales when event changes
+		width.value = svgRef.value?.clientWidth || 400
+		height.value = svgRef.value?.clientHeight || 200
+	},
+)
+
 const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 </script>
 
 <template>
-	<div class="event-graphs-root">
+	<div class="event-graphs-root loading" v-if="store.eventSoftLoadingCount > 0">
+		<div class="spinner-container">
+			<div class="spinner-ring"></div>
+			<div class="spinner-ring-inner"></div>
+		</div>
+	</div>
+	<div class="event-graphs-root" v-else>
 		<IconDimensions class="size-icon" :class="{ [eventType]: true }" />
 		<IconTemperature class="intensity-icon" :class="{ [eventType]: true }" />
 		<svg class="graph-container" ref="svgRef">
@@ -153,6 +174,12 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 	align-items: center;
 	justify-content: center;
 
+	&.loading {
+		flex: 0 0 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
 	.size-icon {
 		width: min(25%, 2rem);
 		height: auto;

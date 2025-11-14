@@ -9,7 +9,9 @@ import {
 } from '@tabler/icons-vue'
 import { nextTick, ref } from 'vue'
 import { useStore } from '@/store/store'
+import { useStore as useEventStore } from '@/store/eventStore'
 const store = useStore()
+const eventStore = useEventStore()
 const model = defineModel({
 	type: String as () => 'hotcold' | 'hot' | 'cold',
 })
@@ -19,6 +21,8 @@ const coldClicked = async () => {
 	model.value = 'cold'
 	setTheme('cold')
 	store.hamburgerMenuOpen = false
+	eventStore.filters.coldIntensity.active = true
+	eventStore.filters.heatIntensity.active = false
 	await store.setLoadingDone()
 }
 
@@ -27,6 +31,8 @@ const hotClicked = async () => {
 	model.value = 'hot'
 	setTheme('hot')
 	store.hamburgerMenuOpen = false
+	eventStore.filters.heatIntensity.active = true
+	eventStore.filters.coldIntensity.active = false
 	await store.setLoadingDone()
 }
 
@@ -35,6 +41,8 @@ const bothClickedfromMiddle = async () => {
 	model.value = 'hotcold'
 	setTheme('hotcold')
 	store.hamburgerMenuOpen = false
+	eventStore.filters.heatIntensity.active = true
+	eventStore.filters.coldIntensity.active = true
 	await store.setLoadingDone()
 }
 </script>
@@ -92,6 +100,7 @@ const bothClickedfromMiddle = async () => {
 		height: 100%;
 		width: 2rem;
 		border-radius: 0;
+		box-shadow: none;
 
 		&.left {
 			border-top-left-radius: $borderRadius;

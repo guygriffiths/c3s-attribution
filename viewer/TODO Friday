@@ -15,6 +15,8 @@ A zoom-to-event button which cycles the view between all current events
 
 When zoomed in on event on timeline, add next years event bars if required (or just anyway?)
 
+Download CSV from scatter. And histogram?  Make PNG exportable - going to have to render to canvas, but it's doable
+
 July 11th 2023 - good example for research (over USA)
 
 
@@ -34,3 +36,27 @@ Zoom controls - zoom in, out, reset
 Scatter plot export
 
 Scatter plot explore nearby points
+
+
+USER NOTES:
+
+MultiEvent is overwhelming
+
+Heatmap isn't interactive enough - add a moving time window of ~10 years. Then render heatmap data by year for ultrafast switching?
+
+TimeReel - vertical dragging
+
+Contextual help - use shepherd JS or maybe just Floating UI (which shepherd is built upon)
+
+Hide MultiEventPanel button
+
+Keep region selection onscreen to show what is selected.
+AND/OR Make it more obvious how many events are currently selected, and where they are selected
+Perhaps have a little preview map in the corner? Maybe not that's a bit of a space hog
+
+Event ranking - only when event selected. Put it somewhere common, along with event stats (bottom still? top left?)
+Histograms, scatters, etc. - always on (hideable) with heatmap view, but show fewer by default. MEP can then contain region selection tools, to link those two things more clearly - it will be obvious what kind of region is selected.
+
+Double up the filters to allow things like 4 < duration < 10
+
+Make panels have a rainbow shine minus the theme colour, then tone the saturation or opacity right down, they shouldn't be perceptible.
