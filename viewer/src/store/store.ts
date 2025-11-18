@@ -27,7 +27,7 @@ interface State {
 	filteringByPoint: boolean // Whether we are currently filtering by a point
 	draggingFilter: boolean
 
-	showMultiEventPanel: boolean // Whether to show the multi-event summary panel
+	showInfoPanel: boolean // Whether to show the current event rankings, or multi-event summary panel
 	showAnalytics: boolean // Whether to show the analytics view in the ME panel
 
 	hamburgerMenuOpen: boolean // Whether the side hamburger menu is open
@@ -68,7 +68,7 @@ export const useStore = defineStore('main', {
 			regionFilterReady: false, // Whether we are currently drawing a region on the map
 			filteringByPoint: false, // Whether we are currently filtering by a point
 
-			showMultiEventPanel: true,
+			showInfoPanel: false,
 			showAnalytics: false,
 
 			hamburgerMenuOpen: false,
@@ -90,7 +90,7 @@ export const useStore = defineStore('main', {
 		async setLoading(message: string | null = null) {
 			this.loadingCount++
 			this.loadingMessage = message
-			console.log('Set loading, count =', this.loadingCount, 'message=', message)
+			// console.log('Set loading, count =', this.loadingCount, 'message=', message)
 			if (this.loadingCount === 1) {
 				const loadingOverlay = document.getElementById('loading-overlay')
 				if (loadingOverlay) {
@@ -105,7 +105,7 @@ export const useStore = defineStore('main', {
 		},
 		async setLoadingDone() {
 			this.loadingCount--
-			console.log('Set loading done, count =', this.loadingCount)
+			// console.log('Set loading done, count =', this.loadingCount)
 			if (this.loadingCount === 0) {
 				const loadingOverlay = document.getElementById('loading-overlay')
 				if (loadingOverlay) loadingOverlay.style.display = 'none'

@@ -2,9 +2,9 @@
 @use 'sass:map';
 
 // Official colors
-$c3sred: rgb(151, 24, 65);
-$c3sblue: rgb(44, 102, 162);
-$c3spurple: rgb(97, 63, 113);
+$c3sred: hsl(341, 73%, 34%);
+$c3sblue: hsl(211, 57%, 40%);
+$c3spurple: hsl(281, 28%, 35%);
 $lightbulb: rgb(247, 205, 81);
 $c3sgrey: hsl(211, 0%, 40%);
 
@@ -12,7 +12,7 @@ $frosty: blur(8px);
 
 // /assets/styles/scssVars.scss
 
-$animTime: 0.25s;
+$animTime: 0.65s;
 $settleTime: 0.25s;
 
 $headerHeight: 4rem;
@@ -54,14 +54,22 @@ $shd-lg: calc(0.75 * $panelMargin);
 $themes: (
 	hot: (
 		// Panel backgrounds (warm)
-		panel-bg: rgba(250, 248, 246, 0.8),
+		// panel-bg: rgba(250, 248, 246, 0.8),
+		panel-bg: linear-gradient(
+			123deg,
+			hsla(151, 100%, 98%, 0.9) 0%,
+			hsla(181, 100%, 98%, 0.9) 25%,
+			hsla(211, 100%, 98%, 0.9) 50%,
+			hsla(241, 100%, 98%, 0.9) 75%,
+			hsla(271, 100%, 98%, 0.9) 100%
+		),
 		panel-solid: rgb(250, 248, 246, 0.9),
 		panel-bg-alt: rgba(220, 218, 216, 0.8),
 		panel-bg-dark: rgba(192, 189, 187, 0.8),
 		panel-bg-night: rgba(43, 42, 42, 0.8),
 		panel-surface: rgb(254, 254, 252),
-		panel-hint: rgba(254, 254, 252, 0.4),
-		panel-hint2: rgba(254, 254, 252, 0.1),
+		panel-hint: hsla(341, 50%, 95%, 0.35),
+		panel-hint2: hsla(211, 20%, 80%, 0.2),
 		chart-bg: rgb(245, 245, 243, 0.8),
 		chart-bg-alt: rgba(220, 218, 216, 0.8),
 		border: rgb(229, 224, 219),

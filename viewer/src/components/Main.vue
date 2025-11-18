@@ -16,8 +16,10 @@ import FocusFrame from './util/FocusFrame.vue'
 import ModeToggle from './util/ModeToggle.vue'
 import {
 	clearFilter,
+	getCurrentEvents,
 	getFilteredEvents,
 	getGlobalFilteredEvents,
+	onCurrentEventsReady,
 	onGlobalEventsReady,
 	onRegionEventsReady,
 	setColdOnly,
@@ -73,6 +75,16 @@ onGlobalEventsReady(() => {
 		eventsOfInterest.value = globalFilteredEvents.value
 	}
 })
+const currentEvents = ref([] as ExtremeEvent[])
+onCurrentEventsReady(() => {
+	currentEvents.value = getCurrentEvents(timeStore.selectedTime)
+})
+watch(
+	() => timeStore.selectedTime,
+	(newVal) => {
+		currentEvents.value = getCurrentEvents(newVal)
+	},
+)
 
 // onGlobalEventsReady(() => {
 // 	console.log('global event trigger')
@@ -185,10 +197,6 @@ const funnelPoints = computed(() => {
 	const end = (90 * (selectedDayIdx.value + 1.5)) / totalDays
 	return `polygon(${offset.value}% 0%,${offset.value + 90}% 0%,${end + offset.value}% 100%,${start + offset.value}% 100%)`
 })
-
-const toggleMenu = () => {
-	store.hamburgerMenuOpen = !store.hamburgerMenuOpen
-}
 </script>
 
 <template>
@@ -202,12 +210,12 @@ const toggleMenu = () => {
 			id="hamburger-button"
 			class="glassy color"
 			:class="{ hidden: store.isFocused || timeStore.timePanelExpanded }"
-			@click="toggleMenu"
+			@click="store.hamburgerMenuOpen = !store.hamburgerMenuOpen"
 		>
 			<IconMenu2 size="24" aria-hidden="true" v-if="!store.hamburgerMenuOpen" />
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
-		<Panel id="hamburger-menu" class="right" :active="store.hamburgerMenuOpen">
+		<Panel id="hamburger-menu" class="top" :active="store.hamburgerMenuOpen">
 			<EventTypeToggle v-model="eventStore.eventTypeMode" />
 			<FilterPanel v-model="eventStore.filters" />
 			<!-- <h1>Filters</h1>
@@ -275,7 +283,6 @@ const toggleMenu = () => {
 				:class="{ selected: timeStore.showBars }"
 				@click="timeStore.showBars = !timeStore.showBars"
 			>
-				<!-- <IconArrowRightSquare  /> -->
 				<IconChartBar class="bar-icon" />
 			</button>
 		</Panel>
@@ -297,10 +304,12 @@ const toggleMenu = () => {
 		<!-- This is the panel on the right with rankings and histograms -->
 		<MultiEventPanel
 			id="multi-event-panel"
-			:events-of-interest="eventsOfInterest"
+			:events-of-interest="
+				store.viewMode === 'heatmap' ? eventsOfInterest : currentEvents
+			"
 			class="right"
 			:class="{ selected: eventStore.eventSelected }"
-			:active="store.showMultiEventPanel && store.viewMode !== 'timemachine'"
+			:active="store.showInfoPanel"
 		/>
 
 		<!-- Event Panel -->
@@ -327,11 +336,13 @@ const toggleMenu = () => {
 					:nbins="10"
 					:xmin="0"
 					:xmax="eventStore.intensityRange[1]"
-					:y-max-count="eventStore.selectedEvent.slices ?
-						0.75 *
-						Math.max(
-							...eventStore.selectedEvent?.slices.map((s) => s.length),
-							): 1
+					:y-max-count="
+						eventStore.selectedEvent.slices
+							? 0.75 *
+								Math.max(
+									...eventStore.selectedEvent?.slices.map((s) => s.length),
+								)
+							: 1
 					"
 					:labelFunc="(v: number) => v.toFixed(1)"
 					:units="'°C'"
@@ -370,7 +381,7 @@ const toggleMenu = () => {
 	</div>
 </template>
 
-<style lang="scss" scoped>
+<style lang="scss">
 @use '@/assets/styles/scssVars.module.scss' as *;
 
 #event-graphs {
@@ -390,8 +401,8 @@ const toggleMenu = () => {
 
 	#hamburger-button {
 		position: absolute;
-		top: 0.5rem;
-		right: 1rem;
+		top: $panelMargin;
+		right: $panelMargin;
 		border-radius: 100%;
 		width: 2.5rem;
 		height: 2.5rem;
@@ -400,12 +411,12 @@ const toggleMenu = () => {
 		box-shadow: var(--shadow-sm), var(--shadow-md);
 
 		&.hidden {
-			transform: translateX(150%);
+			transform: translateY(-150%);
 		}
 	}
 
 	#hamburger-menu {
-		background-color: var(--panel-bg);
+		background: var(--panel-bg);
 		backdrop-filter: $frosty;
 		top: 2 * $panelMargin;
 		right: 2 * $panelMargin;
@@ -413,6 +424,7 @@ const toggleMenu = () => {
 		display: flex;
 		flex-direction: column;
 		gap: $panelMargin;
+		z-index: 250;
 	}
 
 	.focus-frame {
@@ -424,7 +436,7 @@ const toggleMenu = () => {
 
 	.panel {
 		border-radius: $borderRadius;
-		background-color: var(--panel-bg);
+		background: var(--panel-bg);
 		backdrop-filter: $frosty;
 		box-shadow: var(--shadow-md);
 	}
@@ -437,7 +449,7 @@ const toggleMenu = () => {
 
 	#map {
 		flex: 1 1 100%;
-		z-index: 0;
+		// z-index: 0;
 	}
 	#mode-toggle {
 		position: absolute;
@@ -459,6 +471,8 @@ const toggleMenu = () => {
 		z-index: 20;
 		transition: all $transition;
 		border-radius: $borderRadius;
+		background: transparent;
+		backdrop-filter: none;
 
 		.bar-icon {
 			// Manually tweak this icon so that it looks like an event bars icon with the bars offset
@@ -496,7 +510,7 @@ const toggleMenu = () => {
 			border-bottom-left-radius: 0;
 
 			&.timemachine {
-				background-color: var(--panel-bg);
+				background: var(--panel-bg);
 			}
 		}
 
@@ -509,13 +523,15 @@ const toggleMenu = () => {
 		#times {
 			width: 100%;
 			height: 100%;
-			overflow-x: auto;
-			overflow-y: hidden;
 			display: flex;
 			align-items: center;
 			justify-content: center;
 			border: none;
 			border-radius: $borderRadius;
+			
+			.scroller {
+				border-radius: $borderRadius;
+			}
 		}
 		.show-bars,
 		.panel-expand {
@@ -527,6 +543,7 @@ const toggleMenu = () => {
 			width: 2.5rem;
 			height: 2.5rem;
 			border-radius: 0;
+			box-shadow: unset;
 		}
 		.show-bars {
 			border-bottom-right-radius: $borderRadius;
@@ -593,7 +610,7 @@ const toggleMenu = () => {
 		background-color: var(--panel-bg-alt);
 		backdrop-filter: $frosty;
 		overflow: visible;
-		background-color: var(--panel-bg);
+		background: var(--panel-bg);
 
 		&.selected {
 			background-color: var(--panel-bg-dark);
@@ -618,12 +635,12 @@ const toggleMenu = () => {
 			border-radius: $borderRadius;
 			backdrop-filter: $frosty;
 			box-shadow: var(--shadow-md);
-			background-color: var(--panel-bg);
+			background: var(--panel-bg);
 			flex: 1 1 50%;
 			width: 100%;
 
 			&.histo {
-				background-color: var(--panel-bg);
+				background: var(--panel-bg);
 				border-bottom-left-radius: 0;
 				border-bottom-right-radius: 0;
 				width: 90%;
@@ -648,7 +665,7 @@ const toggleMenu = () => {
 			flex: 0 0 2 * $panelMargin;
 			width: 100%;
 			pointer-events: none;
-			background-color: var(--panel-bg);
+			background: var(--panel-bg);
 			backdrop-filter: $frosty;
 			&.hidden {
 				opacity: 0;

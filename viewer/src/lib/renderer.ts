@@ -173,7 +173,7 @@ export const getCanvasFromCache = (
 		}
 		latLonValues = selectedEvent?.slices[selectedIndex] || []
 		dataValues =
-			selectedEvent!.values[selectedIndex].map(intensityForValue) || []
+			selectedEvent?.values[selectedIndex]?.map(intensityForValue) || []
 	} else {
 		latLonValues = selectedEvent?.pixel_set || []
 		dataValues = selectedEvent?.pixel_max_values.map(intensityForValue) || []

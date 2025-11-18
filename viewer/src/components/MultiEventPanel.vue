@@ -22,6 +22,8 @@ import {
 	IconTemperatureSnow,
 	IconTemperatureSun,
 	IconStopwatch,
+	IconChevronRight,
+	IconChevronLeft,
 } from '@tabler/icons-vue'
 import { ref, watch } from 'vue'
 
@@ -59,7 +61,7 @@ const expand = (
 	type: 'histogram' | 'scatter' | 'ts',
 	variable: 'duration' | 'size' | 'intensity',
 ) => {
-	if(expandRow.value === type && expandVar.value === variable) {
+	if (expandRow.value === type && expandVar.value === variable) {
 		expandRow.value = null
 		expandVar.value = null
 		return
@@ -72,7 +74,13 @@ const N = 200
 </script>
 <template>
 	<Panel class="multi-event-panel">
-		<h1><IconMapStar /> {{ eventsOfInterest.length }}</h1>
+		<button
+			class="panel-toggle glassy"
+			@click="store.showInfoPanel = !store.showInfoPanel"
+		>
+			<IconChevronLeft :class="{ flip: store.showInfoPanel }" />
+		</button>
+		<h1><IconMapStar /> {{ eventsOfInterest?.length || 0 }}</h1>
 		<div class="title-panel">
 			<h1>
 				<IconStopwatch />
@@ -426,7 +434,7 @@ const N = 200
 			min-height: 3rem;
 			top: 1rem;
 			left: 0;
-			background-color: var(--panel-bg);
+			background: var(--panel-bg);
 			backdrop-filter: $frosty;
 			padding: 0.1rem 0.5rem;
 			border-radius: 100%;

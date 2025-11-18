@@ -51,7 +51,14 @@ import {
 	onGlobalEventsReady,
 	onCurrentEventsReady,
 } from '@/lib/eventsDB'
-import { IconZoomIn, IconZoomOut, IconMapPin2 } from '@tabler/icons-vue'
+import {
+	IconZoomIn,
+	IconZoomOut,
+	IconMapPin2,
+	IconMenu2,
+	IconX,
+	IconZoomReset,
+} from '@tabler/icons-vue'
 
 const store = useStore()
 const timeStore = useTimeStore()
@@ -135,7 +142,7 @@ const drawControl = computed(
 const currentEvents = ref<ExtremeEvent[]>([])
 onCurrentEventsReady(() => {
 	// This gets called when the time index is ready
-	console.log('Map.vue - Current events ready, updating for selected time')
+	// console.log('Map.vue - Current events ready, updating for selected time')
 	currentEvents.value = getCurrentEvents(timeStore.selectedTime)
 })
 const eventPointFilter = ref<[number, number] | null>(null)
@@ -145,7 +152,6 @@ const globalHeatmapEvents = shallowRef([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
 	// Triggered when the global events have changed.
 	// This is on first load, or when any of the high-level filters change
-	// @ts-ignore
 	globalHeatmapEvents.value = getGlobalFilteredEvents()
 	try {
 		manualHeatmapUpdate()
@@ -244,7 +250,7 @@ const lastBbox = ref<[number, number, number, number] | null>(null)
 
 // Watch for changes that require a redraw of the event pixels
 watch(
-	() => [timeStore.selectedTime, eventStore.selectedEventId, store.viewMode],
+	() => [timeStore.selectedTime, eventStore.selectedEvent, store.viewMode],
 	() => {
 		if (eventPixelsRef.value && eventPixelsRef.value.leafletObject) {
 			eventPixelsRef.value.leafletObject.redraw()
@@ -291,7 +297,7 @@ watch(
 )
 
 watch(
-	() => store.showMultiEventPanel,
+	() => store.showInfoPanel,
 	(newVal) => {
 		if (!mapRef.value) return
 		const el = document.getElementById('event-window')
@@ -547,7 +553,7 @@ const resetZoom = () => {
 	fitBoundsToDiv(
 		mapRef.value!.leafletObject as L.Map,
 		document.getElementById('event-window')!,
-		[-85, -180, 85, 180],
+		[-50, -180, 85, 180],
 	)
 }
 </script>
@@ -672,28 +678,31 @@ const resetZoom = () => {
 			</div>
 
 			<!-- Controls -->
-			<LControl position="topleft" class="zoom-control">
-				<div class="zoom-buttons" :class="{ hidden: eventStore.selectedEvent !== null }">
-					<button
-						class="zoom-button glassy"
-						@click="zoomOut()"
-						:disabled="zoom <= 2"
-					>
-						<IconZoomOut />
-					</button>
-					<button
-						class="zoom-button glassy"
-						@click="resetZoom()"
-						title="Reset zoom"
-					>
-						<IconMapPin2 />
-					</button>
+			<LControl position="topright" class="zoom-control">
+				<div
+					class="zoom-buttons"
+					:class="{ hidden: eventStore.selectedEvent !== null }"
+				>
 					<button
 						class="zoom-button glassy"
 						@click="zoomIn()"
 						:disabled="zoom >= 12"
 					>
 						<IconZoomIn />
+					</button>
+					<button
+						class="zoom-button glassy"
+						@click="resetZoom()"
+						title="Reset zoom"
+					>
+						<IconZoomReset />
+					</button>
+					<button
+						class="zoom-button glassy"
+						@click="zoomOut()"
+						:disabled="zoom <= 2"
+					>
+						<IconZoomOut />
 					</button>
 				</div>
 			</LControl>
@@ -761,14 +770,16 @@ const resetZoom = () => {
 	}
 
 	.zoom-control {
+		transform: translateY(calc($panelMargin + 2rem));
 		margin: $panelMargin;
 		.zoom-buttons {
 			display: flex;
-			flex-direction: row;
-			gap: 0;
+			flex-direction: column;
+			gap: 0.5rem;
+			z-index: 6666666;
 
 			&.hidden {
-				transform: translateX(-250%);
+				transform: translateX(200%);
 			}
 		}
 
@@ -783,16 +794,26 @@ const resetZoom = () => {
 			// 	width: 1.5rem;
 			// 	height: 1.5rem;
 			// }
+			border-radius: 100%;
+			width: 2.5rem;
+			height: 2.5rem;
+			padding: 0.5rem;
+			z-index: 300;
+			box-shadow: var(--shadow-sm), var(--shadow-md);
 
-			border-radius: 0;
-			&:first-child {
-				border-top-left-radius: $borderRadius;
-				border-bottom-left-radius: $borderRadius;
+			&.hidden {
+				transform: translateX(150%);
 			}
-			&:last-child {
-				border-top-right-radius: $borderRadius;
-				border-bottom-right-radius: $borderRadius;
-			}
+
+			// border-radius: 0;
+			// &:first-child {
+			// 	border-top-left-radius: $borderRadius;
+			// 	border-bottom-left-radius: $borderRadius;
+			// }
+			// &:last-child {
+			// 	border-top-right-radius: $borderRadius;
+			// 	border-bottom-right-radius: $borderRadius;
+			// }
 		}
 	}
 

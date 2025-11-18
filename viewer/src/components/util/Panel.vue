@@ -31,7 +31,7 @@ const classes = computed(() => ['panel', { active: props.active }])
 	transform: translateX(-150%);
 }
 .panel.right {
-	transform: translateX(150%);
+	transform: translateX(105%);
 }
 .panel.bottom {
 	transform: translateY(150%);

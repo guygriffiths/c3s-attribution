@@ -198,7 +198,7 @@ export const useStore = defineStore('events', {
 				if (!event || !event.hasOwnProperty('values')) return []
 				event = event as ExtremeEventFull
 				const idx = event.times.findIndex((t) => t === time.getTime())
-				if (idx === -1) return []
+				if (idx === -1 || idx >= event.values.length) return []
 				if (event.event_type === 'hot') {
 					return event.values[idx].map((v) => intensityForValue(v, true))
 				} else {
@@ -237,7 +237,7 @@ export const useStore = defineStore('events', {
 				// mainStore.setLoading()
 				this.selectedEventId = event.id
 				this.selectedEvent = event as ExtremeEventFull
-				console.log('Selected event is now', this.selectedEvent, JSON.stringify(event))
+				// console.log('Selected event is now', this.selectedEvent, JSON.stringify(event))
 				if(!waitForFullLoad) {
 					mainStore.setLoadingDone()
 				} else {
@@ -300,7 +300,7 @@ export const useStore = defineStore('events', {
 				if (events.length > 0) {
 					if (!this.firstEventSetLoaded) {
 						this.firstEventSetLoaded = true
-						console.log('First event set loaded, clearing loading state')
+						// console.log('First event set loaded, clearing loading state')
 						mainStore.setLoadingDone()
 					} else {
 						// console.log('Setting loading...')

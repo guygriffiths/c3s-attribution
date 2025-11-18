@@ -112,28 +112,28 @@ const bothClickedfromMiddle = async () => {
 		}
 
 		&.hot {
-			background-color: var(--theme-hot-primary-glass);
+			background: var(--theme-hot-primary-glass);
 
 			&:hover {
-				background-color: var(--theme-hot-primary-glass-shine);
+				background: var(--theme-hot-primary-glass-shine);
 			}
 			&.selected {
-				background-color: var(--theme-hot-primary-glass-shine);
+				background: var(--theme-hot-primary-glass-shine);
 			}
 			&:active {
-				background-color: var(--theme-hot-primary-glass-dark);
+				background: var(--theme-hot-primary-glass-dark);
 			}
 		}
 		&.cold {
-			background-color: var(--theme-cold-primary-glass);
+			background: var(--theme-cold-primary-glass);
 			&:hover {
-				background-color: var(--theme-cold-primary-glass-shine);
+				background: var(--theme-cold-primary-glass-shine);
 			}
 			&.selected {
-				background-color: var(--theme-cold-primary-glass-shine);
+				background: var(--theme-cold-primary-glass-shine);
 			}
 			&:active {
-				background-color: var(--theme-cold-primary-glass-dark);
+				background: var(--theme-cold-primary-glass-dark);
 			}
 		}
 
