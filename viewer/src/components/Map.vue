@@ -614,16 +614,50 @@ const resetZoom = () => {
 				v-for="event in currentEvents"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event, timeStore.selectedTime)"
-				:weight="event.id === eventStore.selectedEventId ? 4 : 2"
-				:fill="true"
-				:fill-opacity="event.id === eventStore.selectedEventId ? 0.0 : 0.5"
-				:color="
+				:opacity="event.id === eventStore.hoveringEvent?.id ? 0.8 : 1.0"
+				:weight="
 					event.id === eventStore.selectedEventId
+						? 4
+						: event.id === eventStore.hoveringEvent?.id
+							? 8
+							: 1
+				"
+				:fill="true"
+				:fill-opacity="
+					event.id === eventStore.selectedEventId
+						? 0.0
+						: event.id === eventStore.hoveringEvent?.id
+							? 1.0
+							: 0.5
+				"
+				:color="
+					event.id === eventStore.selectedEventId ||
+					event.id === eventStore.hoveringEvent?.id
 						? scssVars.lightbulb
 						: eventStore.colorForEvent(event)
 				"
-				:fill-color="eventStore.colorForEvent(event)"
+				:fill-color="
+					event.id === eventStore.hoveringEvent?.id
+						? scssVars.lightbulb
+						: eventStore.colorForEvent(event)
+				"
+				:transform="
+					event.id === eventStore.hoveringEvent?.id ? `scale(1.2)` : `scale(1)`
+				"
 				@click="eventStore.selectEvent(event)"
+				@mouseover="eventStore.setHoveringEvent(event)"
+				@mouseout="eventStore.setHoveringEvent(null)"
+			>
+			</LPolygon>
+			<LPolygon
+				v-else-if="eventStore.hoveringEvent"
+				:key="`ev-${eventStore.hoveringEvent.id}-hover`"
+				:lat-lngs="eventStore.hoveringEvent.total_region"
+				:weight="0"
+				:fill="true"
+				:fill-opacity="0.8"
+				:color="scssVars.lightbulb"
+				:fill-color="scssVars.lightbulb"
 			>
 			</LPolygon>
 			<!-- Heatmap and fast filter events have now moved to their own renderers. They are blisteringly fast -->
@@ -678,17 +712,18 @@ const resetZoom = () => {
 			</div>
 
 			<!-- Controls -->
-			<LControl position="topright" class="zoom-control">
-				<div
-					class="zoom-buttons"
-					:class="{ hidden: eventStore.selectedEvent !== null }"
-				>
+			<LControl
+				position="topright"
+				class="zoom-control"
+				:class="{ hidden: eventStore.selectedEvent !== null }"
+			>
+				<div class="zoom-buttons">
 					<button
 						class="zoom-button glassy"
-						@click="zoomIn()"
-						:disabled="zoom >= 12"
+						@click="zoomOut()"
+						:disabled="zoom <= 2"
 					>
-						<IconZoomIn />
+						<IconZoomOut />
 					</button>
 					<button
 						class="zoom-button glassy"
@@ -697,12 +732,13 @@ const resetZoom = () => {
 					>
 						<IconZoomReset />
 					</button>
+
 					<button
 						class="zoom-button glassy"
-						@click="zoomOut()"
-						:disabled="zoom <= 2"
+						@click="zoomIn()"
+						:disabled="zoom >= 12"
 					>
-						<IconZoomOut />
+						<IconZoomIn />
 					</button>
 				</div>
 			</LControl>
@@ -738,6 +774,12 @@ const resetZoom = () => {
 		background: rgb(95, 102, 110);
 	}
 
+	.hovered-event {
+		pointer-events: none;
+		fill: red !important;
+		transform: scaleX(3);
+	}
+
 	&.heatmap {
 		.leaflet-container {
 			background: linear-gradient(
@@ -763,24 +805,25 @@ const resetZoom = () => {
 	}
 
 	.region-control {
-		transform: translateY(-$panelMargin);
+		transform: translate(0, 2rem);
 		&.hidden {
-			transform: translateX(-250%);
+			transform: translate(-150%, 2rem);
 		}
 	}
 
 	.zoom-control {
-		transform: translateY(calc($panelMargin + 2rem));
+		transition: transform $transition;
 		margin: $panelMargin;
+		transform: translate(calc(0rem - 2rem - $panelMargin), 0);
+		&.hidden {
+			transform: translate(calc(0rem - 2rem), -200%);
+		}
 		.zoom-buttons {
 			display: flex;
-			flex-direction: column;
+			flex-direction: row;
 			gap: 0.5rem;
-			z-index: 6666666;
-
-			&.hidden {
-				transform: translateX(200%);
-			}
+			z-index: 100;
+			pointer-events: all;
 		}
 
 		.zoom-button {

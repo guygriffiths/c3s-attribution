@@ -107,15 +107,15 @@ const N = 200
 			>
 				<Histogram
 					:data="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-					:nbins="20"
+					:nbins="10"
 					:xmin="eventStore.durationRange[0]"
 					:xmax="
-						0.4 * (eventStore.selectedEvent
+						eventStore.selectedEvent
 							? Math.max(
 									eventStore.durationRange[1],
 									eventStore.durationForEvent(eventStore.selectedEvent),
 								)
-							: eventStore.durationRange[1])
+							: eventStore.durationRange[1]
 					"
 					:labelFunc="(v: number) => v.toFixed(0)"
 					:units="'days'"

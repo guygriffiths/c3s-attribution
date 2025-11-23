@@ -21,6 +21,10 @@ body {
 	padding: 0;
 }
 
+.mono {
+	font-family: $monoFont;
+}
+
 .disable-transitions * {
 	transition: none !important;
 	animation: none !important;

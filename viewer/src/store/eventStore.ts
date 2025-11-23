@@ -19,7 +19,7 @@ import { useStore as useTimeStore } from './timeStore'
 interface State {
 	selectedEvent: ExtremeEventFull | null
 	selectedEventId: string | null
-	hoveringEventId: string | null
+	hoveringEvent: ExtremeEvent | null
 
 	durationRange: [number, number]
 	heatIntensityRange: [number, number]
@@ -82,7 +82,7 @@ export const useStore = defineStore('events', {
 		return {
 			selectedEvent: null,
 			selectedEventId: null,
-			hoveringEventId: null,
+			hoveringEvent: null,
 			durationRange: [3, 14],
 			heatIntensityRange: [0, 0],
 			coldIntensityRange: [0, 0],
@@ -265,6 +265,10 @@ export const useStore = defineStore('events', {
 				mainStore.setEventLoadingDone()
 			}
 		},
+		setHoveringEvent(event: ExtremeEvent | null) {
+			this.hoveringEvent = event
+			console.log('Hovering event set to', event, event?.total_region)
+		},
 		async runFilters() {
 			// console.log('Running event filters')
 			const mainStore = useMainStore()
@@ -294,6 +298,8 @@ export const useStore = defineStore('events', {
 			const to = 2024 //new Date().getFullYear()
 			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
 			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
+			timeStore.startTimeFilter = new Date(Date.UTC(from, 0, 1))
+			timeStore.endTimeFilter = new Date(Date.UTC(to, 11, 31))
 
 			onGlobalEventsReady(() => {
 				const events = getGlobalFilteredEvents()
@@ -302,6 +308,9 @@ export const useStore = defineStore('events', {
 						this.firstEventSetLoaded = true
 						// console.log('First event set loaded, clearing loading state')
 						mainStore.setLoadingDone()
+						setTimeout(() => {
+							mainStore.showInfoPanel = true
+						}, 1500)
 					} else {
 						// console.log('Setting loading...')
 						// mainStore.setLoading()

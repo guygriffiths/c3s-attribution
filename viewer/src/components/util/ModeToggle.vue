@@ -67,7 +67,7 @@ const ariaLabel = computed(() =>
 	cursor: pointer;
 
 	width: $modeButtonWidth;
-	height: 4rem;
+	height: $modeButtonHeight;
 
 	border-radius: 0;
 	padding: 1.5rem 1rem 0.25rem 1rem;

@@ -158,6 +158,7 @@ input[type='number'] {
 	padding: 10px 40px 10px 14px;
 	font-size: 17px;
 	font-weight: 500;
+	font-family: $monoFont;
 	color: var(--text-primary);
 	transition: all $transition;
 

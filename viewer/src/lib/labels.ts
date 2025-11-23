@@ -7,6 +7,7 @@ const langNames: Record<Language, string> = {
 
 const labelsEn = {
 	title: 'C3S Extreme Events Viewer',
+	events: 'Events',
 	duration: 'Duration',
 	from: 'From',
 	to: 'To',

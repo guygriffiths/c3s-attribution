@@ -9,15 +9,6 @@ import {
 	TOTAL_DAYS,
 	intervalToMs,
 } from '@/lib/time-utils'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import {
-	faBackwardStep,
-	faFastBackward,
-	faFastForward,
-	faForwardStep,
-	faPause,
-	faPlay,
-} from '@fortawesome/free-solid-svg-icons'
 import * as d3 from 'd3'
 import {
 	addHours,
@@ -59,6 +50,10 @@ const props = defineProps({
 		type: Object as () => ExtremeEventFull | null,
 		default: null,
 	},
+	hoverEvent: {
+		type: Object as () => ExtremeEvent | null,
+		default: null,
+	},
 	mode: {
 		type: String as PropType<TimeReelMode>,
 		default: 'default',
@@ -93,6 +88,9 @@ const selectedYear = computed(() => model.value.getUTCFullYear())
 
 const emits = defineEmits<{
 	(event: 'eventSelected', ev: ExtremeEvent | null): void
+	(event: 'playing'): void
+	(event: 'paused'): void
+	(event: 'hover', ev: ExtremeEvent | null): void
 }>()
 
 ////////////////////
@@ -197,6 +195,11 @@ const togglePlay = () => {
 		}
 	}
 	playing.value = !playing.value
+	if (playing.value) {
+		emits('playing')
+	} else {
+		emits('paused')
+	}
 	if (playing.value) {
 		let last = performance.now()
 
@@ -443,6 +446,13 @@ const handleDrag = (event: MouseEvent) => {
 const eventClicked = (box: EventBox) => {
 	emits('eventSelected', props.events.find((e) => e.id === box.eventId) || null)
 }
+const eventHovered = (box: EventBox | null) => {
+	if (box === null) {
+		emits('hover', null)
+		return
+	}
+	emits('hover', props.events.find((e) => e.id === box.eventId) || null)
+}
 
 const needleOffsetPct = computed(() => {
 	if (isDefault.value || isOverview.value) {
@@ -587,18 +597,21 @@ watch(isOverview, (newVal) => {
 	} else {
 		// @ts-ignore
 		scroller.value!.style.overflow = 'hidden'
-		setTimeout(() => {
-			// console.log('isOverview: re-enabling scrolling')
-			autoScrolling.value = false
-			if (scroller.value === null) return
-			// @ts-ignore
-			scroller.value!.style.overflow = 'auto'
-			// console.log(
-			// 	'setting scrollTop tomanully',
-			// )
-			scroller.value!.scrollTop =
-				(selectedYear.value - startYear.value) * rowHeight.value
-		}, intervalToMs(scssVars.animTime) + 50)
+		setTimeout(
+			() => {
+				// console.log('isOverview: re-enabling scrolling')
+				autoScrolling.value = false
+				if (scroller.value === null) return
+				// @ts-ignore
+				scroller.value!.style.overflow = 'auto'
+				// console.log(
+				// 	'setting scrollTop tomanully',
+				// )
+				scroller.value!.scrollTop =
+					(selectedYear.value - startYear.value) * rowHeight.value
+			},
+			intervalToMs(scssVars.animTime) + 50,
+		)
 	}
 	// if(newVal) {
 	// 	autoScrolling.value = true
@@ -791,7 +804,12 @@ const scrubberTranslate = computed(() => {
 
 const dateTranslate = computed(() => {
 	if (isOverview.value) {
-		return scrubberTranslate.value
+		const xOffsetPx = needleOffsetPx.value
+		const yOffsetPx =
+			localScrubberOffset.value !== null
+				? localScrubberOffset.value[1] + initialScrubberPos.value[1]
+				: (selectedYear.value - startYear.value + 0.5) * rowHeight.value - 24
+		return `translate(calc(-50% + ${xOffsetPx}px), ${yOffsetPx}px)`
 	} else {
 		return `translateY(${hasMoved.value ? 300 : 0}%) translateX(${hasMoved.value ? needleOffsetPx.value + 2 : scroller.value?.clientWidth! / 2}px) translateX(-50%)`
 	}
@@ -801,7 +819,7 @@ const dateTranslate = computed(() => {
 <template>
 	<div class="time-reel" ref="timeReelRef">
 		<div
-			class="date-info"
+			class="date-info mono"
 			:class="{ dragging: hasMoved }"
 			:style="`transform: ${dateTranslate}`"
 		>
@@ -1037,6 +1055,29 @@ const dateTranslate = computed(() => {
 										:key="box.eventId"
 										vector-effect="non-scaling-stroke"
 										@click="eventClicked(box)"
+										@mouseover="eventHovered(box)"
+									></rect>
+									<rect
+										v-if="hoverEvent !== null && year === selectedYear"
+										v-for="box in eventBoxesForYear[year].filter(
+											(box) => box.eventId === hoverEvent!.id,
+										)"
+										class="event-bar"
+										:data-id="`${box.startX}-${box.endX}-highlight`"
+										:class="{
+											[box.type]: true,
+										}"
+										:fill="scssVars.lightbulb"
+										:x="-1 + box.startX - year * TOTAL_DAYS"
+										:width="box.endX - box.startX + 1"
+										:y="positionY(box.y, box.type)"
+										:height="eventHeight"
+										:key="box.eventId + '-highlight'"
+										stroke-width="2"
+										vector-effect="non-scaling-stroke"
+										filter="url(#dropShadow)"
+										@click="eventClicked(box)"
+										@mouseleave="eventHovered(null)"
 									></rect>
 								</g>
 								<!-- Draw selected event on top. This ensures it is always visible even if overlapping other events -->

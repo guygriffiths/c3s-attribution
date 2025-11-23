@@ -10,7 +10,7 @@ import Histogram from './util/Histogram.vue'
 import EventTypeToggle from './util/EventTypeToggle.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
-import EventInfo from './EventInfo.vue'
+import EventInfoPanel from './EventInfoPanel.vue'
 import FilterPanel from './FilterPanel.vue'
 import FocusFrame from './util/FocusFrame.vue'
 import ModeToggle from './util/ModeToggle.vue'
@@ -26,11 +26,14 @@ import {
 	setHotColdBoth,
 	setHotOnly,
 } from '@/lib/eventsDB'
-import { differenceInDays } from 'date-fns'
+import { differenceInDays, format } from 'date-fns'
 import MultiEventPanel from './MultiEventPanel.vue'
 import {
 	IconCalendarWeek,
 	IconChartBar,
+	IconChevronsUpLeft,
+	IconChevronUpLeft,
+	IconInfoSquareRounded,
 	IconMenu2,
 	IconX,
 } from '@tabler/icons-vue'
@@ -43,9 +46,6 @@ const eventStore = useEventStore()
 onMounted(async () => {})
 const toggleTimePanelExpanded = () => {
 	timeStore.timePanelExpanded = !timeStore.timePanelExpanded
-	if (timeStore.timePanelExpanded) {
-		timeStore.timePanelVisible = true
-	}
 }
 
 const exitFocus = () => {
@@ -197,6 +197,9 @@ const funnelPoints = computed(() => {
 	const end = (90 * (selectedDayIdx.value + 1.5)) / totalDays
 	return `polygon(${offset.value}% 0%,${offset.value + 90}% 0%,${end + offset.value}% 100%,${start + offset.value}% 100%)`
 })
+const toggleInfoPanel = () => {
+	store.showInfoPanel = !store.showInfoPanel
+}
 </script>
 
 <template>
@@ -231,7 +234,7 @@ const funnelPoints = computed(() => {
 		<!-- Time Panel -->
 		<Panel
 			id="time-panel"
-			:active="timeStore.timePanelVisible || eventStore.eventSelected"
+			:active="true"
 			class="bottom peek"
 			:class="{
 				event: eventStore.eventSelected,
@@ -247,8 +250,12 @@ const funnelPoints = computed(() => {
 				:events="eventsOfInterest"
 				:dragging-filter="store.draggingFilter"
 				:selected-event="eventStore.selectedEvent"
+				:hover-event="eventStore.hoveringEvent"
 				v-model="timeStore.selectedTime"
 				@event-selected="eventStore.selectEvent"
+				@playing="timeStore.isPlaying = true"
+				@paused="timeStore.isPlaying = false"
+				@hover="eventStore.setHoveringEvent"
 				:mode="mode"
 				:show-bars="timeStore.showBars"
 				:color-for-event="eventStore.colorForEvent"
@@ -257,11 +264,7 @@ const funnelPoints = computed(() => {
 				:value-extractor="eventStore.intensityForEvent"
 			></TimeReel>
 			<button
-				v-if="
-					timeStore.timePanelVisible &&
-					!eventStore.eventSelected &&
-					store.viewMode !== 'heatmap'
-				"
+				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
 				class="panel-expand glassy color"
 				@click="toggleTimePanelExpanded"
 			>
@@ -289,16 +292,37 @@ const funnelPoints = computed(() => {
 
 		<!-- Event Info Panel -->
 		<!-- This is the event information at the bottom center of the screen -->
-		<Panel
-			id="event-info-panel"
-			class="top"
-			:active="eventStore.selectedEvent !== null"
+		<button
+			id="info-button"
+			class="glassy color"
+			:class="{ hidden: store.isFocused || timeStore.timePanelExpanded }"
+			@click="store.showInfoPanel = !store.showInfoPanel"
 		>
-			<EventInfo
-				:selected-event="eventStore.selectedEvent"
-				:event-store="eventStore"
+			<IconInfoSquareRounded
+				size="24"
+				aria-hidden="true"
+				v-if="!store.showInfoPanel"
 			/>
-		</Panel>
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+		<EventInfoPanel
+			id="event-info-panel"
+			:selected-event="eventStore.selectedEvent"
+			:event-store="eventStore"
+			:time-string="store.viewMode === 'timemachine'
+				? format(timeStore.selectedTime, 'dd MMM yyyy')
+				: timeStore.startTimeFilter?.getUTCFullYear() +
+				  ' - ' +
+				  timeStore.endTimeFilter?.getUTCFullYear()"
+			:events-of-interest="
+				store.viewMode === 'timemachine' ? currentEvents : eventsOfInterest
+			"
+			:class="{
+				'disable-transitions': timeStore.isPlaying,
+				show: store.showInfoPanel && eventStore.selectedEvent === null,
+			}"
+		>
+		</EventInfoPanel>
 
 		<!-- Multi-Event Panel -->
 		<!-- This is the panel on the right with rankings and histograms -->
@@ -309,7 +333,7 @@ const funnelPoints = computed(() => {
 			"
 			class="right"
 			:class="{ selected: eventStore.eventSelected }"
-			:active="store.showInfoPanel"
+			:active="store.showMultiPanel || store.viewMode === 'heatmap'"
 		/>
 
 		<!-- Event Panel -->
@@ -378,6 +402,8 @@ const funnelPoints = computed(() => {
 				multiEventPanelOn: store.viewMode === 'heatmap',
 			}"
 		/>
+
+		<div id="logo">LOGO ETC</div>
 	</div>
 </template>
 
@@ -399,6 +425,17 @@ const funnelPoints = computed(() => {
 	max-height: 100vh;
 	position: relative;
 
+	#logo {
+		position: absolute;
+		top: $panelMargin;
+		left: $panelMargin;
+		width: calc(50% - 2 * $panelMargin - $modeButtonWidth);
+		height: 2.5rem;
+		z-index: 300;
+		pointer-events: none;
+		background: var(--panel-bg);
+	}
+
 	#hamburger-button {
 		position: absolute;
 		top: $panelMargin;
@@ -407,11 +444,11 @@ const funnelPoints = computed(() => {
 		width: 2.5rem;
 		height: 2.5rem;
 		padding: 0.5rem;
-		z-index: 300;
+		z-index: 400;
 		box-shadow: var(--shadow-sm), var(--shadow-md);
 
 		&.hidden {
-			transform: translateY(-150%);
+			transform: translateY(-200%);
 		}
 	}
 
@@ -424,7 +461,7 @@ const funnelPoints = computed(() => {
 		display: flex;
 		flex-direction: column;
 		gap: $panelMargin;
-		z-index: 250;
+		z-index: 350;
 	}
 
 	.focus-frame {
@@ -479,19 +516,19 @@ const funnelPoints = computed(() => {
 			// rather than the normal bar chart icon
 			transform: rotate(-90deg);
 
-			:deep(path:first-child) {
+			path:first-child {
 				transform: scaleY(1.5);
 				transform-box: fill-box; /* or view-box */
 				transform-origin: center;
 				vector-effect: non-scaling-stroke;
 			}
-			:deep(path:nth-child(3)) {
+			path:nth-child(3) {
 				transform: scaleY(1) translateY(-3px);
 				transform-box: fill-box; /* or view-box */
 				transform-origin: center;
 				vector-effect: non-scaling-stroke;
 			}
-			:deep(path:last-child) {
+			path:last-child {
 				display: none;
 			}
 		}
@@ -528,9 +565,9 @@ const funnelPoints = computed(() => {
 			justify-content: center;
 			border: none;
 			border-radius: $borderRadius;
-			
+
 			.scroller {
-				border-radius: $borderRadius;
+				border-radius: $borderRadius !important;
 			}
 		}
 		.show-bars,
@@ -675,25 +712,64 @@ const funnelPoints = computed(() => {
 		}
 	}
 
+	#info-button {
+		position: absolute;
+		top: calc(2 * $panelMargin + 2rem);
+		right: $panelMargin;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 300;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+
+		&.hidden {
+			transform: translateX(200%);
+		}
+	}
+
 	#event-info-panel {
 		// display: none;
-		box-shadow: var(--shadow-md);
-		background-color: var(--panel-solid);
-		right: 50%;
-		transform: translate(50%, 120%);
-		// bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
-		bottom: 0;
-		height: auto;
+
 		z-index: 250;
 		transition: all $transition;
-		border-bottom-left-radius: 0;
-		border-bottom-right-radius: 0;
-		border: 0.25rem solid var(--primary);
-		border-bottom: none;
+		// margin: $panelMargin;
+		position: absolute;
+		top: calc(3.25rem + 2* $panelMargin);
+		right: 2*$panelMargin;
+		// width: max(100px, min(500px, 5%));
+		// max-width: 25%;
+		min-width: 180px;
+		max-width: 25%;
+		// transform: translate(-90%, -90%);
 
-		&.active {
-			transform: translate(50%, 0);
+		// bottom: calc(100% - (2 * $panelMargin) - $smallTimePanelHeight);
+		// width: max(300px, 40%);
+		// height: max(200px, 30%);
+
+		// background: var(--panel-bg);
+		// backdrop-filter: $frosty;
+		// box-shadow: var(--shadow-md);
+
+		.event-info {
+			width: 100%;
 		}
+
+		transform: translate(0, calc(-150% - 2 * $panelMargin));
+		&.show {
+			transform: translate(0, 0);
+		}
+	}
+	button.toggle {
+		z-index: 5;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		border-radius: 0 0 $borderRadius 0;
+		box-shadow: unset !important;
+		position: absolute;
+		right: 0;
+		bottom: 0;
 	}
 }
 </style>

@@ -39,7 +39,7 @@ export const monthsForYear = (
 export const dayStr = (day: number, year: number, showYear: boolean) => {
 	day = Math.max(1, Math.min(day, TOTAL_DAYS))
 	const date = setDayOfYear(new Date(year, 0, 1), day)
-	return format(date, 'do MMMM') + (showYear ? ` ${year}` : '')
+	return format(date, 'dd MMM') + (showYear ? ` ${year}` : '')
 }
 
 export function getEventBoxes(

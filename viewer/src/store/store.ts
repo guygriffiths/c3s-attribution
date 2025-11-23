@@ -27,7 +27,8 @@ interface State {
 	filteringByPoint: boolean // Whether we are currently filtering by a point
 	draggingFilter: boolean
 
-	showInfoPanel: boolean // Whether to show the current event rankings, or multi-event summary panel
+	showInfoPanel: boolean // Whether to show the current event rankings
+	showMultiPanel: boolean // Whether to show the multi-event summary panel
 	showAnalytics: boolean // Whether to show the analytics view in the ME panel
 
 	hamburgerMenuOpen: boolean // Whether the side hamburger menu is open
@@ -69,6 +70,7 @@ export const useStore = defineStore('main', {
 			filteringByPoint: false, // Whether we are currently filtering by a point
 
 			showInfoPanel: false,
+			showMultiPanel: false,
 			showAnalytics: false,
 
 			hamburgerMenuOpen: false,
