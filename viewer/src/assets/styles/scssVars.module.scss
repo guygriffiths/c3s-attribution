@@ -17,20 +17,22 @@ $frosty: blur(8px);
 $animTime: 0.35s;
 $settleTime: 0.25s;
 
-$headerHeight: 4rem;
+$headerHeight: 2.5rem;
 $gap: 0.5rem;
 $footerHeight: 2.25rem;
 
 $panelMargin: 1rem;
 
-$smallTimePanelHeight: max(6rem, 20%);
-$timePanelHeight: max(10rem, 40%);
-$eventPanelWidth: min(400px, 33%);
-$multiEventPanelWidth: 40%;
+$smallTimePanelHeight: max(6rem, 20vh);
+$timePanelHeight: max(10rem, 40vh);
+$eventPanelWidth: min(400px, 33vw);
+$multiEventPanelWidth: 40vw;
 $smallMultiScale: 0.6;
 $rankedEventHeight: 1.5rem;
 $modeButtonWidth: 7rem;
 $modeButtonHeight: 4.5rem;
+$infoHeight: 17rem;
+$infoWidth: 12rem;
 
 $frameBorderRadius: 0.5rem;
 
@@ -60,13 +62,13 @@ $themes: (
 		// panel-bg: rgba(250, 248, 246, 0.8),
 		panel-bg: linear-gradient(
 			123deg,
-			hsla(151, 100%, 99%, 0.85) 0%,
-			hsla(181, 100%, 99%, 0.85) 25%,
-			hsla(211, 100%, 99%, 0.85) 50%,
-			hsla(241, 100%, 99%, 0.85) 75%,
-			hsla(271, 100%, 99%, 0.85) 100%
+			hsla(151, 100%, 98%, 0.85) 0%,
+			hsla(181, 100%, 98%, 0.85) 25%,
+			hsla(211, 100%, 98%, 0.85) 50%,
+			hsla(241, 100%, 98%, 0.85) 75%,
+			hsla(271, 100%, 98%, 0.85) 100%
 		),
-		panel-solid: rgb(250, 248, 246, 0.9),
+		panel-solid: hsla(211, 29%, 97%, 1.0),
 		panel-bg-alt: rgba(220, 218, 216, 0.8),
 		panel-bg-dark: rgba(192, 189, 187, 0.8),
 		panel-bg-night: rgba(43, 42, 42, 0.8),
@@ -120,7 +122,14 @@ $themes: (
 	),
 	cold: (
 		// Panel backgrounds (cool)
-		panel-bg: rgba(248, 249, 250, 0.8),
+				panel-bg: linear-gradient(
+			123deg,
+			hsla(305, 100%, 98%, 0.85) 0%,
+			hsla(335, 100%, 98%, 0.85) 25%,
+			hsla(5, 100%, 98%, 0.85) 50%,
+			hsla(35, 100%, 98%, 0.85) 75%,
+			hsla(65, 100%, 98%, 0.85) 100%
+		),
 		panel-solid: rgba(248, 249, 250, 0.9),
 		panel-bg-alt: rgba(218, 219, 220, 0.8),
 		panel-bg-dark: rgba(189, 191, 193, 0.8),

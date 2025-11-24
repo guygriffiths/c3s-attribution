@@ -22,9 +22,17 @@ interface State {
 	hoveringEvent: ExtremeEvent | null
 
 	durationRange: [number, number]
-	heatIntensityRange: [number, number]
-	coldIntensityRange: [number, number]
+	durationUnits: string
 	sizeRange: [number, number]
+	sizeUnits: string
+	heatIntensityRange: [number, number]
+	heatIntensityUnits: string
+	coldIntensityRange: [number, number]
+	coldIntensityUnits: string
+	durationP90: number | null
+	sizeP90: number | null
+	heatIntensityP90: number | null
+	coldIntensityP90: number | null
 
 	eventTypeMode: 'hot' | 'cold' | 'hotcold'
 
@@ -84,10 +92,18 @@ export const useStore = defineStore('events', {
 			selectedEventId: null,
 			hoveringEvent: null,
 			durationRange: [3, 14],
-			heatIntensityRange: [0, 0],
-			coldIntensityRange: [0, 0],
-			eventTypeMode: 'hot',
+			durationUnits: 'days',
 			sizeRange: [0, 100],
+			sizeUnits: 'km²',
+			heatIntensityRange: [0, 0],
+			heatIntensityUnits: '+°C',
+			coldIntensityRange: [0, 0],
+			coldIntensityUnits: '-°C',
+			durationP90: null,
+			sizeP90: null,
+			heatIntensityP90: null,
+			coldIntensityP90: null,
+			eventTypeMode: 'hot',
 			eventSetsLoaded: 0,
 			filters: {
 				duration: {
@@ -217,7 +233,10 @@ export const useStore = defineStore('events', {
 		},
 	},
 	actions: {
-		async selectEvent(event: ExtremeEvent | ExtremeEventFull | null, waitForFullLoad = false) {
+		async selectEvent(
+			event: ExtremeEvent | ExtremeEventFull | null,
+			waitForFullLoad = false,
+		) {
 			// console.log('EventStore: selecting event', id)
 			const mainStore = useMainStore()
 			const timeStore = useTimeStore()
@@ -238,7 +257,7 @@ export const useStore = defineStore('events', {
 				this.selectedEventId = event.id
 				this.selectedEvent = event as ExtremeEventFull
 				// console.log('Selected event is now', this.selectedEvent, JSON.stringify(event))
-				if(!waitForFullLoad) {
+				if (!waitForFullLoad) {
 					mainStore.setLoadingDone()
 				} else {
 					mainStore.loadingMessage = 'Downloading event data...'
@@ -259,7 +278,7 @@ export const useStore = defineStore('events', {
 				) {
 					timeStore.selectedTime = new Date(event.times[0])
 				}
-				if(waitForFullLoad) {
+				if (waitForFullLoad) {
 					mainStore.setLoadingDone()
 				}
 				mainStore.setEventLoadingDone()
@@ -267,7 +286,7 @@ export const useStore = defineStore('events', {
 		},
 		setHoveringEvent(event: ExtremeEvent | null) {
 			this.hoveringEvent = event
-			console.log('Hovering event set to', event, event?.total_region)
+			// console.log('Hovering event set to', event, event?.total_region)
 		},
 		async runFilters() {
 			// console.log('Running event filters')
@@ -316,6 +335,19 @@ export const useStore = defineStore('events', {
 						// mainStore.setLoading()
 					}
 				}
+				const K = Math.ceil(0.1 * events.length)
+				const pushTop = (arr: Array<number>, v: number) => {
+					arr.push(v)
+					if (arr.length > K) {
+						// drop smallest → keep the top K largest values
+						arr.sort((a, b) => b - a)
+						arr.length = K
+					}
+				}
+				const durationTop: number[] = []
+				const sizeTop: number[] = []
+				const heatTop: number[] = []
+				const coldTop: number[] = []
 				events.forEach((e) => {
 					const duration = this.durationForEvent(e)
 					if (duration < this.durationRange[0]) {
@@ -352,7 +384,16 @@ export const useStore = defineStore('events', {
 							this.coldIntensityRange[1] = intensity
 						}
 					}
+
+					pushTop(durationTop, duration)
+					pushTop(sizeTop, size)
+					if (e.event_type === 'hot') pushTop(heatTop, intensity)
+					else pushTop(coldTop, intensity)
 				})
+				this.durationP90 = durationTop.length ? Math.min(...durationTop) : null
+				this.sizeP90 = sizeTop.length ? Math.min(...sizeTop) : null
+				this.heatIntensityP90 = heatTop.length ? Math.min(...heatTop) : null
+				this.coldIntensityP90 = coldTop.length ? Math.min(...coldTop) : null
 			})
 
 			// Load hot and cold events

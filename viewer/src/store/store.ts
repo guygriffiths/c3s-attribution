@@ -32,6 +32,8 @@ interface State {
 	showAnalytics: boolean // Whether to show the analytics view in the ME panel
 
 	hamburgerMenuOpen: boolean // Whether the side hamburger menu is open
+
+	focusVariable: Variable
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -70,10 +72,12 @@ export const useStore = defineStore('main', {
 			filteringByPoint: false, // Whether we are currently filtering by a point
 
 			showInfoPanel: false,
-			showMultiPanel: false,
+			showMultiPanel: true,
 			showAnalytics: false,
 
 			hamburgerMenuOpen: false,
+
+			focusVariable: 'size',
 		}
 	},
 	getters: {
@@ -89,6 +93,15 @@ export const useStore = defineStore('main', {
 		},
 	},
 	actions: {
+		cycleSorts() {
+			if (this.focusVariable === 'duration') {
+				this.focusVariable = 'size'
+			} else if (this.focusVariable === 'size') {
+				this.focusVariable = 'intensity'
+			} else {
+				this.focusVariable = 'duration'
+			}
+		},
 		async setLoading(message: string | null = null) {
 			this.loadingCount++
 			this.loadingMessage = message

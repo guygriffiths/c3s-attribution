@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useLabels } from '@/lib/labels'
 import { format } from 'date-fns'
@@ -17,98 +17,51 @@ import {
 } from '@tabler/icons-vue'
 import { dayStr } from '@/lib/time-utils'
 import EventRanker from './util/EventRanker.vue'
+import { sort } from 'd3'
 
 const $l = useLabels()
 
-const props = defineProps({
-	selectedEvent: {
-		type: Object,
-		required: false,
-	},
-	eventStore: {
-		type: Object,
-		required: true,
-	},
-	timeString: {
-		type: String,
-		required: true,
-	},
-	eventsOfInterest: {
-		type: Array,
-		required: true,
-	},
-})
-
-// Format helpers
-const timeRange = computed(() => {
-	if (!props.selectedEvent?.times?.length) return '—'
-	const start = new Date(props.selectedEvent.times[0])
-	const end = new Date(props.selectedEvent.times.at(-1))
-	if (start.getMonth() === end.getMonth()) {
-		return `${format(start, 'dd')} → ${format(end, 'dd MMM')}`
-	}
-	return `${format(start, 'dd MMM')} → ${format(end, 'dd MMM')}`
-	// return `${start.toLocaleDateString()} → ${end.toLocaleDateString()}`
-})
-
-const downloadEvent = () => {
-	const url = props.eventStore.downloadLinkForEvent(props.selectedEvent)
-	const filename = `event_${props.selectedEvent?.id || 'data'}.json`
-
-	const a = document.createElement('a')
-	a.href = url
-	a.download = filename
-	document.body.appendChild(a)
-	a.click()
-	document.body.removeChild(a)
-}
+const props = defineProps<{
+	selectedEvent: ExtremeEvent | null
+	mainStore: any
+	eventStore: any
+	timeString: string
+	eventsOfInterest: ExtremeEvent[]
+}>()
 
 const sortDesc = ref(true)
 const toggleAscDesc = () => {
 	sortDesc.value = !sortDesc.value
 }
-const sortModes = ['duration', 'size', 'intensity']
-const mode = ref(sortModes[1])
-const currentSortMode = ref(1)
-const cycleSorts = () => {
-	currentSortMode.value = (currentSortMode.value + 1) % sortModes.length
-	mode.value = sortModes[currentSortMode.value]
-}
 const sortFunc = computed(() => {
-	const mode = sortModes[currentSortMode.value]
-	return sortDesc.value
-		? (a, b) => {
-				let res = 0
-				if (mode === 'duration') {
-					res =
-						props.eventStore.durationForEvent(b) -
-						props.eventStore.durationForEvent(a)
-				} else if (mode === 'size') {
-					res =
-						props.eventStore.sizeForEvent(b) - props.eventStore.sizeForEvent(a)
-				} else if (mode === 'intensity') {
-					res =
-						props.eventStore.intensityForEvent(b) -
-						props.eventStore.intensityForEvent(a)
-				}
-				return res
-			}
-		: (a, b) => {
-				let res = 0
-				if (mode === 'duration') {
-					res =
-						props.eventStore.durationForEvent(b) -
-						props.eventStore.durationForEvent(a)
-				} else if (mode === 'size') {
-					res =
-						props.eventStore.sizeForEvent(b) - props.eventStore.sizeForEvent(a)
-				} else if (mode === 'intensity') {
-					res =
-						props.eventStore.intensityForEvent(b) -
-						props.eventStore.intensityForEvent(a)
-				}
-				return -res
-			}
+	if (sortDesc.value) {
+		if (props.mainStore.focusVariable === 'duration') {
+			return (a: ExtremeEvent, b: ExtremeEvent) =>
+				props.eventStore.durationForEvent(b) -
+				props.eventStore.durationForEvent(a)
+		} else if (props.mainStore.focusVariable === 'size') {
+			return (a: ExtremeEvent, b: ExtremeEvent) =>
+				props.eventStore.sizeForEvent(b) - props.eventStore.sizeForEvent(a)
+		} else if (props.mainStore.focusVariable === 'intensity') {
+			return (a: ExtremeEvent, b: ExtremeEvent) =>
+				props.eventStore.intensityForEvent(b) -
+				props.eventStore.intensityForEvent(a)
+		}
+	} else {
+		if (props.mainStore.focusVariable === 'duration') {
+			return (a: ExtremeEvent, b: ExtremeEvent) =>
+				props.eventStore.durationForEvent(a) -
+				props.eventStore.durationForEvent(b)
+		} else if (props.mainStore.focusVariable === 'size') {
+			return (a: ExtremeEvent, b: ExtremeEvent) =>
+				props.eventStore.sizeForEvent(a) - props.eventStore.sizeForEvent(b)
+		} else if (props.mainStore.focusVariable === 'intensity') {
+			return (a: ExtremeEvent, b: ExtremeEvent) =>
+				props.eventStore.intensityForEvent(a) -
+				props.eventStore.intensityForEvent(b)
+		}
+	}
+	return () => 0
 })
 </script>
 
@@ -123,16 +76,21 @@ const sortFunc = computed(() => {
 				<IconTemperatureSun v-if="eventStore.eventTypeMode === 'hot'" />
 				<IconTemperatureSnow v-else-if="eventStore.eventTypeMode === 'cold'" />
 				<IconTemperature v-else />
-				<span class="value">{{ eventsOfInterest.length.toLocaleString() }}</span>
+				<span class="value">{{
+					eventsOfInterest.length.toLocaleString()
+				}}</span>
 			</div>
 		</div>
 		<div class="buttons">
 			<span class="award"
 				><IconAward /> {{ eventsOfInterest.length < 100 ? '' : '100' }}
 			</span>
-			<button @click="cycleSorts" class="cycle-sort-button glassy">
-				<IconStopwatch v-if="mode === 'duration'" />
-				<IconDimensions v-else-if="mode === 'size'" />
+			<button
+				@click="props.mainStore.cycleSorts"
+				class="cycle-sort-button glassy"
+			>
+				<IconStopwatch v-if="mainStore.focusVariable === 'duration'" />
+				<IconDimensions v-else-if="mainStore.focusVariable === 'size'" />
 				<IconTemperature v-else />
 			</button>
 			<button @click="toggleAscDesc" class="cycle-sort-button glassy">
@@ -150,49 +108,10 @@ const sortFunc = computed(() => {
 				/>
 			</div>
 		</div>
-		<div class="info-row" v-if="props.selectedEvent">
-			<IconClockHour4 class="icon" />
-			<!-- <span class="label">{{ $l.duration }}:</span> -->
-			<span class="value mono"
-				>{{ props.eventStore.durationForEvent(props.selectedEvent) }} days
-				<span class="small mono">({{ timeRange }})</span></span
-			>
-		</div>
-		<div class="info-row" v-if="props.selectedEvent">
-			<IconDimensions class="icon" />
-			<!-- <span class="label">{{ $l.size }}:</span> -->
-			<span class="value mono"
-				>{{
-					props.eventStore.sizeForEvent(props.selectedEvent).toFixed(2)
-				}}km²</span
-			>
-		</div>
-		<div class="info-row" v-if="props.selectedEvent">
-			<IconTemperature class="icon" />
-			<!-- <span class="label">{{ $l.intensity }}:</span> -->
-			<span class="value mono"
-				>+{{
-					props.eventStore.intensityForEvent(props.selectedEvent).toFixed(2)
-				}}°C</span
-			>
-		</div>
-		<div class="info-row" v-if="props.selectedEvent">
-			<div class="download-link" @click="downloadEvent" role="button">
-				<IconDownload class="icon" />
-			</div>
-		</div>
-		<slot></slot>
 	</div>
 </template>
 
 <style scoped>
-.download-link {
-	cursor: pointer;
-	&:hover {
-		opacity: 0.8;
-	}
-}
-
 .event-info {
 	display: flex;
 	flex-direction: column;

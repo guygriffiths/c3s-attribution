@@ -1,4 +1,4 @@
-import * as d3 from 'd3'
+import * as d3 from 'd3';
 
 export const DATA_ROOT = `${import.meta.env.X_PUBLIC_PATH || ''}data/`
 export const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
@@ -146,4 +146,21 @@ export const fetchDataForYear = async (year: number) => {
 			.catch(() => []),
 	])
 	return [hot, cold]
+}
+
+export const niceNumber = (n: number) => {
+	const num = Number(n)
+	const abs = Math.abs(num)
+
+	const fmt = (x: number) =>
+		x
+			.toFixed(2) // start with 3 d.p.
+			.replace(/\.?0+$/, '') // strip trailing zeros + dot
+
+	if (abs >= 1e12) return fmt(num / 1e12) + 't'
+	if (abs >= 1e9) return fmt(num / 1e9) + 'b'
+	if (abs >= 1e6) return fmt(num / 1e6) + 'm'
+	if (abs >= 1e3) return fmt(num / 1e3) + 'k'
+
+	return fmt(num) // plain number
 }

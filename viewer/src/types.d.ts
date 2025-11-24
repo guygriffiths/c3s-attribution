@@ -11,6 +11,8 @@ declare global {
 
 	type EventType = 'hot' | 'cold' // | 'wet' | 'windy' | 'dry'
 
+	type Variable = 'duration' | 'size' | 'intensity'
+
 	interface ExtremeEvent {
 		id: string
 		times: number[]

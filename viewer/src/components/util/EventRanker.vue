@@ -40,7 +40,7 @@ const widthScale = computed(() => {
 	return d3
 		.scaleLinear()
 		.domain(eventStore.durationRange)
-		.range([12, width.value - 28])
+		.range([12, width.value - 40])
 		.clamp(true)
 })
 const heightScale = computed(() => {

@@ -491,6 +491,8 @@ const needleOffsetPx = computed(() => {
 	const containerWidth = scroller.value?.clientWidth
 	if (isOverview.value) {
 		return 40 + (pct! / 100) * (containerWidth! - 40)
+	} else if(isZoom.value) {
+		return (pct! / 100) * containerWidth! + xOffset.value
 	} else {
 		return (pct! / 100) * containerWidth!
 	}
@@ -515,6 +517,7 @@ onMounted(() => {
 		eventBoxesForYear.value[year] = res.events
 	}
 	const handleKey = (e: KeyboardEvent) => {
+		if(isTimeline.value) return
 		// TODO Should all of this go in a global key handler? Perhaps not, since people use arrow keys on maps?
 		if (e.key === 'ArrowLeft') prevDay()
 		else if (e.key === 'ArrowRight') nextDay()
@@ -720,10 +723,18 @@ watch(
 )
 
 const xScaleFactor = computed(() => {
-	const panelWidth = document.getElementById('event-panel')?.clientWidth
+	const panelWidth = document.getElementById('event-graph-width-el')?.clientWidth
 	const totalWidth = timeReelRef.value?.clientWidth
 
 	return panelWidth && totalWidth ? totalWidth / panelWidth : 1.0
+})
+const xOffset = computed(() => {
+	const paddingOffset = document.getElementById('event-graph-width-el')?.getBoundingClientRect().left
+	const panelOffset = document.getElementById('event-graphs')?.getBoundingClientRect().left
+
+	console.log('XOFFSETS', paddingOffset, panelOffset)
+
+	return paddingOffset! - panelOffset! || 0
 })
 const viewportTransform = computed(() => {
 	if (props.selectedEvent && isZoom.value) {
@@ -733,9 +744,11 @@ const viewportTransform = computed(() => {
 		)
 		const nDays = (eventEnd - eventStart + 2) * xScaleFactor.value
 		const scale = Math.max(1, 366 / nDays)
+		const pxPerDay = (timeReelRef.value?.clientWidth || 1) / nDays
+		console.log('XOFFSET', xOffset.value)
 
 		// return 'translate(0, 0)'
-		return `scale(${scale}, 1) translate(${-(eventStart - 1)}, 0)`
+		return `scale(${scale}, 1) translate(${-(eventStart - 1)}, 0) translate(${xOffset.value / pxPerDay}, 0)`
 	} else {
 		return 'translate(0, 0)'
 	}
@@ -1220,7 +1233,7 @@ const dateTranslate = computed(() => {
 	&.overview {
 		.date-info {
 			// display: none;s
-			z-index: 100000;
+			z-index: 1000;
 		}
 	}
 	&.timeline {
@@ -1373,6 +1386,8 @@ const dateTranslate = computed(() => {
 		backdrop-filter: $frosty;
 		&.overview {
 			overflow-y: visible;
+			transition: opacity $transition, backdrop-filter $transition,
+				background $transition;
 			&.dragging {
 				background: transparent;
 				backdrop-filter: blur(1px);
@@ -1384,6 +1399,7 @@ const dateTranslate = computed(() => {
 				fill-opacity: 0.8;
 			}
 			.scrollee {
+				overflow-y: visible;
 				.year {
 					align-items: center;
 					user-select: none;

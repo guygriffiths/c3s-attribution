@@ -5,12 +5,12 @@ import { useStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { useStore as useEventStore } from '@/store/eventStore'
 import MapComponent from './Map.vue'
-import Panel from './util/Panel.vue'
 import Histogram from './util/Histogram.vue'
 import EventTypeToggle from './util/EventTypeToggle.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
 import EventInfoPanel from './EventInfoPanel.vue'
+import SelectedEventInfoPanel from './SelectedEventInfoPanel.vue'
 import FilterPanel from './FilterPanel.vue'
 import FocusFrame from './util/FocusFrame.vue'
 import ModeToggle from './util/ModeToggle.vue'
@@ -27,10 +27,11 @@ import {
 	setHotOnly,
 } from '@/lib/eventsDB'
 import { differenceInDays, format } from 'date-fns'
-import MultiEventPanel from './MultiEventPanel.vue'
+import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
 import {
 	IconCalendarWeek,
 	IconChartBar,
+	IconChartHistogram,
 	IconChevronsUpLeft,
 	IconChevronUpLeft,
 	IconInfoSquareRounded,
@@ -204,26 +205,29 @@ const toggleInfoPanel = () => {
 
 <template>
 	<div class="main">
-		<FocusFrame
-			class="focus-frame"
-			:active="store.isFocused"
-			@close="exitFocus"
-		/>
+		<FocusFrame id="focus-frame" :active="store.isFocused" @close="exitFocus" />
 		<button
 			id="hamburger-button"
 			class="glassy color"
-			:class="{ hidden: store.isFocused || timeStore.timePanelExpanded }"
+			:class="{
+				hidden: store.isFocused || timeStore.timePanelExpanded,
+				close: store.hamburgerMenuOpen,
+			}"
 			@click="store.hamburgerMenuOpen = !store.hamburgerMenuOpen"
 		>
 			<IconMenu2 size="24" aria-hidden="true" v-if="!store.hamburgerMenuOpen" />
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
-		<Panel id="hamburger-menu" class="top" :active="store.hamburgerMenuOpen">
+		<div
+			id="hamburger-menu"
+			class="panel top"
+			:class="{ active: store.hamburgerMenuOpen }"
+		>
 			<EventTypeToggle v-model="eventStore.eventTypeMode" />
 			<FilterPanel v-model="eventStore.filters" />
 			<!-- <h1>Filters</h1>
 			<h1>Animation speed</h1> -->
-		</Panel>
+		</div>
 
 		<MapComponent id="map"></MapComponent>
 		<ModeToggle
@@ -232,10 +236,9 @@ const toggleInfoPanel = () => {
 			:class="{ hidden: timeStore.timePanelExpanded }"
 		/>
 		<!-- Time Panel -->
-		<Panel
+		<div
 			id="time-panel"
-			:active="true"
-			class="bottom peek"
+			class="panel bottom active"
 			:class="{
 				event: eventStore.eventSelected,
 				expanded: timeStore.timePanelExpanded,
@@ -288,14 +291,19 @@ const toggleInfoPanel = () => {
 			>
 				<IconChartBar class="bar-icon" />
 			</button>
-		</Panel>
+		</div>
 
 		<!-- Event Info Panel -->
 		<!-- This is the event information at the bottom center of the screen -->
 		<button
 			id="info-button"
 			class="glassy color"
-			:class="{ hidden: store.isFocused || timeStore.timePanelExpanded }"
+			:class="{
+				hidden:
+					timeStore.timePanelExpanded ||
+					(store.isFocused && store.viewMode === 'timemachine'),
+				close: store.showInfoPanel,
+			}"
 			@click="store.showInfoPanel = !store.showInfoPanel"
 		>
 			<IconInfoSquareRounded
@@ -308,41 +316,77 @@ const toggleInfoPanel = () => {
 		<EventInfoPanel
 			id="event-info-panel"
 			:selected-event="eventStore.selectedEvent"
+			:main-store="store"
 			:event-store="eventStore"
-			:time-string="store.viewMode === 'timemachine'
-				? format(timeStore.selectedTime, 'dd MMM yyyy')
-				: timeStore.startTimeFilter?.getUTCFullYear() +
-				  ' - ' +
-				  timeStore.endTimeFilter?.getUTCFullYear()"
+			:time-string="
+				store.viewMode === 'timemachine'
+					? format(timeStore.selectedTime, 'dd MMM yy')
+					: timeStore.startTimeFilter?.getUTCFullYear() +
+						' - ' +
+						timeStore.endTimeFilter?.getUTCFullYear()
+			"
 			:events-of-interest="
 				store.viewMode === 'timemachine' ? currentEvents : eventsOfInterest
 			"
 			:class="{
 				'disable-transitions': timeStore.isPlaying,
-				show: store.showInfoPanel && eventStore.selectedEvent === null,
+				show:
+					store.showInfoPanel &&
+					!timeStore.timePanelExpanded &&
+					!(store.isFocused && store.viewMode === 'timemachine'),
 			}"
 		>
 		</EventInfoPanel>
+		<SelectedEventInfoPanel
+			id="selected-event-info-panel"
+			v-if="eventStore.selectedEvent"
+			:selected-event="eventStore.selectedEvent"
+			:event-store="eventStore"
+			:class="{
+				show: eventStore.selectedEvent !== null && store.showInfoPanel,
+				single: store.viewMode === 'timemachine' && store.isFocused,
+			}"
+		/>
 
 		<!-- Multi-Event Panel -->
 		<!-- This is the panel on the right with rankings and histograms -->
-		<MultiEventPanel
+		<button
+			id="multi-button"
+			class="glassy color"
+			:class="{
+				hidden: store.viewMode !== 'heatmap',
+				close: store.showMultiPanel,
+			}"
+			@click="store.showMultiPanel = !store.showMultiPanel"
+		>
+			<IconChartHistogram
+				size="24"
+				aria-hidden="true"
+				v-if="!store.showMultiPanel"
+			/>
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+		<MultiEventSmartPanel
 			id="multi-event-panel"
 			:events-of-interest="
 				store.viewMode === 'heatmap' ? eventsOfInterest : currentEvents
 			"
-			class="right"
-			:class="{ selected: eventStore.eventSelected }"
-			:active="store.showMultiPanel || store.viewMode === 'heatmap'"
+			class="right panel"
+			:class="{
+				selected: eventStore.eventSelected,
+				active: store.showMultiPanel && store.viewMode === 'heatmap',
+			}"
 		/>
 
 		<!-- Event Panel -->
 		<!-- This is the panel on the left with event timeseries etc. -->
-		<Panel
+		<!-- <div
 			id="event-panel"
-			class="left"
-			:class="{ small: store.viewMode === 'heatmap' }"
-			:active="store.viewMode === 'timemachine' && eventStore.eventSelected"
+			class="panel left"
+			:class="{
+				small: store.viewMode === 'heatmap',
+				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
+			}"
 		>
 			<div
 				class="subpanel histo"
@@ -383,14 +427,19 @@ const toggleInfoPanel = () => {
 				:class="{ hidden: selectedDayIdx === null }"
 				:style="`clip-path: ${funnelPoints};`"
 			/>
-			<div class="subpanel">
-				<EventGraphs
-					:selected-event="eventStore.selectedEvent"
-					:event-store="eventStore"
-					id="event-graphs"
-				/>
-			</div>
-		</Panel>
+			<div class="subpanel"></div>
+		</div> -->
+
+		<EventGraphs
+			id="event-graphs"
+			:selected-event="eventStore.selectedEvent"
+			:event-store="eventStore"
+			class="panel left"
+			:class="{
+				small: store.viewMode === 'heatmap',
+				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
+			}"
+		/>
 
 		<!-- Event Window -->
 		<!-- This is the invisible div that defines where the map should zoom to -->
@@ -410,11 +459,6 @@ const toggleInfoPanel = () => {
 <style lang="scss">
 @use '@/assets/styles/scssVars.module.scss' as *;
 
-#event-graphs {
-	width: 100%;
-	height: 100%;
-}
-
 .main {
 	display: flex;
 	flex-direction: column;
@@ -425,15 +469,38 @@ const toggleInfoPanel = () => {
 	max-height: 100vh;
 	position: relative;
 
+	#map {
+		flex: 1 1 100%;
+		height: 100vh;
+		min-height: 100vh;
+		width: 100vw;
+		min-width: 100vw;
+
+		// z-index: 0;
+	}
+
 	#logo {
 		position: absolute;
 		top: $panelMargin;
 		left: $panelMargin;
 		width: calc(50% - 2 * $panelMargin - $modeButtonWidth);
-		height: 2.5rem;
-		z-index: 300;
+		height: $headerHeight;
+		z-index: 50;
 		pointer-events: none;
 		background: var(--panel-bg);
+	}
+
+	#mode-toggle {
+		position: absolute;
+		top: 0;
+		left: 50%;
+		z-index: 250;
+		transform: translateX(-50%) translateY(-1rem);
+		transition: transform $transition;
+		box-shadow: unset !important;
+		&.hidden {
+			transform: translateX(-50%) translateY(-150%);
+		}
 	}
 
 	#hamburger-button {
@@ -455,8 +522,8 @@ const toggleInfoPanel = () => {
 	#hamburger-menu {
 		background: var(--panel-bg);
 		backdrop-filter: $frosty;
-		top: 2 * $panelMargin;
-		right: 2 * $panelMargin;
+		top: $panelMargin;
+		right: $panelMargin;
 		padding: $panelMargin;
 		display: flex;
 		flex-direction: column;
@@ -464,48 +531,19 @@ const toggleInfoPanel = () => {
 		z-index: 350;
 	}
 
-	.focus-frame {
+	#focus-frame {
 		overflow: hidden;
 		transition: all $transition;
 		z-index: 200;
 		position: absolute;
 	}
 
-	.panel {
-		border-radius: $borderRadius;
-		background: var(--panel-bg);
-		backdrop-filter: $frosty;
-		box-shadow: var(--shadow-md);
-	}
-
-	#buttons-debug {
-		position: absolute;
-		left: -10px;
-		bottom: -10px;
-	}
-
-	#map {
-		flex: 1 1 100%;
-		// z-index: 0;
-	}
-	#mode-toggle {
-		position: absolute;
-		top: 0;
-		left: 50%;
-		z-index: 250;
-		transform: translateX(-50%) translateY(-1rem);
-		transition: transform $transition;
-		box-shadow: unset !important;
-		&.hidden {
-			transform: translateX(-50%) translateY(-150%);
-		}
-	}
 	#time-panel {
+		z-index: 150;
 		width: calc(100% - 2 * $panelMargin);
 		right: $panelMargin;
 		bottom: $panelMargin;
 		height: $timePanelHeight;
-		z-index: 20;
 		transition: all $transition;
 		border-radius: $borderRadius;
 		background: transparent;
@@ -538,9 +576,7 @@ const toggleInfoPanel = () => {
 		}
 
 		&.event {
-			// width: calc(50% - $panelMargin);
 			height: $smallTimePanelHeight;
-			// padding-bottom: calc(15% - 0.75rem);
 			border-top: none;
 			border-top-right-radius: 0;
 			border-top-left-radius: 0;
@@ -613,60 +649,22 @@ const toggleInfoPanel = () => {
 		}
 	}
 
-	#event-window {
+	#event-graphs {
 		position: absolute;
-		top: $panelMargin;
-		left: $panelMargin;
-		width: calc(100% - 2 * $panelMargin);
-		height: calc(100% - 2 * $panelMargin - $timePanelHeight);
-		pointer-events: none;
-		z-index: 10000;
-
-		// background-color: rgba(0,255,0,0.1);
-
-		&.eventPanelOn {
-			left: calc($panelMargin + $eventPanelWidth);
-			width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
-			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
-		}
-
-		&.multiEventPanelOn {
-			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
-			width: calc(100% - $multiEventPanelWidth - $panelMargin);
-			&.eventPanelOn {
-				width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
-			}
-		}
-	}
-
-	#multi-event-panel {
-		width: calc($multiEventPanelWidth - $panelMargin);
-		height: calc(100% - 8 * $panelMargin - $smallTimePanelHeight);
-		right: $panelMargin;
-		bottom: calc($panelMargin + $smallTimePanelHeight);
-		background-color: var(--panel-bg-alt);
-		backdrop-filter: $frosty;
-		overflow: visible;
-		background: var(--panel-bg);
-
-		&.selected {
-			background-color: var(--panel-bg-dark);
-		}
-	}
-
-	#event-panel {
 		width: $eventPanelWidth;
 		left: $panelMargin;
-		height: calc(80% - $smallTimePanelHeight - 2 * $panelMargin);
-		bottom: calc(1 * $panelMargin + $smallTimePanelHeight);
-		display: flex;
-		flex-direction: column;
-		justify-content: flex-start;
-		align-items: flex-start;
-		border-radius: 0;
-		background-color: transparent;
-		backdrop-filter: none;
-		box-shadow: none;
+		height: calc(
+			100% - $smallTimePanelHeight - 4 * $panelMargin - 0.5 * $infoHeight - 3rem - 10rem
+		);
+		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+		// display: flex;
+		// flex-direction: column;
+		// justify-content: flex-start;
+		// align-items: flex-start;
+		// border-radius: 0;
+		// backdrop-filter: none;
+		// box-shadow: none;
+		// background: transparent;
 
 		.subpanel {
 			border-radius: $borderRadius;
@@ -712,6 +710,54 @@ const toggleInfoPanel = () => {
 		}
 	}
 
+	#multi-button {
+		position: absolute;
+		top: 0;
+		right: $panelMargin;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 200;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+		transform: translateY(
+			calc(100vh - 2 * $panelMargin - $smallTimePanelHeight - 2.5rem)
+		);
+
+		&.hidden {
+			transform: translateX(200%);
+		}
+
+		&.close {
+			transform: translateY(
+				calc($headerHeight + 2.5 * $panelMargin + $infoHeight)
+			);
+			&.hidden {
+				transform: translate(
+					200%,
+					calc($headerHeight + 2.5 * $panelMargin + $infoHeight)
+				);
+			}
+		}
+	}
+	#multi-event-panel {
+		z-index: 150;
+		width: calc($infoWidth * 2 + $panelMargin);
+		height: calc(
+			100vh - 4 * $panelMargin - #{$smallTimePanelHeight} - $infoHeight - 3rem
+		);
+		right: calc($panelMargin);
+		bottom: calc(2 * $panelMargin + #{$smallTimePanelHeight});
+		background-color: var(--panel-bg-alt);
+		backdrop-filter: $frosty;
+		overflow: visible;
+		background: var(--panel-bg);
+
+		&.selected {
+			background-color: var(--panel-bg-dark);
+		}
+	}
+
 	#info-button {
 		position: absolute;
 		top: calc(2 * $panelMargin + 2rem);
@@ -727,29 +773,14 @@ const toggleInfoPanel = () => {
 			transform: translateX(200%);
 		}
 	}
-
 	#event-info-panel {
-		// display: none;
-
+		height: $infoHeight !important;
+		width: $infoWidth !important;
 		z-index: 250;
 		transition: all $transition;
-		// margin: $panelMargin;
 		position: absolute;
-		top: calc(3.25rem + 2* $panelMargin);
-		right: 2*$panelMargin;
-		// width: max(100px, min(500px, 5%));
-		// max-width: 25%;
-		min-width: 180px;
-		max-width: 25%;
-		// transform: translate(-90%, -90%);
-
-		// bottom: calc(100% - (2 * $panelMargin) - $smallTimePanelHeight);
-		// width: max(300px, 40%);
-		// height: max(200px, 30%);
-
-		// background: var(--panel-bg);
-		// backdrop-filter: $frosty;
-		// box-shadow: var(--shadow-md);
+		top: calc(3rem + 1 * $panelMargin);
+		right: $panelMargin;
 
 		.event-info {
 			width: 100%;
@@ -760,16 +791,62 @@ const toggleInfoPanel = () => {
 			transform: translate(0, 0);
 		}
 	}
-	button.toggle {
-		z-index: 5;
-		width: 2.5rem;
-		height: 2.5rem;
-		padding: 0.5rem;
-		border-radius: 0 0 $borderRadius 0;
-		box-shadow: unset !important;
+	#selected-event-info-panel {
+		z-index: 250;
+		transition: all $transition;
 		position: absolute;
-		right: 0;
-		bottom: 0;
+		top: calc(3rem + $panelMargin);
+		right: calc($infoWidth + 2 * $panelMargin);
+		transform: translate(0, calc(-250% - 2 * $panelMargin));
+		height: $infoHeight !important;
+		width: $infoWidth !important;
+		&.single {
+			// transform: translate(calc(100% - 100vw), calc(-250% - 2 * $panelMargin));
+			right: calc(100vw - $eventPanelWidth - $panelMargin);
+			width: calc($eventPanelWidth) !important;
+			height: calc($infoHeight * 0.5) !important;
+		}
+		&.show {
+			transform: translate(0, 0);
+			// &.single {
+			// 	transform: translate(calc(100% - 100vw), 0);
+			// }
+		}
+	}
+
+	#multi-button.close,
+	#hamburger-button.close,
+	#info-button.close {
+		border-radius: 10%;
+		width: 1.5rem;
+		height: 1.5rem;
+		padding: 0rem;
+		box-shadow: none;
+	}
+	#event-window {
+		position: absolute;
+		top: $panelMargin;
+		left: $panelMargin;
+		width: calc(100% - 2 * $panelMargin);
+		height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
+		pointer-events: none;
+		z-index: 10000;
+
+		// background-color: rgba(0,255,0,0.1);
+
+		&.eventPanelOn {
+			left: calc($panelMargin + $eventPanelWidth);
+			width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
+			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
+		}
+
+		&.multiEventPanelOn {
+			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
+			width: calc(100% - $multiEventPanelWidth - $panelMargin);
+			&.eventPanelOn {
+				width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
+			}
+		}
 	}
 }
 </style>

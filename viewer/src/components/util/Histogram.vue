@@ -270,7 +270,7 @@ watch(
 							:x="1"
 							:y="b.y - 1"
 							:width="Math.max(3, b.w - 2)"
-							:height="b.h + 1"
+							:height="b.h + 3"
 							:data-pct="b.pct"
 							:data-count="b.count"
 							:class="{

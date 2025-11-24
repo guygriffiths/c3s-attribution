@@ -805,7 +805,7 @@ const resetZoom = () => {
 	}
 
 	.region-control {
-		transform: translate(0, 2rem);
+		transform: translate(0, 1.25rem);
 		&.hidden {
 			transform: translate(-150%, 2rem);
 		}
