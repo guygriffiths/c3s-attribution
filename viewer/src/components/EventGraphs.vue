@@ -7,6 +7,7 @@ import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { IconDimensions, IconTemperature } from '@tabler/icons-vue'
 import { niceNumber } from '@/lib/utils'
+import { dateStr } from '@/lib/time-utils'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 
 const store = useStore()
@@ -14,7 +15,7 @@ const eventStore = useEventStore()
 const timeStore = useTimeStore()
 const props = defineProps<{ selectedEvent: ExtremeEventFull | null }>()
 const emits = defineEmits<{
-	(event: 'dateSelected', date: Date): void
+	(event: 'dateSelected', date: number): void
 }>()
 
 const days = computed(() => props.selectedEvent?.times || [])
@@ -44,12 +45,13 @@ const xScale = computed(() => {
 		.padding(0)
 })
 
-const sizeScale = computed(() =>
-	d3
+const sizeScale = computed(() => {
+	// console.log('Area data for sizeScale:', areaData.value)
+	return d3
 		.scaleLinear()
-		.domain([0, d3.max(areaData.value) || 1])
-		.range([height.value - 3, chartTopMargin]),
-)
+		.domain([0, d3.max(areaData ? areaData.value : []) || 1])
+		.range([height.value - 3, chartTopMargin +3])
+})
 const intensityScale = computed(() =>
 	d3
 		.scaleLinear()
@@ -57,7 +59,7 @@ const intensityScale = computed(() =>
 			d3.min(intensityData.value) || 0,
 			d3.max(intensityData.value) || 1,
 		])
-		.range([height.value, chartTopMargin]),
+		.range([height.value-5, chartTopMargin+5]),
 )
 
 const selectedIndex = computed(() => {
@@ -74,11 +76,9 @@ onMounted(() => {
 			width.value = entry.contentRect.width
 			height.value = entry.contentRect.height
 		}
-		console.log('SVG resized:', entries, width.value, height.value)
+		// console.log('SVG resized:', entries, width.value, height.value)
 	})
-	console.log('ooooooh....')
 	if (!svgRef.value) return
-	console.log('Observing SVG for resize')
 	observer.observe(svgRef.value)
 
 	onBeforeUnmount(() => observer.disconnect())
@@ -92,7 +92,7 @@ watch(
 		svgRef.value,
 	],
 	() => {
-		console.log('EventGraphs: event or areaData changed')
+		// console.log('EventGraphs: event or areaData changed')
 		// Reset scales when event changes
 		width.value = svgRef.value?.clientWidth || 100
 		height.value = svgRef.value?.clientHeight || 100
@@ -103,27 +103,28 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 </script>
 
 <template>
-	<div class="event-graphs-root loading" v-if="store.eventSoftLoadingCount > 0">
-		<div class="spinner-container">
-			<div class="spinner-ring"></div>
-			<div class="spinner-ring-inner"></div>
+	<div class="event-graphs-root">
+		<div class="loading" v-if="store.eventSoftLoadingCount > 0">
+			<div class="spinner-container">
+				<div class="spinner-ring"></div>
+				<div class="spinner-ring-inner"></div>
+			</div>
 		</div>
-	</div>
-	<div class="event-graphs-root" v-else>
 		<div class="chart">
 			<div class="axis">
-				<div class="label mono">{{ niceNumber(intensityScale.domain()[0]) }}</div>
+				<div class="label mono">
+					{{ niceNumber(intensityScale.domain()[0]) }}
+				</div>
 				<span class="unit-icon"
-					><IconTemperature
-						class="icon"
-						:class="{ [eventType]: true }"
-					/>{{
+					><IconTemperature class="icon" :class="{ [eventType]: true }" />{{
 						selectedEvent?.event_type === 'hot'
 							? eventStore.heatIntensityUnits
 							: eventStore.coldIntensityUnits
 					}}</span
 				>
-				<div class="label mono">{{ niceNumber(intensityScale.domain()[1]) }}</div>
+				<div class="label mono">
+					{{ niceNumber(intensityScale.domain()[1]) }}
+				</div>
 			</div>
 			<svg class="intensity-chart" ref="svgRef" id="event-graph-width-el">
 				<defs>
@@ -211,7 +212,13 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 							vector-effect="non-scaling-stroke"
 							class="area-bar"
 							filter="url(#egBarShadow)"
-						/>
+							@click="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
+						>
+							<title>
+								{{ dateStr(new Date(props.selectedEvent?.times[i] || 0)) }} :
+								{{ niceNumber(value) }} {{ eventStore.sizeUnits }}
+							</title>
+						</rect>
 					</template>
 				</g>
 			</svg>
@@ -231,6 +238,20 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 	gap: 0.5rem;
 	padding: 0.5rem;
 
+	.loading {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background-color: var(--panel-bg-night);
+		background-image: var(--panel-bg);
+		z-index: 10;
+	}
+
 	&.loading {
 		flex: 0 0 100%;
 		display: flex;
@@ -246,9 +267,7 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 	}
 
 	.chart {
-		width: 100%;
 		z-index: 0;
-		
 
 		flex: 0 1 calc(50% - 0.5rem); /* allow shrinking */
 		max-height: calc(50% - 0.5rem);
@@ -261,8 +280,6 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 		align-items: stretch; /* default, just in case */
 		justify-content: center;
 
-
-
 		.axis {
 			flex: 1 0 2.5rem;
 			height: 100%;
@@ -270,6 +287,7 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 			flex-direction: column-reverse;
 			justify-content: space-between;
 			align-items: center;
+			font-size: 0.85rem;
 
 			.label {
 				user-select: none;
@@ -279,15 +297,13 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 
 			.icon {
 				flex: 0 0 auto;
-				width: 1.5rem;
-				height: 1.5rem;
+				width: 1.25rem;
+				height: 1.25rem;
 				margin: 0.25rem 0;
 
 				display: flex;
 				align-items: center;
 				justify-content: center;
-
-				
 
 				&.hot {
 					color: var(--theme-hot-primary);
@@ -317,6 +333,7 @@ svg {
 	user-select: none;
 
 	.area-bar {
+		cursor: pointer;
 		&.hot {
 			fill: var(--theme-hot-primary);
 		}
@@ -325,6 +342,12 @@ svg {
 		}
 		&.selected {
 			fill: var(--primary-glass-shine);
+			&.hot {
+				fill: var(--theme-hot-primary-glass-shine);
+			}
+			&.cold {
+				fill: var(--theme-cold-primary-glass-shine);
+			}
 		}
 	}
 

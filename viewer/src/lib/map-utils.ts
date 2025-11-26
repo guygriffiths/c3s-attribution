@@ -72,8 +72,7 @@ export const fitBoundsToDiv = (
 		mapRect.bottom - divRect.bottom,
 	]
 
-	console.log('fitting bounds to div', bbox, paddingTopLeft, paddingBottomRight)
-	// @ts-ignore
+	// console.log('fitting bounds to div', bbox, paddingTopLeft, paddingBottomRight)
 
 	map.fitBounds(
 		[

@@ -1,10 +1,7 @@
 <script setup lang="ts">
-import { watch, defineModel } from 'vue'
+import { defineModel } from 'vue'
 import { useLabels } from '@/lib/labels'
 import {
-	IconArrowBarToDown,
-	IconArrowBarToUp,
-	IconTemperatureCelsius,
 	IconDimensions,
 	IconFilter,
 	IconMathEqualGreater,
@@ -13,8 +10,6 @@ import {
 	IconTemperature,
 	IconTemperaturePlus,
 	IconTemperatureMinus,
-	IconTilde,
-	IconMeterSquare,
 	IconRefreshAlert,
 } from '@tabler/icons-vue'
 import NumberSelect from './util/NumberSelect.vue'

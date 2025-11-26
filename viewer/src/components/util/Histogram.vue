@@ -11,7 +11,8 @@
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as d3 from 'd3'
-import { binGradient } from '@/lib/utils'
+import { colorMixer } from '@/lib/utils'
+import { getBins } from '@/lib/histo-utils'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
 	IconDimensions,
@@ -21,22 +22,32 @@ import {
 
 type Props = {
 	data: number[]
+	bins?: any[]
 	xmin: number
 	xmax: number
-	labelFunc?: (v: number) => string
-	units?: string | null
 	nbins?: number
 	yMaxCount?: number | null
 	highlightValue?: number | null
-	types?: ('hot' | 'cold')[]
-	variable?: 'duration' | 'size' | 'intensity'
+	types?: EventType[]
+	variable?: Variable
 }
 
 const props = defineProps<Props>()
 // defaults
 const nbins = props.nbins ?? 10
-const units = props.units ?? ''
-const labelFunc = props.labelFunc ?? ((v: number) => `${v}`)
+
+const bins = computed(() =>
+	props.bins !== null && props.bins !== undefined
+		? props.bins
+		: getBins(
+				props.data,
+				props.types ?? [],
+				props.xmin,
+				props.xmax,
+				nbins,
+				true,
+			),
+)
 
 // responsive width handling
 const containerRef = ref<HTMLElement | null>(null)
@@ -94,59 +105,17 @@ const domain = computed(() => {
 	return [a, b] as [number, number]
 })
 
-// Set the fixed bin thresholds based on domain
-// The last bin edge is set based on data max to ensure all data is included
-// This means the last bin will be wider than the others
-const bins = computed(() => {
-	const d = props.data ?? []
-	const types = props.types ?? []
-	const [xmin, xmax] = domain.value
-
-	const step = (xmax - xmin) / (nbins + 1)
-	const thresholds = Array.from({ length: nbins }, (_, i) => xmin + i * step)
-	thresholds.push(
-		dataExtent.value[1] + 0.5 * (dataExtent.value[1] - dataExtent.value[0]),
-	)
-
-	const binned = thresholds.slice(0, -1).map((t0, i) => {
-		const t1 = thresholds[i + 1]
-		const binIdx = d
-			.map((val, j) => ({ val, j }))
-			.filter(({ val }) => val >= t0 && val < t1)
-
-		const hotCount = binIdx.filter(({ j }) => types[j] === 'hot').length
-		const coldCount = binIdx.filter(({ j }) => types[j] === 'cold').length
-		const total = binIdx.length || 1
-
-		const binPoints = binIdx.map(({ val }) => val)
-		return Object.assign(binPoints, {
-			x0: t0,
-			x1: t1,
-			hotPct: hotCount / total,
-			coldPct: coldCount / total,
-		})
-	})
-
-	if (binned.length > 0) {
-		binned[binned.length - 1].x1 = xmax
-	}
-
-	return binned
-})
-
 // y values expressed as percentage of total data count
-const counts = computed(() => bins.value.map((b) => b.length))
+const counts = computed(() => bins.value!.map((b) => b.length))
 const totalCount = computed(() => Math.max(1, props.data?.length ?? 0))
-// const countsPct = computed(() =>
-// 	counts.value.map((c) => (c / totalCount.value) * 100),
-// )
 
 // y scale domain: 0 -> auto max or fixed yMaxPct prop
 const maxCountAuto = computed(() =>
 	counts.value.length ? Math.max(...counts.value) : 0,
 )
 const yMax = computed(() => {
-	if (props.yMaxCount != null) return Math.max(props.yMaxCount, maxCountAuto.value)
+	if (props.yMaxCount != null)
+		return Math.max(props.yMaxCount, maxCountAuto.value)
 	// give a little headroom so bars don't touch top
 	return Math.max(1, Math.ceil(maxCountAuto.value * 1.08))
 })
@@ -174,19 +143,19 @@ const yScale = computed(() =>
 
 const highlightBin = computed(() => {
 	if (props.highlightValue == null) return null
-	const ret = bins.value.findIndex((b) => {
+	const ret = bins.value!.findIndex((b) => {
 		return (
 			(b.x0 as number) <= props.highlightValue! &&
 			(b.x1 as number) > props.highlightValue!
 		)
 	})
-	if (ret < 0) return bins.value.length - 1
+	if (ret < 0) return bins.value!.length - 1
 	return ret
 })
 
 // bar rectangles data (x, width, y, height, pct, count)
 const bars = computed(() => {
-	const ret = bins.value.map((b, idx) => {
+	const ret = bins.value!.map((b, idx) => {
 		const x = xScale.value(b.x0 as number)
 		const x1p = xScale.value(b.x1 as number)
 		const w = Math.max(0, x1p - x)
@@ -204,25 +173,17 @@ const bars = computed(() => {
 			bin0: b.x0,
 			bin1: b.x1,
 			color:
-				b.hotPct === 0 && b.coldPct === 0
+				b.coldPct === 0 && b.hotPct === 0
 					? 'var(--primary)'
-					: binGradient(b.hotPct, b.coldPct, scssVars.c3sred, scssVars.c3sblue), // red→blue
+					: b.coldPct === 0
+						? 'var(--theme-hot-primary)'
+						: b.hotPct === 0
+							? 'var(--theme-cold-primary)'
+							: colorMixer(scssVars.c3sred, b.hotPct, scssVars.c3sblue), // red→blue
 		}
 	})
 	return ret
 })
-
-// optional: animate transitions by giving CSS transitions to rect attrs
-// We'll use straightforward attribute binding + CSS transitions on transform/height where possible
-
-// watch for data changes to possibly reset width/height or perform actions
-watch(
-	() => [props.data, props.xmin, props.xmax, props.nbins],
-	() => {
-		// nothing special required here, computed values will update
-	},
-	{ deep: false },
-)
 </script>
 
 <template>
@@ -337,14 +298,13 @@ watch(
 	font-size: 11px;
 }
 
-$rate: 0s;//0.5 * $animTime;
+$rate: 0s; //0.5 * $animTime;
 /* bars */
 .bars .bar-group {
 	transition:
 		transform $rate ease,
 		opacity $rate ease;
 }
-
 
 .bar-rect {
 	// stroke: black;

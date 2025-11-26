@@ -12,7 +12,7 @@ import {
 } from '@/lib/utils'
 import * as d3 from 'd3'
 import { defineStore } from 'pinia'
-import { watch } from 'vue'
+import { markRaw, watch } from 'vue'
 import { useStore as useMainStore } from './store'
 import { useStore as useTimeStore } from './timeStore'
 
@@ -44,13 +44,14 @@ interface State {
 
 export const intensityForValue = (v: number, hot: boolean) => {
 	if (v == null || isNaN(v)) return 0
-	if (hot) {
-		let baseline = 301.15
-		return v - baseline
-	} else {
-		let baseline = 275.15
-		return baseline - v
-	}
+	return v - (hot ? 273.15 : 273.15)
+	// if (hot) {
+	// 	let baseline = 301.15
+	// 	return v - baseline
+	// } else {
+	// 	let baseline = 275.15
+	// 	return baseline - v
+	// }
 }
 
 export const colorForValue = (
@@ -71,7 +72,7 @@ export const colorForEvent = (
 	scale: d3.ScaleLinear<number, number>,
 ) => {
 	const value = intensityForValue(
-		event.event_type === 'hot' ? event.max_value : event.mean_value,
+		event.event_type === 'hot' ? event.max_value : event.min_value,
 		event.event_type === 'hot',
 	)
 	console.log(
@@ -96,9 +97,9 @@ export const useStore = defineStore('events', {
 			sizeRange: [0, 100],
 			sizeUnits: 'km²',
 			heatIntensityRange: [0, 0],
-			heatIntensityUnits: '+°C',
+			heatIntensityUnits: '°C',
 			coldIntensityRange: [0, 0],
-			coldIntensityUnits: '-°C',
+			coldIntensityUnits: '°C',
 			durationP90: null,
 			sizeP90: null,
 			heatIntensityP90: null,
@@ -195,7 +196,7 @@ export const useStore = defineStore('events', {
 		sizesForEvent: (state: State) => {
 			return (event: ExtremeEventFull | null) => {
 				if (!event) return []
-				return event.areas
+				return event.areas || []
 			}
 		},
 		intensitiesForEvent: (state: State) => {
@@ -271,7 +272,7 @@ export const useStore = defineStore('events', {
 				eventJson.times = eventJson.times.map((time: string) =>
 					new Date(time).getTime(),
 				)
-				this.selectedEvent = eventJson as ExtremeEventFull
+				this.selectedEvent = markRaw(eventJson as ExtremeEventFull)
 				if (
 					timeStore.selectedTime < eventJson.times[0] ||
 					timeStore.selectedTime > eventJson.times[event.times.length - 1]
@@ -286,7 +287,6 @@ export const useStore = defineStore('events', {
 		},
 		setHoveringEvent(event: ExtremeEvent | null) {
 			this.hoveringEvent = event
-			// console.log('Hovering event set to', event, event?.total_region)
 		},
 		async runFilters() {
 			// console.log('Running event filters')
@@ -348,6 +348,11 @@ export const useStore = defineStore('events', {
 				const sizeTop: number[] = []
 				const heatTop: number[] = []
 				const coldTop: number[] = []
+
+				let localHeatMin = Infinity
+				let localColdMin = Infinity
+				let localHeatMax = -Infinity
+				let localColdMax = -Infinity
 				events.forEach((e) => {
 					const duration = this.durationForEvent(e)
 					if (duration < this.durationRange[0]) {
@@ -370,18 +375,18 @@ export const useStore = defineStore('events', {
 						e.event_type === 'hot',
 					)
 					if (e.event_type === 'hot') {
-						if (intensity < this.heatIntensityRange[0]) {
-							this.heatIntensityRange[0] = intensity
+						if (intensity < localHeatMin) {
+							localHeatMin = intensity
 						}
-						if (intensity > this.heatIntensityRange[1]) {
-							this.heatIntensityRange[1] = intensity
+						if (intensity > localHeatMax) {
+							localHeatMax = intensity
 						}
 					} else if (e.event_type === 'cold') {
-						if (intensity < this.coldIntensityRange[0]) {
-							this.coldIntensityRange[0] = intensity
+						if (intensity < localColdMin) {
+							localColdMin = intensity
 						}
-						if (intensity > this.coldIntensityRange[1]) {
-							this.coldIntensityRange[1] = intensity
+						if (intensity > localColdMax) {
+							localColdMax = intensity
 						}
 					}
 
@@ -394,6 +399,14 @@ export const useStore = defineStore('events', {
 				this.sizeP90 = sizeTop.length ? Math.min(...sizeTop) : null
 				this.heatIntensityP90 = heatTop.length ? Math.min(...heatTop) : null
 				this.coldIntensityP90 = coldTop.length ? Math.min(...coldTop) : null
+				this.heatIntensityRange = [
+					localHeatMin === Infinity ? 0 : localHeatMin,
+					localHeatMax === -Infinity ? 0 : localHeatMax,
+				]
+				this.coldIntensityRange = [
+					localColdMin === Infinity ? 0 : localColdMin,
+					localColdMax === -Infinity ? 0 : localColdMax,
+				]
 			})
 
 			// Load hot and cold events

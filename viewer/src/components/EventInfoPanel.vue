@@ -17,6 +17,7 @@ import {
 } from '@tabler/icons-vue'
 import { dayStr } from '@/lib/time-utils'
 import EventRanker from './util/EventRanker.vue'
+import CalendarIcon from './util/CalendarIcon.vue'
 import { sort } from 'd3'
 
 const $l = useLabels()
@@ -25,10 +26,22 @@ const props = defineProps<{
 	selectedEvent: ExtremeEvent | null
 	mainStore: any
 	eventStore: any
-	timeString: string
+	timeStore: any
 	eventsOfInterest: ExtremeEvent[]
 }>()
 
+const timeString = computed(() =>
+	props.mainStore.viewMode === 'timemachine'
+		? format(props.timeStore.selectedTime, 'dd MMM yy')
+		: props.timeStore.startTimeFilter?.getUTCFullYear() +
+			' - ' +
+			props.timeStore.endTimeFilter?.getUTCFullYear(),
+)
+const dateNumber = computed(() => {
+	return props.mainStore.viewMode === 'timemachine'
+		? props.timeStore.selectedTime.getUTCDate()
+		: null
+})
 const sortDesc = ref(true)
 const toggleAscDesc = () => {
 	sortDesc.value = !sortDesc.value
@@ -68,7 +81,7 @@ const sortFunc = computed(() => {
 <template>
 	<div class="event-info panel">
 		<div class="info-row title">
-			<IconCalendar />
+			<CalendarIcon :size="24" :date="dateNumber" />
 			<span class="value mono">{{ timeString }}</span>
 		</div>
 		<div class="info-row header">
@@ -88,11 +101,34 @@ const sortFunc = computed(() => {
 			<button
 				@click="props.mainStore.cycleSorts"
 				class="cycle-sort-button glassy"
+				popovertarget="pop-sortby"
 			>
 				<IconStopwatch v-if="mainStore.focusVariable === 'duration'" />
 				<IconDimensions v-else-if="mainStore.focusVariable === 'size'" />
 				<IconTemperature v-else />
 			</button>
+			<div id="pop-sortby" class="pop-over glassy" popover>
+				<div class="pop-over-content">
+					<div
+						class="pop-over-item"
+						@click="mainStore.setFocusVariable('duration')"
+					>
+						<IconClockHour4 class="icon" />
+					</div>
+					<div
+						class="pop-over-item"
+						@click="mainStore.setFocusVariable('size')"
+					>
+						<IconDimensions class="icon" />
+					</div>
+					<div
+						class="pop-over-item"
+						@click="mainStore.setFocusVariable('intensity')"
+					>
+						<IconTemperature class="icon" />
+					</div>
+				</div>
+			</div>
 			<button @click="toggleAscDesc" class="cycle-sort-button glassy">
 				<IconSortDescendingSmallBig v-if="sortDesc" />
 				<IconSortAscendingSmallBig v-else />
@@ -110,6 +146,18 @@ const sortFunc = computed(() => {
 		</div>
 	</div>
 </template>
+
+<style>
+/* .calendar-frame { */
+/* Remove the inner details of the calendar icon to make space for the date number */
+/* .calendar-frame > path:nth-child(4), */
+.calendar-frame > path:nth-child(5),
+.calendar-frame > path:nth-child(6) {
+	display: none !important;
+	opacity: 0 !important;
+}
+/* } */
+</style>
 
 <style scoped>
 .event-info {
@@ -176,6 +224,13 @@ const sortFunc = computed(() => {
 		padding: 0.25rem;
 		.tabler-icon {
 			width: 2rem;
+		}
+
+		.date-text {
+			/* Position the icon in the calendar icon */
+			position: absolute;
+			left: calc(0.25rem + 20px);
+			transform: translate(-50%, 4px);
 		}
 	}
 

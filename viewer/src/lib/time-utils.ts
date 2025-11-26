@@ -42,6 +42,10 @@ export const dayStr = (day: number, year: number, showYear: boolean) => {
 	return format(date, 'dd MMM') + (showYear ? ` ${year}` : '')
 }
 
+export const dateStr = (date: Date) => {
+	return dayStr(getDayOfYear(date), date.getUTCFullYear(), true)
+}
+
 export function getEventBoxes(
 	events: {
 		times: number[]

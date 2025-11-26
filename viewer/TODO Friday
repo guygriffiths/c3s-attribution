@@ -60,4 +60,36 @@ Histograms, scatters, etc. - always on (hideable) with heatmap view, but show fe
 
 Double up the filters to allow things like 4 < duration < 10
 
-Make panels have a rainbow shine minus the theme colour, then tone the saturation or opacity right down, they shouldn't be perceptible.
+Make panels have a rainbow shine minus the theme colour, then tone the saturation or opacity right down, they shouldn't be perceptible. DONE
+
+
+
+
+PRECIP DEF - Climatology, 95th%ile of wet days (- precip < 1mm), 75%, 25%
+IQR is 75%-25%
+So (precip - 95%) / IQR = PRECIP
+NO 3 DAY LIMIT
+
+30 X 1x1 deg minimum area for heat
+
+Do the AREA properly and use units of degrees squared (at the equator) 1°x1° ("degree cell equivalent")
+
+
+
+HEAT INDEX: DEI anomaly over 95th%ile per day, added up per pixel
+
+mean intensity * mean duration * mean area
+
+Intensity = degrees over threshold / SD at that pixel
+
+
+Climatology has a 30 day window and is on a daily basis.
+
+
+MINMAX not changing
+
+Named regions, and use as default comparison
+
+ROADMAP + EXISTING FUNCTIONALITY
+
++ ROADMAP for P1

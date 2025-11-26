@@ -108,6 +108,7 @@ const setDate = (dateVal: number) => {
 }
 const autoScrolling = ref(false)
 const scrollToYear = (year: number) => {
+	console.trace('scrollToYear', year)
 	if (scroller.value) {
 		// Snap to top of specified year
 		const yearsOffset = year - startYear.value
@@ -320,10 +321,11 @@ const endDrag = (event: MouseEvent) => {
 	if (time < 200 && Math.abs(event.clientX - startX) < 5) {
 		// This was a click, not a drag
 		// const container = containerRef.value
-		const xOffset =
+		const clickXOff =
 			event.clientX - (scroller.value?.getBoundingClientRect().left || 0)
-		const percentage = xOffset / (scroller.value?.clientWidth || 1)
 		if (isZoom.value) {
+			const percentage =
+				(clickXOff - xOffset.value) / (scroller.value?.clientWidth || 1)
 			if (!props.selectedEvent) return
 			const eventStart = getDayOfYear(props.selectedEvent.times[0])
 			const eventEnd = getDayOfYear(
@@ -349,6 +351,7 @@ const endDrag = (event: MouseEvent) => {
 				)
 			}
 		} else {
+			const percentage = clickXOff / (scroller.value?.clientWidth || 1)
 			const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
 			const dayFromStart = Math.floor(
 				1 + Math.max(0, Math.min(1, percentage)) * totalDays,
@@ -491,7 +494,7 @@ const needleOffsetPx = computed(() => {
 	const containerWidth = scroller.value?.clientWidth
 	if (isOverview.value) {
 		return 40 + (pct! / 100) * (containerWidth! - 40)
-	} else if(isZoom.value) {
+	} else if (isZoom.value) {
 		return (pct! / 100) * containerWidth! + xOffset.value
 	} else {
 		return (pct! / 100) * containerWidth!
@@ -517,7 +520,7 @@ onMounted(() => {
 		eventBoxesForYear.value[year] = res.events
 	}
 	const handleKey = (e: KeyboardEvent) => {
-		if(isTimeline.value) return
+		if (isTimeline.value) return
 		// TODO Should all of this go in a global key handler? Perhaps not, since people use arrow keys on maps?
 		if (e.key === 'ArrowLeft') prevDay()
 		else if (e.key === 'ArrowRight') nextDay()
@@ -556,7 +559,6 @@ onMounted(() => {
 		scroller.value.scrollTo({
 			top: scrollOffset * rowHeight.value,
 		})
-		// console.log('and scrolled to', selectedYear.value)
 	}
 
 	onBeforeUnmount(() => {
@@ -590,9 +592,6 @@ const scrollListener = () => {
 	setDate(newDate)
 	// console.log('scrolled to year', newYear)
 }
-const scrollEnded = () => {
-	// autoScrolling.value = false
-}
 watch(isOverview, (newVal) => {
 	// console.log('isOverview changed to', newVal)
 	if (newVal) {
@@ -607,9 +606,7 @@ watch(isOverview, (newVal) => {
 				if (scroller.value === null) return
 				// @ts-ignore
 				scroller.value!.style.overflow = 'auto'
-				// console.log(
-				// 	'setting scrollTop tomanully',
-				// )
+				console.log('setting scrollTop tomanully')
 				scroller.value!.scrollTop =
 					(selectedYear.value - startYear.value) * rowHeight.value
 			},
@@ -697,10 +694,10 @@ watch(
 		// 	rowsToShow.value,
 		// )
 		if ((newVal[0] !== oldVal[0] || newVal[1]) && scroller.value) {
-			console.log(
-				'TimeReel: selected event changed, scrolling to',
-				selectedYear.value,
-			)
+			// console.log(
+			// 	'TimeReel: selected event changed, scrolling to',
+			// 	selectedYear.value,
+			// )
 			const yearsOffset = selectedYear.value - startYear.value
 			const scrollOffset = 0.5 * (yearsOffset * 2)
 			scroller.value.scrollTo({
@@ -723,16 +720,20 @@ watch(
 )
 
 const xScaleFactor = computed(() => {
-	const panelWidth = document.getElementById('event-graph-width-el')?.clientWidth
+	const panelWidth = document.getElementById(
+		'event-graph-width-el',
+	)?.clientWidth
 	const totalWidth = timeReelRef.value?.clientWidth
 
 	return panelWidth && totalWidth ? totalWidth / panelWidth : 1.0
 })
 const xOffset = computed(() => {
-	const paddingOffset = document.getElementById('event-graph-width-el')?.getBoundingClientRect().left
-	const panelOffset = document.getElementById('event-graphs')?.getBoundingClientRect().left
-
-	console.log('XOFFSETS', paddingOffset, panelOffset)
+	const paddingOffset = document
+		.getElementById('event-graph-width-el')
+		?.getBoundingClientRect().left
+	const panelOffset = document
+		.getElementById('event-graphs')
+		?.getBoundingClientRect().left
 
 	return paddingOffset! - panelOffset! || 0
 })
@@ -745,7 +746,6 @@ const viewportTransform = computed(() => {
 		const nDays = (eventEnd - eventStart + 2) * xScaleFactor.value
 		const scale = Math.max(1, 366 / nDays)
 		const pxPerDay = (timeReelRef.value?.clientWidth || 1) / nDays
-		console.log('XOFFSET', xOffset.value)
 
 		// return 'translate(0, 0)'
 		return `scale(${scale}, 1) translate(${-(eventStart - 1)}, 0) translate(${xOffset.value / pxPerDay}, 0)`
@@ -905,7 +905,6 @@ const dateTranslate = computed(() => {
 			class="scroller"
 			ref="scrollerRef"
 			@scroll="scrollListener"
-			@scrollend="scrollEnded"
 			@mousedown="startDrag"
 			@prevent.default
 			:class="{
@@ -954,7 +953,6 @@ const dateTranslate = computed(() => {
 								<stop offset="51%" :stop-color="scssVars.c3sblue" />
 								<stop offset="100%" :stop-color="scssVars.c3sblue" />
 							</linearGradient>
-
 							<filter
 								id="blur"
 								x="-20%"
@@ -965,12 +963,12 @@ const dateTranslate = computed(() => {
 							>
 								<feGaussianBlur stdDeviation="0.00051 0.0051" />
 								<feComponentTransfer>
-									<feFuncR type="linear" slope="1.2" />
-									<feFuncG type="linear" slope="1.2" />
-									<feFuncB type="linear" slope="1.2" />
-									<feFuncA type="linear" slope="0.75" />
+									<feFuncA type="linear" slope="0.6" />
 								</feComponentTransfer>
+								<!-- Drop saturation by 50% -->
+								<feColorMatrix type="saturate" values="0.5" />
 							</filter>
+
 							<filter
 								id="dropShadow"
 								x="-50%"
@@ -985,6 +983,43 @@ const dateTranslate = computed(() => {
 									stdDeviation="0.02 0.1"
 									flood-color="var(--highlight)"
 								/>
+							</filter>
+
+							<filter
+								id="halo"
+								x="-50%"
+								y="-50%"
+								width="200%"
+								height="200%"
+								primitiveUnits="objectBoundingBox"
+							>
+								<!-- Slight halo -->
+								<feGaussianBlur
+									in="SourceAlpha"
+									stdDeviation="0.03"
+									result="blurred"
+								/>
+								<feFlood flood-color="var(--highlight)" result="color" />
+								<feComposite
+									in="color"
+									in2="blurred"
+									operator="in"
+									result="halo"
+								/>
+
+								<!-- Boost saturation -->
+								<feColorMatrix
+									in="halo"
+									type="saturate"
+									values="1.5"
+									result="haloSaturated"
+								/>
+
+								<!-- Merge original graphic on top -->
+								<feMerge>
+									<feMergeNode in="haloSaturated" />
+									<feMergeNode in="SourceGraphic" />
+								</feMerge>
 							</filter>
 						</defs>
 
@@ -1061,14 +1096,14 @@ const dateTranslate = computed(() => {
 											[box.type]: true,
 										}"
 										:fill="box.color || scssVars.c3sred"
-										:x="-1 + box.startX - year * TOTAL_DAYS"
+										:x="box.startX - year * TOTAL_DAYS"
 										:width="box.endX - box.startX + 1"
 										:y="positionY(box.y, box.type)"
 										:height="eventHeight"
 										:key="box.eventId"
 										vector-effect="non-scaling-stroke"
 										@click="eventClicked(box)"
-										@mouseover="eventHovered(box)"
+										@mouseover="isZoom ? null : eventHovered(box)"
 									></rect>
 									<rect
 										v-if="hoverEvent !== null && year === selectedYear"
@@ -1081,20 +1116,20 @@ const dateTranslate = computed(() => {
 											[box.type]: true,
 										}"
 										:fill="scssVars.lightbulb"
-										:x="-1 + box.startX - year * TOTAL_DAYS"
+										:x="box.startX - year * TOTAL_DAYS"
 										:width="box.endX - box.startX + 1"
 										:y="positionY(box.y, box.type)"
 										:height="eventHeight"
 										:key="box.eventId + '-highlight'"
 										stroke-width="2"
 										vector-effect="non-scaling-stroke"
-										filter="url(#dropShadow)"
-										@click="eventClicked(box)"
+										filter="url(#halo)"
+										@click="isZoom ? () => {} : eventClicked(box)"
 										@mouseleave="eventHovered(null)"
 									></rect>
 								</g>
 								<!-- Draw selected event on top. This ensures it is always visible even if overlapping other events -->
-								<g filter="url(#dropShadow)">
+								<g filter="url(#halo)">
 									<rect
 										v-if="
 											isZoom &&
@@ -1386,7 +1421,9 @@ const dateTranslate = computed(() => {
 		backdrop-filter: $frosty;
 		&.overview {
 			overflow-y: visible;
-			transition: opacity $transition, backdrop-filter $transition,
+			transition:
+				opacity $transition,
+				backdrop-filter $transition,
 				background $transition;
 			&.dragging {
 				background: transparent;

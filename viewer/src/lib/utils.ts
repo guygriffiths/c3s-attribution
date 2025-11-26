@@ -78,10 +78,9 @@ export const interpolateColorCold = (
 	}
 }
 
-export const binGradient = (
-	startPct: number,
-	endPct: number,
+export const colorMixer = (
 	startColor: string,
+	startPct: number,
 	endColor: string,
 ) => {
 	// Interpolate between red and blue based on startPct
@@ -89,10 +88,9 @@ export const binGradient = (
 	const mix = d3.interpolateRgb(
 		startColor ?? 'rgb(151, 24, 65)',
 		endColor ?? 'rgb(44, 102, 162)',
-	)(endPct) // or 1-startPct
+	)(1 - startPct) // or 1-startPct
 
 	return mix
-	// return `linear-gradient(135deg, ${startColor} ${startPct * 100}%, ${mix} 50%, ${endColor} ${endPct * 100}%)`
 }
 
 // Switch to a specific theme
@@ -154,7 +152,7 @@ export const niceNumber = (n: number) => {
 
 	const fmt = (x: number) =>
 		x
-			.toFixed(2) // start with 3 d.p.
+			.toFixed(1) // start with 1 d.p.
 			.replace(/\.?0+$/, '') // strip trailing zeros + dot
 
 	if (abs >= 1e12) return fmt(num / 1e12) + 't'

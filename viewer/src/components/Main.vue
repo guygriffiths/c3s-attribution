@@ -38,6 +38,7 @@ import {
 	IconMenu2,
 	IconX,
 } from '@tabler/icons-vue'
+import EventDayPanel from './EventDayPanel.vue'
 
 const $l = useLabels()
 const store = useStore()
@@ -206,6 +207,17 @@ const toggleInfoPanel = () => {
 <template>
 	<div class="main">
 		<FocusFrame id="focus-frame" :active="store.isFocused" @close="exitFocus" />
+
+		<MapComponent id="map"></MapComponent>
+
+		<div id="logo">LOGO ETC</div>
+
+		<ModeToggle
+			v-model="store.viewMode"
+			id="mode-toggle"
+			:class="{ hidden: timeStore.timePanelExpanded }"
+		/>
+
 		<button
 			id="hamburger-button"
 			class="glassy color"
@@ -229,12 +241,111 @@ const toggleInfoPanel = () => {
 			<h1>Animation speed</h1> -->
 		</div>
 
-		<MapComponent id="map"></MapComponent>
-		<ModeToggle
-			v-model="store.viewMode"
-			id="mode-toggle"
-			:class="{ hidden: timeStore.timePanelExpanded }"
+		<!-- Event Panel -->
+		<!-- This is the panel on the left with graphs for an individual event -->
+		<EventDayPanel
+			id="event-day-panel"
+			:selected-event="eventStore.selectedEvent"
+			:selected-index="selectedDayIdx !== null ? selectedDayIdx : 0"
+			class="panel left"
+			:class="{
+				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
+			}"
 		/>
+		<EventGraphs
+			id="event-graphs"
+			:selected-event="eventStore.selectedEvent"
+			:event-store="eventStore"
+			class="panel left"
+			:class="{
+				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
+			}"
+			@dateSelected="
+				(date: number) => {
+					timeStore.selectedTime = new Date(date)
+				}
+			"
+		/>
+
+		<!-- Multi-Event Panel -->
+		<!-- This is the panel on the right with rankings and histograms -->
+		<button
+			id="multi-button"
+			class="glassy color"
+			:class="{
+				hidden: store.viewMode !== 'heatmap',
+				close: store.showMultiPanel,
+			}"
+			@click="store.showMultiPanel = !store.showMultiPanel"
+		>
+			<IconChartHistogram
+				size="24"
+				aria-hidden="true"
+				v-if="!store.showMultiPanel"
+			/>
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+		<MultiEventSmartPanel
+			id="multi-event-panel"
+			:events-of-interest="
+				store.viewMode === 'heatmap' ? eventsOfInterest : currentEvents
+			"
+			class="right panel"
+			:class="{
+				selected: eventStore.eventSelected,
+				active: store.showMultiPanel && store.viewMode === 'heatmap',
+			}"
+		/>
+
+		<!-- Event Info Panel -->
+		<!-- This is the event information at the bottom center of the screen -->
+		<button
+			id="info-button"
+			class="glassy color"
+			:class="{
+				hidden:
+					timeStore.timePanelExpanded ||
+					(store.isFocused && store.viewMode === 'timemachine'),
+				close: store.showInfoPanel,
+			}"
+			@click="store.showInfoPanel = !store.showInfoPanel"
+		>
+			<IconInfoSquareRounded
+				size="24"
+				aria-hidden="true"
+				v-if="!store.showInfoPanel"
+			/>
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+		<EventInfoPanel
+			id="event-info-panel"
+			:selected-event="eventStore.selectedEvent"
+			:main-store="store"
+			:event-store="eventStore"
+			:time-store="timeStore"
+			:events-of-interest="
+				store.viewMode === 'timemachine' ? currentEvents : eventsOfInterest
+			"
+			:class="{
+				'disable-transitions': timeStore.isPlaying,
+				show:
+					store.showInfoPanel &&
+					!timeStore.timePanelExpanded &&
+					!(store.isFocused && store.viewMode === 'timemachine'),
+			}"
+		>
+		</EventInfoPanel>
+		<SelectedEventInfoPanel
+			id="selected-event-info-panel"
+			v-if="eventStore.selectedEvent"
+			:selected-event="eventStore.selectedEvent"
+			:event-store="eventStore"
+			:class="{
+				show: eventStore.selectedEvent !== null && store.showInfoPanel,
+				single: store.viewMode === 'timemachine' && store.isFocused,
+			}"
+		/>
+
 		<!-- Time Panel -->
 		<div
 			id="time-panel"
@@ -293,154 +404,6 @@ const toggleInfoPanel = () => {
 			</button>
 		</div>
 
-		<!-- Event Info Panel -->
-		<!-- This is the event information at the bottom center of the screen -->
-		<button
-			id="info-button"
-			class="glassy color"
-			:class="{
-				hidden:
-					timeStore.timePanelExpanded ||
-					(store.isFocused && store.viewMode === 'timemachine'),
-				close: store.showInfoPanel,
-			}"
-			@click="store.showInfoPanel = !store.showInfoPanel"
-		>
-			<IconInfoSquareRounded
-				size="24"
-				aria-hidden="true"
-				v-if="!store.showInfoPanel"
-			/>
-			<IconX size="24" aria-hidden="true" v-else />
-		</button>
-		<EventInfoPanel
-			id="event-info-panel"
-			:selected-event="eventStore.selectedEvent"
-			:main-store="store"
-			:event-store="eventStore"
-			:time-string="
-				store.viewMode === 'timemachine'
-					? format(timeStore.selectedTime, 'dd MMM yy')
-					: timeStore.startTimeFilter?.getUTCFullYear() +
-						' - ' +
-						timeStore.endTimeFilter?.getUTCFullYear()
-			"
-			:events-of-interest="
-				store.viewMode === 'timemachine' ? currentEvents : eventsOfInterest
-			"
-			:class="{
-				'disable-transitions': timeStore.isPlaying,
-				show:
-					store.showInfoPanel &&
-					!timeStore.timePanelExpanded &&
-					!(store.isFocused && store.viewMode === 'timemachine'),
-			}"
-		>
-		</EventInfoPanel>
-		<SelectedEventInfoPanel
-			id="selected-event-info-panel"
-			v-if="eventStore.selectedEvent"
-			:selected-event="eventStore.selectedEvent"
-			:event-store="eventStore"
-			:class="{
-				show: eventStore.selectedEvent !== null && store.showInfoPanel,
-				single: store.viewMode === 'timemachine' && store.isFocused,
-			}"
-		/>
-
-		<!-- Multi-Event Panel -->
-		<!-- This is the panel on the right with rankings and histograms -->
-		<button
-			id="multi-button"
-			class="glassy color"
-			:class="{
-				hidden: store.viewMode !== 'heatmap',
-				close: store.showMultiPanel,
-			}"
-			@click="store.showMultiPanel = !store.showMultiPanel"
-		>
-			<IconChartHistogram
-				size="24"
-				aria-hidden="true"
-				v-if="!store.showMultiPanel"
-			/>
-			<IconX size="24" aria-hidden="true" v-else />
-		</button>
-		<MultiEventSmartPanel
-			id="multi-event-panel"
-			:events-of-interest="
-				store.viewMode === 'heatmap' ? eventsOfInterest : currentEvents
-			"
-			class="right panel"
-			:class="{
-				selected: eventStore.eventSelected,
-				active: store.showMultiPanel && store.viewMode === 'heatmap',
-			}"
-		/>
-
-		<!-- Event Panel -->
-		<!-- This is the panel on the left with event timeseries etc. -->
-		<!-- <div
-			id="event-panel"
-			class="panel left"
-			:class="{
-				small: store.viewMode === 'heatmap',
-				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
-			}"
-		>
-			<div
-				class="subpanel histo"
-				:class="{ hidden: selectedDayIdx === null }"
-				:style="`margin-left: ${offset}%`"
-			>
-				<Histogram
-					v-if="eventStore.selectedEvent"
-					:data="
-						eventStore.intensitiesForEventStep(
-							eventStore.selectedEvent,
-							timeStore.selectedTime,
-						)
-					"
-					:nbins="10"
-					:xmin="0"
-					:xmax="eventStore.intensityRange[1]"
-					:y-max-count="
-						eventStore.selectedEvent.slices
-							? 0.75 *
-								Math.max(
-									...eventStore.selectedEvent?.slices.map((s) => s.length),
-								)
-							: 1
-					"
-					:labelFunc="(v: number) => v.toFixed(1)"
-					:units="'°C'"
-					:types="
-						eventStore.selectedEvent.times.map(
-							() => eventStore.selectedEvent?.event_type || 'hot',
-						)
-					"
-					variable="intensity"
-				/>
-			</div>
-			<div
-				class="funnel"
-				:class="{ hidden: selectedDayIdx === null }"
-				:style="`clip-path: ${funnelPoints};`"
-			/>
-			<div class="subpanel"></div>
-		</div> -->
-
-		<EventGraphs
-			id="event-graphs"
-			:selected-event="eventStore.selectedEvent"
-			:event-store="eventStore"
-			class="panel left"
-			:class="{
-				small: store.viewMode === 'heatmap',
-				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
-			}"
-		/>
-
 		<!-- Event Window -->
 		<!-- This is the invisible div that defines where the map should zoom to -->
 		<div
@@ -451,8 +414,6 @@ const toggleInfoPanel = () => {
 				multiEventPanelOn: store.viewMode === 'heatmap',
 			}"
 		/>
-
-		<div id="logo">LOGO ETC</div>
 	</div>
 </template>
 
@@ -469,14 +430,19 @@ const toggleInfoPanel = () => {
 	max-height: 100vh;
 	position: relative;
 
+	#focus-frame {
+		overflow: hidden;
+		transition: all $transition;
+		z-index: 200;
+		position: absolute;
+	}
+
 	#map {
 		flex: 1 1 100%;
 		height: 100vh;
 		min-height: 100vh;
 		width: 100vw;
 		min-width: 100vw;
-
-		// z-index: 0;
 	}
 
 	#logo {
@@ -531,131 +497,22 @@ const toggleInfoPanel = () => {
 		z-index: 350;
 	}
 
-	#focus-frame {
-		overflow: hidden;
-		transition: all $transition;
-		z-index: 200;
+	$eventGap: calc(100% - $smallTimePanelHeight - 4.5 * $panelMargin - 0.5 * $infoHeight - $headerHeight);
+	$eventPanelHeight: calc($eventGap * 0.5 - 0.5 * $panelMargin);
+	#event-day-panel {
 		position: absolute;
+		width: $eventPanelWidth;
+		left: $panelMargin;
+		height: $eventPanelHeight;
+		bottom: calc(
+			3 * $panelMargin + $smallTimePanelHeight + $eventPanelHeight
+		);
 	}
-
-	#time-panel {
-		z-index: 150;
-		width: calc(100% - 2 * $panelMargin);
-		right: $panelMargin;
-		bottom: $panelMargin;
-		height: $timePanelHeight;
-		transition: all $transition;
-		border-radius: $borderRadius;
-		background: transparent;
-		backdrop-filter: none;
-
-		.bar-icon {
-			// Manually tweak this icon so that it looks like an event bars icon with the bars offset
-			// rather than the normal bar chart icon
-			transform: rotate(-90deg);
-
-			path:first-child {
-				transform: scaleY(1.5);
-				transform-box: fill-box; /* or view-box */
-				transform-origin: center;
-				vector-effect: non-scaling-stroke;
-			}
-			path:nth-child(3) {
-				transform: scaleY(1) translateY(-3px);
-				transform-box: fill-box; /* or view-box */
-				transform-origin: center;
-				vector-effect: non-scaling-stroke;
-			}
-			path:last-child {
-				display: none;
-			}
-		}
-
-		&.expanded {
-			height: calc(100% - 2 * $panelMargin);
-		}
-
-		&.event {
-			height: $smallTimePanelHeight;
-			border-top: none;
-			border-top-right-radius: 0;
-			border-top-left-radius: 0;
-			border-bottom-left-radius: 0;
-
-			&.timemachine {
-				background: var(--panel-bg);
-			}
-		}
-
-		&.heatmap {
-			height: $smallTimePanelHeight;
-			background-color: var(--panel-bg-alt);
-			// transition: height $transition;
-		}
-
-		#times {
-			width: 100%;
-			height: 100%;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			border: none;
-			border-radius: $borderRadius;
-
-			.scroller {
-				border-radius: $borderRadius !important;
-			}
-		}
-		.show-bars,
-		.panel-expand {
-			padding: 0.5rem;
-			position: absolute;
-			right: 0;
-			top: 0;
-			z-index: 20;
-			width: 2.5rem;
-			height: 2.5rem;
-			border-radius: 0;
-			box-shadow: unset;
-		}
-		.show-bars {
-			border-bottom-right-radius: $borderRadius;
-			border-top-left-radius: $borderRadius;
-		}
-		.panel-expand {
-			border-top-right-radius: $borderRadius;
-			border-bottom-left-radius: $borderRadius;
-			// background-color: var(--primary-glass);
-		}
-		&.expanded {
-			.panel-expand {
-				// right: -$panelMargin;
-				// top: -$panelMargin;
-				width: 2rem;
-				height: 2rem;
-				padding: 0.25rem;
-			}
-		}
-		.panel-sideline {
-			position: absolute;
-			left: -20px;
-			z-index: 20;
-		}
-		.show-bars {
-			right: unset;
-			left: 0;
-
-			z-index: 20;
-		}
-	}
-
 	#event-graphs {
 		position: absolute;
 		width: $eventPanelWidth;
 		left: $panelMargin;
-		height: calc(
-			100% - $smallTimePanelHeight - 4 * $panelMargin - 0.5 * $infoHeight - 3rem - 10rem
-		);
+		height: $eventPanelHeight;
 		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
 		// display: flex;
 		// flex-direction: column;
@@ -814,10 +671,123 @@ const toggleInfoPanel = () => {
 		}
 	}
 
+	#time-panel {
+		z-index: 150;
+		width: calc(100% - 2 * $panelMargin);
+		right: $panelMargin;
+		bottom: $panelMargin;
+		height: $timePanelHeight;
+		transition: all $transition;
+		border-radius: $borderRadius;
+		background: transparent;
+		backdrop-filter: none;
+
+		.bar-icon {
+			// Manually tweak this icon so that it looks like an event bars icon with the bars offset
+			// rather than the normal bar chart icon
+			transform: rotate(-90deg);
+
+			path:first-child {
+				transform: scaleY(1.5);
+				transform-box: fill-box; /* or view-box */
+				transform-origin: center;
+				vector-effect: non-scaling-stroke;
+			}
+			path:nth-child(3) {
+				transform: scaleY(1) translateY(-3px);
+				transform-box: fill-box; /* or view-box */
+				transform-origin: center;
+				vector-effect: non-scaling-stroke;
+			}
+			path:last-child {
+				display: none;
+			}
+		}
+
+		&.expanded {
+			height: calc(100% - 2 * $panelMargin);
+		}
+
+		&.event {
+			height: $smallTimePanelHeight;
+			border-top: none;
+			border-top-right-radius: 0;
+			border-top-left-radius: 0;
+			border-bottom-left-radius: 0;
+
+			&.timemachine {
+				background: var(--panel-bg);
+			}
+		}
+
+		&.heatmap {
+			height: $smallTimePanelHeight;
+			background-color: var(--panel-bg-alt);
+			// transition: height $transition;
+		}
+
+		#times {
+			width: 100%;
+			height: 100%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border: none;
+			border-radius: $borderRadius;
+
+			.scroller {
+				border-radius: $borderRadius !important;
+			}
+		}
+		.show-bars,
+		.panel-expand {
+			padding: 0.5rem;
+			position: absolute;
+			right: 0;
+			top: 0;
+			z-index: 20;
+			width: 2.5rem;
+			height: 2.5rem;
+			border-radius: 0;
+			box-shadow: unset;
+		}
+		.show-bars {
+			border-bottom-right-radius: $borderRadius;
+			border-top-left-radius: $borderRadius;
+		}
+		.panel-expand {
+			border-top-right-radius: $borderRadius;
+			border-bottom-left-radius: $borderRadius;
+			// background-color: var(--primary-glass);
+		}
+		&.expanded {
+			.panel-expand {
+				// right: -$panelMargin;
+				// top: -$panelMargin;
+				width: 2rem;
+				height: 2rem;
+				padding: 0.25rem;
+			}
+		}
+		.panel-sideline {
+			position: absolute;
+			left: -20px;
+			z-index: 20;
+		}
+		.show-bars {
+			right: unset;
+			left: 0;
+
+			z-index: 20;
+		}
+	}
+
 	#multi-button.close,
 	#hamburger-button.close,
 	#info-button.close {
-		border-radius: 10%;
+		border-radius: $borderRadius;
+		border-top-left-radius: 0;
+		border-bottom-right-radius: 0;
 		width: 1.5rem;
 		height: 1.5rem;
 		padding: 0rem;
