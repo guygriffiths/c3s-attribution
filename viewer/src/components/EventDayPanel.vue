@@ -134,7 +134,7 @@ watch(
 		}
 		maxcount.value = Math.ceil(localCount * 1.05)
 		dayBins.value = newBins
-		console.log(maxcount.value, xmin.value, xmax.value)
+		// console.log(maxcount.value, xmin.value, xmax.value)
 	},
 	{ immediate: true },
 )
@@ -358,39 +358,7 @@ const size = computed(() => {
 		}
 
 		.axis {
-			flex: 0 0 2.5rem;
-			height: calc(100% - 2.5rem);
-			display: flex;
-			flex-direction: column-reverse;
-			justify-content: space-between;
-			align-items: center;
-			overflow: visible;
-			font-size: 0.85rem;
-
-			.label {
-				user-select: none;
-				font-size: 0.85rem;
-				color: var(--text-secondary);
-			}
-
-			.icon {
-				color: var(--text-secondary);
-				flex: 0 0 auto;
-				width: 1.5rem;
-				height: 1.5rem;
-				margin: 0.25rem 0;
-
-				display: flex;
-				align-items: center;
-				justify-content: center;
-
-				&.hot {
-					color: var(--theme-hot-primary);
-				}
-				&.cold {
-					color: var(--theme-cold-primary);
-				}
-			}
+			height: calc(100% - 2.5rem)
 		}
 	}
 

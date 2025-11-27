@@ -93,3 +93,25 @@ Named regions, and use as default comparison
 ROADMAP + EXISTING FUNCTIONALITY
 
 + ROADMAP for P1
+
+P1
+--
+Done:
+* All the stuff you can see.
+
+To come:
+* Time range selection for heatmap view
+* Greater interactivity with analytics charts (zoom/pan, etc, select-similar events)
+* Logos
+
+P2
+--
+* Dual filters (e.g. 4 < duration < 10)
+* Precipitation (drought/wet to mirror heat/cold duality)
+* Data 1940-1979
+* Achievements system
+* Contextual help
+* Chart and chart data download
+* User-uploadable regions
+* Save user settings in local storage, including custom regions.
+* Settle on the most useful definitions

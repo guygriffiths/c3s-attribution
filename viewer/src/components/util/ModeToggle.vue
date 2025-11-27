@@ -40,8 +40,8 @@ const ariaLabel = computed(() =>
 			class="mode-button glassy"
 			:class="{ [mode]: true, selected: mode === 'heatmap' }"
 			@click="mode = 'heatmap'"
-			:aria-label="ariaLabel"
-			:aria-pressed="mode === 'timemachine'"
+			aria-label="Select heatmap mode"
+			:aria-pressed="mode === 'heatmap'"
 			role="switch"
 		>
 			<IconLayersIntersect

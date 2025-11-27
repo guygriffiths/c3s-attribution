@@ -101,34 +101,11 @@ const sortFunc = computed(() => {
 			<button
 				@click="props.mainStore.cycleSorts"
 				class="cycle-sort-button glassy"
-				popovertarget="pop-sortby"
 			>
 				<IconStopwatch v-if="mainStore.focusVariable === 'duration'" />
 				<IconDimensions v-else-if="mainStore.focusVariable === 'size'" />
 				<IconTemperature v-else />
 			</button>
-			<div id="pop-sortby" class="pop-over glassy" popover>
-				<div class="pop-over-content">
-					<div
-						class="pop-over-item"
-						@click="mainStore.setFocusVariable('duration')"
-					>
-						<IconClockHour4 class="icon" />
-					</div>
-					<div
-						class="pop-over-item"
-						@click="mainStore.setFocusVariable('size')"
-					>
-						<IconDimensions class="icon" />
-					</div>
-					<div
-						class="pop-over-item"
-						@click="mainStore.setFocusVariable('intensity')"
-					>
-						<IconTemperature class="icon" />
-					</div>
-				</div>
-			</div>
 			<button @click="toggleAscDesc" class="cycle-sort-button glassy">
 				<IconSortDescendingSmallBig v-if="sortDesc" />
 				<IconSortAscendingSmallBig v-else />
@@ -296,15 +273,4 @@ const sortFunc = computed(() => {
 	}
 }
 
-.cycle-sort-button {
-	padding: 0.125rem;
-	margin: 0;
-	cursor: pointer;
-	box-shadow: none;
-
-	.tabler-icon {
-		width: 1rem;
-		color: var(--text-primary);
-	}
-}
 </style>
