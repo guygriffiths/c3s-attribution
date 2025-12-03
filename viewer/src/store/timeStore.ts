@@ -31,7 +31,7 @@ export const useStore = defineStore('time', {
 			endTimeFilter: null,
 
 			// Whether to plot individual events as bars in the time reel
-			showBars: false,
+			showBars: true,
 
 			// Whether the time panel is expanded - i.e. in overview mode
 			timePanelExpanded: false,

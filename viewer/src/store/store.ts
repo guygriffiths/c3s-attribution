@@ -47,7 +47,7 @@ export const useStore = defineStore('main', {
 			loadingMessage: null,
 			mapSoftLoadingCount: 0,
 			eventSoftLoadingCount: 0,
-			viewMode: 'heatmap', // 'timemachine' or 'heatmap'
+			viewMode: 'timemachine', // 'timemachine' or 'heatmap'
 			mapCentre: new LatLng(-20, 0) as unknown as Point, // Default center point for the map
 
 			lat2Index: d3

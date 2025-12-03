@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useLabels } from '@/lib/labels'
 import { format } from 'date-fns'
 import {
 	IconAward,
-	IconCalendar,
-	IconClockHour4,
 	IconDimensions,
-	IconDownload,
 	IconSortAscendingSmallBig,
 	IconSortDescendingSmallBig,
 	IconStopwatch,
@@ -15,15 +11,11 @@ import {
 	IconTemperatureSnow,
 	IconTemperatureSun,
 } from '@tabler/icons-vue'
-import { dayStr } from '@/lib/time-utils'
 import EventRanker from './util/EventRanker.vue'
 import CalendarIcon from './util/CalendarIcon.vue'
-import { sort } from 'd3'
-
-const $l = useLabels()
 
 const props = defineProps<{
-	selectedEvent: ExtremeEvent | null
+	selectedEvent: ExtremeEvent | ExtremeEventFull | null
 	mainStore: any
 	eventStore: any
 	timeStore: any
@@ -125,15 +117,12 @@ const sortFunc = computed(() => {
 </template>
 
 <style>
-/* .calendar-frame { */
 /* Remove the inner details of the calendar icon to make space for the date number */
-/* .calendar-frame > path:nth-child(4), */
 .calendar-frame > path:nth-child(5),
 .calendar-frame > path:nth-child(6) {
 	display: none !important;
 	opacity: 0 !important;
 }
-/* } */
 </style>
 
 <style scoped>

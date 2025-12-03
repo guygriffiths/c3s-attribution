@@ -141,7 +141,7 @@ const computeOpacity = (n: number, maxOpacity = 0.5) =>
 	Math.min(maxOpacity, maxOpacity * Math.pow(n, -0.2))
 
 watch(() => xyData.value, (newPts) => {
-	console.log('Updating scatter plot points:', newPts.length)
+	// console.log('Updating scatter plot points:', newPts.length)
 	const now = performance.now()
 	const newIds = new Set(newPts.map((p) => p.id ?? `__idx_${p.x}_${p.y}`))
 
@@ -184,7 +184,7 @@ watch([xyData, width, height, () => props.highlightId], () => {
 })
 
 function draw() {
-	console.log('Drawing scatter plot', pointStates.size, 'points', pointStates)
+	// console.log('Drawing scatter plot', pointStates.size, 'points', pointStates)
 	if (!canvasRef.value) return
 	const ctx = canvasRef.value.getContext('2d')!
 	ctx.clearRect(0, 0, width.value, height.value)

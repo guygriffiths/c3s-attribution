@@ -14,7 +14,7 @@ import {
 import { dayStr } from '@/lib/time-utils'
 
 const props = defineProps<{
-	selectedEvent: ExtremeEvent
+	selectedEvent: ExtremeEvent | ExtremeEventFull
 	eventStore: any
 }>()
 

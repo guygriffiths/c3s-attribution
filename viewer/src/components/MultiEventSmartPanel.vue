@@ -45,27 +45,36 @@ watch(
 	},
 )
 
-const xmin = computed(() => {
-	return store.focusVariable === 'duration'
+const minVar = (focus: string) => {
+	return focus === 'duration'
 		? eventStore.durationRange[0]
-		: store.focusVariable === 'size'
+		: focus === 'size'
 			? eventStore.sizeRange[0]
 			: eventStore.intensityRange[0]
+}
+const xmin = computed(() => {
+	return minVar(store.focusVariable)
 })
+const ymin = computed(() => {
+	return minVar(scatterY.value)
+})
+const maxVar = (focus: string) => {
+	return focus === 'duration'
+		? Math.max(eventStore.durationP90 || 0, 13) || eventStore.durationRange[1]
+		: focus === 'size'
+			? eventStore.sizeP90 || eventStore.sizeRange[1]
+			: Math.max(
+					eventStore.heatIntensityP90 || 0,
+					eventStore.coldIntensityP90 || 0,
+				)
+}
 const xmax = computed(() => {
-	const xmax =
-		store.focusVariable === 'duration'
-			? Math.max(eventStore.durationP90 || 0, 13) || eventStore.durationRange[1]
-			: store.focusVariable === 'size'
-				? eventStore.sizeP90 || eventStore.sizeRange[1]
-				: Math.max(
-						eventStore.heatIntensityRange[1] || 0,
-						eventStore.coldIntensityRange[1] || 0,
-					)
-	if (eventStore.selectedEvent !== null)
-		return Math.max(xmax, valueForEvent.value || 0)
-	return xmax
+	return maxVar(store.focusVariable)
 })
+const ymax = computed(() => {
+	return maxVar(scatterY.value)
+})
+
 const valueForEvent = computed(() => {
 	if (!eventStore.selectedEvent) return null
 	return store.focusVariable === 'duration'
@@ -110,42 +119,6 @@ const cycleYVar = () => {
 		else scatterY.value = 'intensity'
 	}
 }
-const ymin = computed(() => {
-	return scatterY.value === 'intensity'
-		? eventStore.intensityRange[0]
-		: scatterY.value === 'duration'
-			? eventStore.durationRange[0]
-			: eventStore.sizeRange[0]
-})
-const ymax = computed(() => {
-	const ymax =
-		scatterY.value === 'intensity'
-			? allHot.value
-				? Math.max(eventStore.heatIntensityP90 || 0, 1)
-				: allCold.value
-					? Math.max(eventStore.coldIntensityP90 || 0, 1)
-					: Math.max(
-							eventStore.heatIntensityP90 || 0,
-							eventStore.coldIntensityP90 || 0,
-						) || eventStore.intensityRange[1]
-			: scatterY.value === 'duration'
-				? Math.max(eventStore.durationP90 || 0, 13) ||
-					eventStore.durationRange[1]
-				: eventStore.sizeP90 || eventStore.sizeRange[1]
-	if (eventStore.selectedEvent !== null)
-		return Math.max(ymax, valueForEvent.value || 0)
-
-	if (scatterY.value === 'duration') {
-		return eventStore.durationRange[1]
-	}
-	if (scatterY.value === 'size') {
-		return eventStore.sizeRange[1]
-	}
-	if (scatterY.value === 'intensity') {
-		return eventStore.intensityRange[1]
-	}
-	return ymax
-})
 const ydata = computed(() => {
 	return scatterY.value === 'intensity'
 		? props.eventsOfInterest.map((e) => eventStore.intensityForEvent(e))

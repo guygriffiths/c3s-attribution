@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import HeatmapWorker from '@/lib/worker/heatmapRenderWorker?worker'
 import {
-	latLngToLayerPoint,
 	renderToContext,
 } from '@/lib/worker/heatmapRenderWorker'
-import { debounce, ECMWF_BONN } from '@/lib/utils'
+import {  ECMWF_BONN } from '@/lib/utils'
 import { useStore } from '@/store/store'
 import {
 	colorForValue,
@@ -25,7 +24,7 @@ import { Map as LeafletMap, LeafletMouseEvent } from 'leaflet'
 import 'leaflet-draw'
 import 'leaflet-draw/dist/leaflet.draw.css'
 import 'leaflet/dist/leaflet.css'
-import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
@@ -45,18 +44,15 @@ import {
 	getCurrentEvents,
 	setFilterToRegion,
 	setFilterToPoint,
-	getGlobalFilteredEvents,
 	getEventCount,
 	getFilteredEvents,
 	onGlobalEventsReady,
 	onCurrentEventsReady,
+	getGlobalFilteredEvents,
 } from '@/lib/eventsDB'
 import {
 	IconZoomIn,
 	IconZoomOut,
-	IconMapPin2,
-	IconMenu2,
-	IconX,
 	IconZoomReset,
 } from '@tabler/icons-vue'
 
@@ -272,18 +268,26 @@ watch(
 
 // If we change what kind of events are being shown, update the heatmap and filtered events
 watch(
-	() => [eventStore.eventTypeMode],
+	() => [
+		eventStore.eventTypeMode,
+	],
 	() => {
 		globalHeatmapEvents.value = getGlobalFilteredEvents()
 		currentEvents.value = getCurrentEvents(timeStore.selectedTime)
 		if (store.viewMode === 'heatmap') {
 			try {
+				console.log('calling manualHeatmapUpdate from event type/time filter change')
 				manualHeatmapUpdate()
 			} catch (e) {
 				console.warn('Error updating heatmap renderer', e)
 			}
 			if (store.filteringByPoint || store.filteringByRegion) {
-				regionFilteredEvents = getFilteredEvents()
+				regionFilteredEvents = getFilteredEvents().filter(
+					(event) =>
+						new Date(event.times[event.times.length - 1]) >=
+							timeStore.startTimeFilter! &&
+						new Date(event.times[0]) <= timeStore.endTimeFilter!,
+				)
 				try {
 					// @ts-ignore
 					fastRenderer._update()
@@ -395,6 +399,9 @@ const addEventPanes = () => {
 	// When leaflet triggers an update, re-remder the heatmap on the main thread
 	// Because we have already rendered this data once via the worker, GPU calculations
 	// should be cached and this should be *fast*
+	//
+	// TODO - NOt technically true. I have sent it empty data to prime the cache, which works.
+	// But I don;'t know why.
 	heatmapRenderer.on('update', () => {
 		// TODO - add pixel accurate method?
 		const canvasEl = (heatmapRenderer as any)._container
@@ -402,7 +409,7 @@ const addEventPanes = () => {
 
 		const ctxEl = canvasEl.getContext('2d')
 
-		const events = globalHeatmapEvents.value.map((event) => ({
+		const events = globalHeatmapEvents.value?.map((event) => ({
 			total_region: [...event.total_region],
 			event_type: event.event_type,
 			id: event.id,
@@ -482,27 +489,13 @@ const manualHeatmapUpdate = () => {
 	const canvasEl = (heatmapRenderer as any)._container
 	if (!canvasEl) return
 
+	// Apparently this is enough to precache whatever was slowing it down.
 	const offscreen = new OffscreenCanvas(canvasEl.width, canvasEl.height)
-	const events = globalHeatmapEvents.value.map((event) => ({
-		total_region: [...event.total_region],
-		event_type: event.event_type,
-		id: event.id,
-	}))
-	const zoom = map.value.getZoom()
-	const crs = map.value.options.crs // Usually L.CRS.EPSG3857
-	// @ts-ignore
-	const transformation = crs!.transformation
-	const scale = crs!.scale(zoom)
-	const pixelOrigin = map.value.getPixelOrigin()
-
 	heatmapWorker.postMessage(
 		{
 			canvas: offscreen,
-			events,
+			events: [],
 			mapState: {
-				scale,
-				transformation,
-				pixelOrigin,
 			},
 		},
 		[offscreen],
@@ -522,23 +515,6 @@ heatmapWorker.onmessage = (e) => {
 	}
 }
 
-const showMarker = computed(
-	() => store.filteringByPoint && store.viewMode === 'heatmap',
-)
-// const showMarkerTrigger = computed(
-// 	() => store.filteringByPoint && store.viewMode === 'heatmap',
-// )
-// const showMarker = ref(showMarkerTrigger.value)
-// watch(
-// 	showMarkerTrigger,
-// 	(newVal) => {
-// 		nextTick(() => {
-// 			showMarker.value = newVal
-// 		})
-// 	},
-// 	{ immediate: true },
-// )
-
 const zoomIn = () => {
 	if (map.value) {
 		map.value.zoomIn()
@@ -553,7 +529,7 @@ const resetZoom = () => {
 	fitBoundsToDiv(
 		mapRef.value!.leafletObject as L.Map,
 		document.getElementById('event-window')!,
-		[-50, -180, 85, 180],
+		[-70, -180, 85, 180],
 	)
 }
 </script>

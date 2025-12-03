@@ -2,8 +2,7 @@ import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
 	fetchAndIndexEvents,
 	getGlobalFilteredEvents,
-	onGlobalEventsReady,
-	setPostFilters,
+	onGlobalEventsReady
 } from '@/lib/eventsDB'
 import {
 	DATA_ROOT,
@@ -292,13 +291,7 @@ export const useStore = defineStore('events', {
 			// console.log('Running event filters')
 			const mainStore = useMainStore()
 			await mainStore.setLoading()
-
-			setPostFilters(
-				this.filters,
-				this.durationForEvent,
-				this.intensityForEvent,
-				this.sizeForEvent,
-			)
+			// this.refilterEventsDB()
 			// This needs to get set by the leaflet layers
 			mainStore.setLoadingDone()
 		},
@@ -317,11 +310,22 @@ export const useStore = defineStore('events', {
 			const to = 2024 //new Date().getFullYear()
 			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
 			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
-			timeStore.startTimeFilter = new Date(Date.UTC(from, 0, 1))
+			timeStore.startTimeFilter = new Date(
+				Date.UTC(Math.max(to - 20, from), 0, 1),
+			)
 			timeStore.endTimeFilter = new Date(Date.UTC(to, 11, 31))
+
+			// watch(
+			// 	() => [timeStore.startTimeFilter, timeStore.endTimeFilter],
+			// 	() => {
+			// 		this.refilterEventsDB()
+			// 	},
+			// 	{ immediate: true },
+			// )
 
 			onGlobalEventsReady(() => {
 				const events = getGlobalFilteredEvents()
+				// this.refilterEventsDB()
 				if (events.length > 0) {
 					if (!this.firstEventSetLoaded) {
 						this.firstEventSetLoaded = true

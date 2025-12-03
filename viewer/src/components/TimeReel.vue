@@ -38,36 +38,27 @@ import {
 	IconPlayerSkipForwardFilled,
 	IconPlayerTrackNextFilled,
 	IconPlayerTrackPrevFilled,
+	IconArrowsMove,
+	IconArrowBarToRight,
+	IconArrowBarToLeft,
 } from '@tabler/icons-vue'
+import { get } from '@vueuse/core'
 
 const $l = useLabels()
 
-const props = defineProps({
-	start: { type: Date, default: () => new Date(1970, 0, 1) },
-	end: { type: Date, default: () => new Date(2024, 0, 1) },
-	events: { type: Array<ExtremeEvent>, default: () => [] },
-	selectedEvent: {
-		type: Object as () => ExtremeEventFull | null,
-		default: null,
-	},
-	hoverEvent: {
-		type: Object as () => ExtremeEvent | null,
-		default: null,
-	},
-	mode: {
-		type: String as PropType<TimeReelMode>,
-		default: 'default',
-	},
-	showBars: { type: Boolean, default: true },
-	eventType: {
-		type: String as PropType<'hotcold' | 'hot' | 'cold'>,
-		default: 'hotcold',
-	},
-	colorForEvent: {
-		type: Function as PropType<(event: ExtremeEvent) => string | null>,
-		default: (event: ExtremeEvent) => event.color || null,
-	},
-})
+const props = defineProps<{
+	start: Date
+	end: Date
+	startFilter: Date | null
+	endFilter: Date | null
+	events: ExtremeEvent[]
+	selectedEvent: ExtremeEventFull | null
+	hoverEvent: ExtremeEvent | null
+	mode: TimeReelMode
+	showBars: boolean
+	eventType: 'hotcold' | 'hot' | 'cold'
+	colorForEvent: (event: ExtremeEvent) => string | null
+}>()
 
 // console.log('Time Reel: colorForEvent:', props.colorForEvent)
 
@@ -91,6 +82,8 @@ const emits = defineEmits<{
 	(event: 'playing'): void
 	(event: 'paused'): void
 	(event: 'hover', ev: ExtremeEvent | null): void
+	(event: 'update:startFilter', date: Date): void
+	(event: 'update:endFilter', date: Date): void
 }>()
 
 ////////////////////
@@ -276,8 +269,25 @@ const isDefault = computed(() => props.mode === 'default')
 const isOverview = computed(() => props.mode === 'overview')
 
 const localNeedleOffset = ref(null as number | null)
+const rangeDrag = ref<'start' | 'end' | 'move' | null>(null)
+let rangeDragStartDate: Date | null = null
+let rangeDragEndDate: Date | null = null
 const startDrag = (event: MouseEvent) => {
-	if (isTimeline.value) return
+	if (event === null || event.target === null) return
+	// console.log('startDrag', event, event.target)
+	if ((event.target as HTMLElement).classList.contains('start-handle')) {
+		rangeDrag.value = 'start'
+	} else if ((event.target as HTMLElement).classList.contains('end-handle')) {
+		rangeDrag.value = 'end'
+	} else if ((event.target as HTMLElement).classList.contains('grab-area')) {
+		rangeDrag.value = 'move'
+	} else {
+		rangeDrag.value = null
+	}
+	if(rangeDrag.value !== null) {
+		rangeDragStartDate = new Date(props.startFilter!)
+		rangeDragEndDate = new Date(props.endFilter!)
+	}
 	isDragging.value = true
 	hasMoved.value = true
 	// setTimeout(() => {
@@ -319,6 +329,13 @@ const endDrag = (event: MouseEvent) => {
 	localScrubberOffset.value = null
 	const time = performance.now() - startMs
 	if (time < 200 && Math.abs(event.clientX - startX) < 5) {
+		if (rangeDrag.value !== null) {
+			// Range drag ended with a click, ignore
+			rangeDrag.value = null
+			window.removeEventListener('mousemove', handleDrag)
+			window.removeEventListener('mouseup', endDrag)
+			return
+		}
 		// This was a click, not a drag
 		// const container = containerRef.value
 		const clickXOff =
@@ -395,22 +412,67 @@ const handleDrag = (event: MouseEvent) => {
 		}
 
 		if (dragMode.value === 'horizontal') {
+			// if (rangeDrag.value !== null) {
+			// 	const target = event.target as HTMLElement
+			// 	if (rangeDrag.value === 'start') {
+			// 		const newDate = addHours(startDate, (dx / (scroller.value?.clientWidth || 1)) * 24 * TOTAL_DAYS)
+			// 		if (newDate < (props.endFilter || props.end) && newDate <= model.value) {
+			// 			emits('update:startFilter', newDate)
+			// 		}
+			// 	} else if (rangeDrag.value === 'end') {
+			// 		const newDate = addHours(startDate, (dx / (scroller.value?.clientWidth || 1)) * 24 * TOTAL_DAYS)
+			// 		if (newDate > (props.startFilter || props.start) && newDate >= model.value) {
+			// 			emits('update:endFilter', newDate)
+			// 		}
+			// 	} else if (rangeDrag.value === 'move') {
+			// 		const totalRangeDays =
+			// 			((props.endFilter ? differenceInDays(props.endFilter, props.startFilter || props.start) : differenceInDays(props.end, props.start)) + 1)
+			// 		const newStartDate = addHours(startDate, (dx / (scroller.value?.clientWidth || 1)) * 24 * totalRangeDays)
+			// 		const newEndDate = addHours(newStartDate, totalRangeDays * 24 - 1)
+			// 		if (
+			// 			newStartDate >= props.start &&
+			// 			newEndDate <= props.end
+			// 		) {
+			// 			emits('update:startFilter', newStartDate)
+			// 			emits('update:endFilter', newEndDate)
+			// 		}
+			// 	}
+			// } else {
 			const container = containerRef.value
 			if (container) {
 				if (!isZoom.value) {
 					const rect = container.getBoundingClientRect()
-					const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
-					const pixelsPerDay = rect.width / totalDays
-					const daysMoved = Math.round(dx / pixelsPerDay)
-
-					// addHours will respect DST, addDays won't
-					const newDate = addHours(startDate, 24 * daysMoved)
-					if (newDate.getFullYear() === selectedYear.value) {
-						setDate(newDate.getTime())
-					} else if (newDate.getFullYear() < selectedYear.value) {
-						setDate(Date.UTC(selectedYear.value, 0, 1))
-					} else if (newDate.getFullYear() > selectedYear.value) {
-						setDate(Date.UTC(selectedYear.value, 11, 31))
+					if (rangeDrag.value !== null) {
+						const pixelsPerDay = rect.width / (years.value.length * TOTAL_DAYS)
+						const daysMoved = Math.round(dx / pixelsPerDay)
+						let newStart = new Date(rangeDragStartDate!)
+						let newEnd = new Date(rangeDragEndDate!)
+						if(rangeDrag.value === 'start' || rangeDrag.value === 'move') {
+							newStart = addHours(rangeDragStartDate!, 24 * daysMoved)
+							if(newStart < props.start) newStart = props.start
+						}
+						if(rangeDrag.value === 'end' || rangeDrag.value === 'move') {
+							newEnd = addHours(
+								rangeDragEndDate!,
+								24 * daysMoved,
+							)
+							if(newEnd > props.end) newEnd = props.end
+						}
+						emits('update:startFilter', newStart)
+						emits('update:endFilter', newEnd)
+					} else {
+						// const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
+						const pixelsPerDay = rect.width / TOTAL_DAYS
+						const daysMoved = Math.round(dx / pixelsPerDay)
+						// addHours will respect DST, addDays won't
+						const newDate = addHours(startDate, 24 * daysMoved)
+						if (newDate.getFullYear() === selectedYear.value) {
+							setDate(newDate.getTime())
+						} else if (newDate.getFullYear() < selectedYear.value) {
+							setDate(Date.UTC(selectedYear.value, 0, 1))
+						} else if (newDate.getFullYear() > selectedYear.value) {
+							setDate(Date.UTC(selectedYear.value, 11, 31))
+						}
 					}
 				} else {
 					const rect = container.getBoundingClientRect()
@@ -440,6 +502,7 @@ const handleDrag = (event: MouseEvent) => {
 			// console.log('dy=', dy, 'scroller.scrollTop=', scroller.value!.scrollTop)
 			// scroller.value!.scrollTop += dy
 			// console.log('dy=', dy, 'scroller.scrollTop=', scroller.value!.scrollTop)
+			// }
 		} else if (dragMode.value === 'vertical') {
 			//  scroller.value!.scrollTop += dy
 		}
@@ -457,18 +520,20 @@ const eventHovered = (box: EventBox | null) => {
 	emits('hover', props.events.find((e) => e.id === box.eventId) || null)
 }
 
-const needleOffsetPct = computed(() => {
+const getNeedleOffsetPct = (date: Date | null) => {
+	if (date === null) return 0
 	if (isDefault.value || isOverview.value) {
-		const offset = (selectedDay.value / TOTAL_DAYS) * 100
+		const selectedDay = getDayOfYear(date)
+		const offset = (selectedDay / TOTAL_DAYS) * 100
 		return Math.max(Math.min(offset, 100), 0)
 	} else if (isTimeline.value) {
 		const totalDays = differenceInDays(props.end, props.start) + 1
-		const daysFromStart = differenceInDays(model.value, props.start) + 1
+		const daysFromStart = differenceInDays(date, props.start) + 1
 		const offset = (daysFromStart / totalDays) * 100 + 0.5
 		return Math.max(Math.min(offset, 100), 0)
 	} else if (isZoom.value && props.selectedEvent) {
 		const eventStart = getDayOfYear(props.selectedEvent.times[0])
-		const selectedDay = getDayOfYear(model.value)
+		const selectedDay = getDayOfYear(date)
 		const eventEnd = getDayOfYear(
 			props.selectedEvent.times[props.selectedEvent.times.length - 1],
 		)
@@ -488,9 +553,31 @@ const needleOffsetPct = computed(() => {
 		// Fallback, shouldn't get here
 		return (selectedDay.value / TOTAL_DAYS) * 100
 	}
-})
+}
 const needleOffsetPx = computed(() => {
-	const pct = needleOffsetPct.value
+	const pct = getNeedleOffsetPct(model.value)
+	const containerWidth = scroller.value?.clientWidth
+	if (isOverview.value) {
+		return 40 + (pct! / 100) * (containerWidth! - 40)
+	} else if (isZoom.value) {
+		return (pct! / 100) * containerWidth! + xOffset.value
+	} else {
+		return (pct! / 100) * containerWidth!
+	}
+})
+const startNeedleOffsetPx = computed(() => {
+	const pct = getNeedleOffsetPct(props.startFilter)
+	const containerWidth = scroller.value?.clientWidth
+	if (isOverview.value) {
+		return 40 + (pct! / 100) * (containerWidth! - 40)
+	} else if (isZoom.value) {
+		return (pct! / 100) * containerWidth! + xOffset.value
+	} else {
+		return (pct! / 100) * containerWidth!
+	}
+})
+const endNeedleOffsetPx = computed(() => {
+	const pct = getNeedleOffsetPct(props.endFilter)
 	const containerWidth = scroller.value?.clientWidth
 	if (isOverview.value) {
 		return 40 + (pct! / 100) * (containerWidth! - 40)
@@ -771,7 +858,7 @@ const yearTransform = computed(() => {
 const lineOpacity = computed(() => {
 	return (year: number): number => {
 		return props.showBars && selectedYear.value === year && !isTimeline.value
-			? 0.5
+			? 0.1
 			: 1
 	}
 })
@@ -1194,7 +1281,6 @@ const dateTranslate = computed(() => {
 				<div
 					class="needle"
 					:class="{
-						highlight: selectedEvent,
 						indicator: selectedEvent && isTimeline,
 					}"
 					ref="needleRef"
@@ -1203,6 +1289,32 @@ const dateTranslate = computed(() => {
 					@mousedown="startDrag"
 				>
 					<div class="line" />
+				</div>
+				<div
+					class="needle range off"
+					v-if="isTimeline"
+					:style="`transform: translateX(0px); width: ${Math.round(startNeedleOffsetPx - 6)}px;`"
+				></div>
+				<div
+					class="needle range off"
+					v-if="isTimeline"
+					:style="`transform: translateX(calc(${endNeedleOffsetPx - 4}px)); width: calc(100% - ${Math.round(endNeedleOffsetPx - 6)}px);`"
+				></div>
+				<div
+					class="needle range"
+					v-if="isTimeline"
+					:style="`transform: translateX(calc(${startNeedleOffsetPx - 5}px)); width: calc(${endNeedleOffsetPx - startNeedleOffsetPx + 1}px);`"
+					@mousedown="startDrag"
+				>
+					<div class="start-handle handle">
+						<IconArrowBarToLeft />
+					</div>
+					<div class="grab-area handle">
+						<IconArrowsMove />
+					</div>
+					<div class="end-handle handle">
+						<IconArrowBarToRight />
+					</div>
 				</div>
 				<div class="month-labels" v-if="!isZoom && !isTimeline">
 					<p v-show="!isZoom" class="jan">{{ $l.months.jan }}</p>
@@ -1464,7 +1576,7 @@ const dateTranslate = computed(() => {
 		fill: $c3sblue;
 		fill-opacity: 0.25;
 		pointer-events: none;
-		// transition: all $transition;
+		transition: opacity 0.5 * $animTime linear;
 
 		&.hot {
 			stroke: $c3sred;
@@ -1581,6 +1693,67 @@ const dateTranslate = computed(() => {
 					border-left: 0.5rem solid rgba($lightbulb, 0.25);
 					border-bottom: none;
 					transform: translateX(-50%);
+
+					&.range {
+						background: rgba($lightbulb, 0.05);
+
+						&.off {
+							background: rgba(black, 0.1);
+							border-top: none;
+							border-right: none;
+							border-left: none;
+							backdrop-filter: blur(1px);
+						}
+						opacity: 1;
+						height: 100%;
+
+						border-top: 0.5rem solid var(--primary-active);
+						border-right: 0.125rem solid var(--primary-glass); //rgba($lightbulb, 0.25);
+						border-left: 0.125rem solid var(--primary-glass); //rgba($lightbulb, 0.25);
+
+						display: flex;
+						flex-direction: row;
+						pointer-events: none;
+						cursor: default;
+						// align-items: stretch;
+						// justify-content: stretch;
+
+						.handle {
+							pointer-events: auto;
+							display: flex;
+							justify-content: center;
+							align-items: center;
+							&.start-handle {
+								cursor: w-resize;
+								flex: 1 1 25%;
+								// background-color: blue;
+							}
+							&.end-handle {
+								cursor: e-resize;
+								flex: 1 1 25%;
+								// background-color: green;
+							}
+							&.grab-area {
+								cursor: grab;
+								flex: 1 1 50%;
+								// background-color: red;
+							}
+
+							.tabler-icon {
+								color: var(--highlight);
+								// color: black;
+								flex: 1 1 50%;
+								height: 50%;
+								opacity: 0.25;
+								transition: opacity $transition;
+								pointer-events: none;
+							}
+
+							&:hover .tabler-icon {
+								opacity: 0.75;
+							}
+						}
+					}
 
 					.line {
 						position: absolute;

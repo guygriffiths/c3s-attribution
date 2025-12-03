@@ -257,6 +257,7 @@ const selectedIndex = computed(() => {
 			left: 0;
 			height: auto;
 			background-color: transparent;
+			overflow: visible;
 		}
 		display: flex;
 		flex-direction: column;

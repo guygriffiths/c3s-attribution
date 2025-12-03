@@ -19,14 +19,15 @@ import {
 	getCurrentEvents,
 	getFilteredEvents,
 	getGlobalFilteredEvents,
+	manualGlobalTrigger,
 	onCurrentEventsReady,
 	onGlobalEventsReady,
 	onRegionEventsReady,
 	setColdOnly,
-	setHotColdBoth,
 	setHotOnly,
+	setHotColdBoth,
 } from '@/lib/eventsDB'
-import { differenceInDays, format } from 'date-fns'
+import { differenceInDays, format, getTime } from 'date-fns'
 import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
 import {
 	IconCalendarWeek,
@@ -39,6 +40,7 @@ import {
 	IconX,
 } from '@tabler/icons-vue'
 import EventDayPanel from './EventDayPanel.vue'
+import { get } from '@vueuse/core'
 
 const $l = useLabels()
 const store = useStore()
@@ -69,10 +71,6 @@ const globalFilteredEvents = ref([] as ExtremeEvent[])
 const eventsOfInterest = ref([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
 	globalFilteredEvents.value = getGlobalFilteredEvents()
-	// console.log(
-	// 	'global events ready - Main.vue',
-	// 	globalFilteredEvents.value.length,
-	// )
 	if (globalEventsOfInterest.value) {
 		eventsOfInterest.value = globalFilteredEvents.value
 	}
@@ -87,6 +85,20 @@ watch(
 		currentEvents.value = getCurrentEvents(newVal)
 	},
 )
+// watch(
+// 	() => [timeStore.startTimeFilter, timeStore.endTimeFilter],
+// 	() => {
+// 		if (globalEventsOfInterest.value) {
+// 			globalFilteredEvents.value = getGlobalFilteredEvents()
+// 			eventsOfInterest.value = globalFilteredEvents.value
+// 			timeFilteredEventsOfInterest.value = getGlobalTimeFilteredEvents()
+// 		} else {
+// 			eventsOfInterest.value = getFilteredEvents()
+// 			console.log('filtering timeFilteredEventsOfInterest')
+// 			timeFilteredEventsOfInterest.value = getTimeFilteredEvents()
+// 		}
+// 	},
+// )
 
 // onGlobalEventsReady(() => {
 // 	console.log('global event trigger')
@@ -97,26 +109,9 @@ watch(
 
 onRegionEventsReady(() => {
 	console.log('region events ready - Main.vue')
-	// console.log(
-	// 	'eventsOfInterest updated from filtered events',
-	// 	eventsOfInterest.value,
-	// )
 	eventsOfInterest.value = getFilteredEvents()
 })
-watch(
-	() => eventStore.selectedEvent,
-	(newVal) => {
-		if (globalEventsOfInterest.value) {
-			eventsOfInterest.value = globalFilteredEvents.value
-		} else {
-			console.log(
-				'eventsOfInterest updated from filtered events',
-				eventsOfInterest.value,
-			)
-			eventsOfInterest.value = getFilteredEvents()
-		}
-	},
-)
+
 watch(
 	() => [
 		store.filteringByRegion,
@@ -129,10 +124,6 @@ watch(
 		if (globalEventsOfInterest.value) {
 			eventsOfInterest.value = globalFilteredEvents.value
 		} else {
-			console.log(
-				'eventsOfInterest updated from filtered events',
-				eventsOfInterest.value,
-			)
 			eventsOfInterest.value = getFilteredEvents()
 		}
 	},
@@ -142,24 +133,17 @@ watch(
 watch(
 	() => [eventStore.eventTypeMode],
 	() => {
-		if (eventStore.eventTypeMode === 'hotcold') {
-			setHotColdBoth()
-		} else if (eventStore.eventTypeMode === 'cold') {
+		if (eventStore.eventTypeMode === 'cold') {
 			setColdOnly()
 		} else if (eventStore.eventTypeMode === 'hot') {
 			setHotOnly()
 		} else {
-			// none selected, default to both
 			setHotColdBoth()
 		}
 		if (globalEventsOfInterest.value) {
 			globalFilteredEvents.value = getGlobalFilteredEvents()
 			eventsOfInterest.value = globalFilteredEvents.value
 		} else {
-			console.log(
-				'eventsOfInterest updated from filtered events',
-				eventsOfInterest.value,
-			)
 			eventsOfInterest.value = getFilteredEvents()
 		}
 	},
@@ -187,21 +171,6 @@ const selectedDayIdx = computed((): number | null => {
 	if (selectedDay < 0 || selectedDay >= totalDays) return null
 	return selectedDay
 })
-const offset = computed(() => {
-	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent) + 1
-	if (!selectedDayIdx.value) return 0
-	return (10 * (selectedDayIdx.value + 0.5)) / totalDays
-})
-const funnelPoints = computed(() => {
-	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent) + 1
-	if (selectedDayIdx.value === null || selectedDayIdx.value < 0) return ''
-	const start = (90 * (selectedDayIdx.value + 0.5)) / totalDays
-	const end = (90 * (selectedDayIdx.value + 1.5)) / totalDays
-	return `polygon(${offset.value}% 0%,${offset.value + 90}% 0%,${end + offset.value}% 100%,${start + offset.value}% 100%)`
-})
-const toggleInfoPanel = () => {
-	store.showInfoPanel = !store.showInfoPanel
-}
 </script>
 
 <template>
@@ -288,7 +257,9 @@ const toggleInfoPanel = () => {
 		<MultiEventSmartPanel
 			id="multi-event-panel"
 			:events-of-interest="
-				store.viewMode === 'heatmap' ? eventsOfInterest : currentEvents
+				store.viewMode === 'timemachine'
+					? currentEvents
+					: eventsOfInterest
 			"
 			class="right panel"
 			:class="{
@@ -298,7 +269,6 @@ const toggleInfoPanel = () => {
 		/>
 
 		<!-- Event Info Panel -->
-		<!-- This is the event information at the bottom center of the screen -->
 		<button
 			id="info-button"
 			class="glassy color"
@@ -324,7 +294,9 @@ const toggleInfoPanel = () => {
 			:event-store="eventStore"
 			:time-store="timeStore"
 			:events-of-interest="
-				store.viewMode === 'timemachine' ? currentEvents : eventsOfInterest
+				store.viewMode === 'timemachine'
+					? currentEvents
+					: eventsOfInterest
 			"
 			:class="{
 				'disable-transitions': timeStore.isPlaying,
@@ -361,21 +333,21 @@ const toggleInfoPanel = () => {
 				id="times"
 				:start="timeStore.startTime"
 				:end="timeStore.endTime"
+				v-model:startFilter="timeStore.startTimeFilter"
+				v-model:endFilter="timeStore.endTimeFilter"
 				:events="eventsOfInterest"
-				:dragging-filter="store.draggingFilter"
 				:selected-event="eventStore.selectedEvent"
 				:hover-event="eventStore.hoveringEvent"
+				:mode="mode"
+				:show-bars="timeStore.showBars"
+				:color-for-event="eventStore.colorForEvent"
+				:eventType="eventStore.eventTypeMode"
+				:class="mode"
 				v-model="timeStore.selectedTime"
 				@event-selected="eventStore.selectEvent"
 				@playing="timeStore.isPlaying = true"
 				@paused="timeStore.isPlaying = false"
 				@hover="eventStore.setHoveringEvent"
-				:mode="mode"
-				:show-bars="timeStore.showBars"
-				:color-for-event="eventStore.colorForEvent"
-				:class="mode"
-				:eventType="eventStore.eventTypeMode"
-				:value-extractor="eventStore.intensityForEvent"
 			></TimeReel>
 			<button
 				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
@@ -497,16 +469,17 @@ const toggleInfoPanel = () => {
 		z-index: 350;
 	}
 
-	$eventGap: calc(100% - $smallTimePanelHeight - 4.5 * $panelMargin - 0.5 * $infoHeight - $headerHeight);
+	$eventGap: calc(
+		100% - $smallTimePanelHeight - 4.5 * $panelMargin - 0.5 * $infoHeight -
+			$headerHeight
+	);
 	$eventPanelHeight: calc($eventGap * 0.5 - 0.5 * $panelMargin);
 	#event-day-panel {
 		position: absolute;
 		width: $eventPanelWidth;
 		left: $panelMargin;
 		height: $eventPanelHeight;
-		bottom: calc(
-			3 * $panelMargin + $smallTimePanelHeight + $eventPanelHeight
-		);
+		bottom: calc(3 * $panelMargin + $smallTimePanelHeight + $eventPanelHeight);
 	}
 	#event-graphs {
 		position: absolute;
