@@ -1,13 +1,15 @@
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
 	fetchAndIndexEvents,
-	getGlobalFilteredEvents,
-	onGlobalEventsReady
+	getGlobalFilteredEventsHotColdWet,
+	onGlobalEventsReady,
+	setFilters,
 } from '@/lib/eventsDB'
 import {
 	DATA_ROOT,
 	interpolateColorCold,
 	interpolateColorHot,
+	setTheme,
 } from '@/lib/utils'
 import * as d3 from 'd3'
 import { defineStore } from 'pinia'
@@ -20,9 +22,11 @@ interface State {
 	selectedEventId: string | null
 	hoveringEvent: ExtremeEvent | null
 
-	durationRange: [number, number]
+	heatDurationRange: [number, number]
+	coldDurationRange: [number, number]
 	durationUnits: string
-	sizeRange: [number, number]
+	heatSizeRange: [number, number]
+	coldSizeRange: [number, number]
 	sizeUnits: string
 	heatIntensityRange: [number, number]
 	heatIntensityUnits: string
@@ -43,6 +47,7 @@ interface State {
 
 export const intensityForValue = (v: number, hot: boolean) => {
 	if (v == null || isNaN(v)) return 0
+	// console.log('intensityForValue', v, hot, v - (hot ? 273.15 : 273.15))
 	return v - (hot ? 273.15 : 273.15)
 	// if (hot) {
 	// 	let baseline = 301.15
@@ -91,13 +96,15 @@ export const useStore = defineStore('events', {
 			selectedEvent: null,
 			selectedEventId: null,
 			hoveringEvent: null,
-			durationRange: [3, 14],
+			heatDurationRange: [3, 14],
+			coldDurationRange: [3, 14],
 			durationUnits: 'days',
-			sizeRange: [0, 100],
+			heatSizeRange: [0, 100],
+			coldSizeRange: [0, 100],
 			sizeUnits: 'km²',
-			heatIntensityRange: [0, 0],
+			heatIntensityRange: [28, 40],
 			heatIntensityUnits: '°C',
-			coldIntensityRange: [0, 0],
+			coldIntensityRange: [-20, 2],
 			coldIntensityUnits: '°C',
 			durationP90: null,
 			sizeP90: null,
@@ -131,6 +138,34 @@ export const useStore = defineStore('events', {
 		}
 	},
 	getters: {
+		durationRange: (state: State) => {
+			if (state.eventTypeMode === 'hotcold') {
+				return [
+					Math.min(state.coldDurationRange[0], state.heatDurationRange[0]),
+					Math.max(state.coldDurationRange[1], state.heatDurationRange[1]),
+				]
+			} else if (state.eventTypeMode === 'hot') {
+				return state.heatDurationRange
+			} else if (state.eventTypeMode === 'cold') {
+				return state.coldDurationRange
+			} else {
+				return [0, 1]
+			}
+		},
+		sizeRange: (state: State) => {
+			if (state.eventTypeMode === 'hotcold') {
+				return [
+					Math.min(state.coldSizeRange[0], state.heatSizeRange[0]),
+					Math.max(state.coldSizeRange[1], state.heatSizeRange[1]),
+				]
+			} else if (state.eventTypeMode === 'hot') {
+				return state.heatSizeRange
+			} else if (state.eventTypeMode === 'cold') {
+				return state.coldSizeRange
+			} else {
+				return [0, 1]
+			}
+		},
 		intensityRange: (state: State) => {
 			if (state.eventTypeMode === 'hotcold') {
 				return [
@@ -287,11 +322,29 @@ export const useStore = defineStore('events', {
 		setHoveringEvent(event: ExtremeEvent | null) {
 			this.hoveringEvent = event
 		},
+		setEventTypeMode(mode: 'hot' | 'cold' | 'hotcold') {
+			this.eventTypeMode = mode
+			setTheme(mode === 'hot' ? 'hot' : mode === 'cold' ? 'cold' : 'hotcold')
+		},
+		cycleEventType() {
+			if (this.eventTypeMode === 'hot') {
+				this.setEventTypeMode('cold')
+			} else if (this.eventTypeMode === 'cold') {
+				this.setEventTypeMode('hotcold')
+			} else {
+				this.setEventTypeMode('hot')
+			}
+		},
 		async runFilters() {
 			// console.log('Running event filters')
 			const mainStore = useMainStore()
 			await mainStore.setLoading()
-			// this.refilterEventsDB()
+			setFilters(
+				this.filters,
+				this.durationForEvent,
+				this.sizeForEvent,
+				this.intensityForEvent,
+			)
 			// This needs to get set by the leaflet layers
 			mainStore.setLoadingDone()
 		},
@@ -324,7 +377,8 @@ export const useStore = defineStore('events', {
 			// )
 
 			onGlobalEventsReady(() => {
-				const events = getGlobalFilteredEvents()
+				const events = getGlobalFilteredEventsHotColdWet()
+				// console.trace('global events ready, count:', events.length)
 				// this.refilterEventsDB()
 				if (events.length > 0) {
 					if (!this.firstEventSetLoaded) {
@@ -359,26 +413,23 @@ export const useStore = defineStore('events', {
 				let localColdMax = -Infinity
 				events.forEach((e) => {
 					const duration = this.durationForEvent(e)
-					if (duration < this.durationRange[0]) {
-						this.durationRange[0] = duration
-					}
-					if (duration > this.durationRange[1]) {
-						this.durationRange[1] = duration
-					}
 
 					const size = this.sizeForEvent(e)
-					if (size < this.sizeRange[0]) {
-						this.sizeRange[0] = size
-					}
-					if (size > this.sizeRange[1]) {
-						this.sizeRange[1] = size
-					}
 
-					const intensity = intensityForValue(
-						e.event_type === 'hot' ? e.max_value : e.mean_value,
-						e.event_type === 'hot',
-					)
+					const intensity = this.intensityForEvent(e)
 					if (e.event_type === 'hot') {
+						if (duration < this.heatDurationRange[0]) {
+							this.heatDurationRange[0] = duration
+						}
+						if (duration > this.heatDurationRange[1]) {
+							this.heatDurationRange[1] = duration
+						}
+						if (size < this.heatSizeRange[0]) {
+							this.heatSizeRange[0] = size
+						}
+						if (size > this.heatSizeRange[1]) {
+							this.heatSizeRange[1] = size
+						}
 						if (intensity < localHeatMin) {
 							localHeatMin = intensity
 						}
@@ -386,6 +437,18 @@ export const useStore = defineStore('events', {
 							localHeatMax = intensity
 						}
 					} else if (e.event_type === 'cold') {
+						if (duration < this.coldDurationRange[0]) {
+							this.coldDurationRange[0] = duration
+						}
+						if (duration > this.coldDurationRange[1]) {
+							this.coldDurationRange[1] = duration
+						}
+						if (size < this.coldSizeRange[0]) {
+							this.coldSizeRange[0] = size
+						}
+						if (size > this.coldSizeRange[1]) {
+							this.coldSizeRange[1] = size
+						}
 						if (intensity < localColdMin) {
 							localColdMin = intensity
 						}
@@ -399,7 +462,10 @@ export const useStore = defineStore('events', {
 					if (e.event_type === 'hot') pushTop(heatTop, intensity)
 					else pushTop(coldTop, intensity)
 				})
-				this.durationP90 = durationTop.length ? Math.min(...durationTop) : null
+				durationTop.sort()
+				this.durationP90 = durationTop.length
+					? durationTop[Math.floor(0.95 * durationTop.length)]
+					: null
 				this.sizeP90 = sizeTop.length ? Math.min(...sizeTop) : null
 				this.heatIntensityP90 = heatTop.length ? Math.min(...heatTop) : null
 				this.coldIntensityP90 = coldTop.length ? Math.min(...coldTop) : null

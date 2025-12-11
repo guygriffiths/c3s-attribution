@@ -30,6 +30,13 @@ body {
 	animation: none !important;
 }
 
+.disable-pointer-events,
+.disable-pointer-events * {
+	pointer-events: none !important;
+	user-select: none !important;
+	cursor: default !important;
+}
+
 button {
 	font-size: 1rem;
 	background: var(--primary);

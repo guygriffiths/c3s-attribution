@@ -1,7 +1,5 @@
 <script lang="ts" setup>
 import { useStore } from '@/store/store'
-import { useStore as useEventStore } from '@/store/eventStore'
-import { useLabels } from '@/lib/labels'
 import { IconLayersSelected, IconMapPin, IconPolygon, IconWorld } from '@tabler/icons-vue'
 import { ref } from 'vue'
 

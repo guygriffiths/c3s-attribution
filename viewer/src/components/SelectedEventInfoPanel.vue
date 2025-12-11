@@ -10,6 +10,8 @@ import {
 	IconTemperature,
 	IconTemperatureSun,
 	IconTemperatureSnow,
+	IconTemperatureMinus,
+	IconTemperaturePlus,
 } from '@tabler/icons-vue'
 import { dayStr } from '@/lib/time-utils'
 
@@ -77,7 +79,9 @@ const downloadEvent = () => {
 			>
 		</div>
 		<div class="info-row">
-			<IconTemperature class="icon" />
+			<IconTemperaturePlus v-if="props.selectedEvent.event_type === 'hot'" class="icon" />
+			<IconTemperatureMinus v-else-if="props.selectedEvent.event_type === 'cold'" class="icon" />
+			<IconTemperature class="icon" v-else />
 			<!-- <span class="label">{{ $l.intensity }}:</span> -->
 			<span class="value mono"
 				>+{{

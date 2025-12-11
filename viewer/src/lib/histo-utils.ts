@@ -7,7 +7,7 @@ export const getBins = (
 	xmin: number,
 	xmax: number,
 	nbins: number,
-	longtail: boolean = true,
+	longtail: boolean,
 ) => {
 	const N = longtail ? nbins + 1 : nbins
 	const d = data ?? []

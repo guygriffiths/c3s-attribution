@@ -2,12 +2,6 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import * as d3 from 'd3'
-import {
-	IconClockHour4,
-	IconTemperature,
-	IconDimensions,
-	IconStopwatch,
-} from '@tabler/icons-vue'
 
 type Props = {
 	xdata: number[]
@@ -16,11 +10,15 @@ type Props = {
 	ydata: number[]
 	ymin: number
 	ymax: number
-	types?: ('hot' | 'cold')[]
+	xbg?: number[]
+	ybg?: number[]
+	types?: ('hot' | 'cold' | 'bg')[]
 	ids?: string[]
-	highlightId?: string | null
-	xvar?: 'duration' | 'size' | 'intensity' | 'time'
-	yvar?: 'duration' | 'size' | 'intensity'
+	selectedX: number | null
+	selectedY: number | null
+	hoverId?: string | null
+	xscale?: number
+	yscale?: number
 }
 
 const props = defineProps<Props>()
@@ -45,7 +43,7 @@ onMounted(() => {
 				resizeTimeout = setTimeout(() => {
 					width.value = Math.floor(entry.contentRect.width)
 					height.value = Math.floor(entry.contentRect.height)
-				}, 0) 
+				}, 0)
 			}
 		}
 	})
@@ -104,7 +102,7 @@ const xyData = computed(() => {
 	const pts: {
 		x: number
 		y: number
-		type: 'hot' | 'cold'
+		type: 'hot' | 'cold' | 'bg'
 		id: string | null
 	}[] = []
 	for (let i = 0; i < n; i++) {
@@ -121,80 +119,178 @@ const xyData = computed(() => {
 	}
 	return pts
 })
-
-// fade bookkeeping
-const pointStates = new Map<
-	string,
-	{
-		opacity: number
-		target: number
-		lastUpdate: number
+const bgData = computed(() => {
+	if (!props.xbg || !props.ybg) return []
+	const xd = props.xbg
+	const yd = props.ybg
+	const n = Math.min(xd.length, yd.length)
+	const pts: {
 		x: number
 		y: number
+		type: 'hot' | 'cold' | 'bg'
 		id: string | null
-		type: 'hot' | 'cold'
+	}[] = []
+	for (let i = 0; i < n; i++) {
+		pts.push({
+			x: xd[i],
+			y: yd[i],
+			type: 'bg',
+			id: null,
+		})
 	}
->()
+	return pts
+})
+
+interface PointState {
+	opacity: number
+	target: number
+	lastUpdate: number
+	x: number
+	y: number
+	id: string | null
+	color: string
+}
+
+// fade bookkeeping
+const pointStates = new Map<string, PointState>()
+const bgPointStates = new Map<string, PointState>()
 const fadeDuration = 50 // ms
 
-const computeOpacity = (n: number, maxOpacity = 0.5) =>
+const computeOpacity = (n: number, maxOpacity = 0.8) =>
 	Math.min(maxOpacity, maxOpacity * Math.pow(n, -0.2))
-
-watch(() => xyData.value, (newPts) => {
-	// console.log('Updating scatter plot points:', newPts.length)
-	const now = performance.now()
-	const newIds = new Set(newPts.map((p) => p.id ?? `__idx_${p.x}_${p.y}`))
-
-	const fullOpacity = computeOpacity(xyData.value.length)
-	// mark new + update existing
-	for (const p of newPts) {
-		const key = p.id ?? `__idx_${p.x}_${p.y}`
-		if (!pointStates.has(key)) {
-			pointStates.set(key, {
-				opacity: 0,
-				target: fullOpacity,
-				lastUpdate: now,
-				x: p.x,
-				y: p.y,
-				id: p.id,
-				type: p.type,
-			})
-		} else {
-			const st = pointStates.get(key)!
-			st.target = fullOpacity
-			st.lastUpdate = now
-			st.x = p.x
-			st.y = p.y
-		}
-	}
-
-	// mark removed -> fade out
-	for (const [key, st] of pointStates) {
-		if (!newIds.has(key)) {
-			st.target = 0
-			st.lastUpdate = now
-		}
-	}
-})
 
 // dirty redraw
 const needsRedraw = ref(true)
-watch([xyData, width, height, () => props.highlightId], () => {
-	needsRedraw.value = true
-})
+watch(
+	[
+		() => props.xdata,
+		() => props.ydata,
+		() => props.types,
+		() => props.ids,
+		width,
+		height,
+		xScale,
+		yScale,
+		() => props.hoverId,
+		() => props.selectedX,
+		() => props.selectedY,
+	],
+	() => {
+		// TODO Split into two - one for data changes, one for size changes. The size one can then use the progress indicator to do a smooth move of all the points.
+		// Add update x/y to updatePointOpacity? Then calculate the scaled points in the updateMethod
+		needsRedraw.value = true
+	},
+)
+
+watch(
+	() => xyData.value,
+	(newPts) => {
+		const now = performance.now()
+		const newIds = new Set(newPts.map((p) => p.id ?? `__idx_${p.x}_${p.y}`))
+		const fullOpacity = computeOpacity(xyData.value.length)
+
+		// Track nearest points if we have a selection
+		let nearestPoints: Array<{ key: string; distance: number }> = []
+		const selectedX = props.selectedX
+		const selectedY = props.selectedY
+		const hasSelection = selectedX !== null && selectedY !== null
+
+		// mark new + update existing
+		for (const p of newPts) {
+			const key = p.id ?? `__idx_${p.x}_${p.y}`
+			if (!pointStates.has(key)) {
+				pointStates.set(key, {
+					opacity: 0,
+					target: fullOpacity,
+					lastUpdate: now,
+					x: p.x,
+					y: p.y,
+					id: p.id,
+					color:
+						p.type === 'hot'
+							? scssVars.c3sred
+							: p.type === 'cold'
+								? scssVars.c3sblue
+								: scssVars.c3spurple,
+				})
+			} else {
+				const st = pointStates.get(key)!
+				st.target = fullOpacity
+				st.lastUpdate = now
+				st.x = p.x
+				st.y = p.y
+			}
+
+			// Calculate distance to selected point
+			if (hasSelection && props.xscale && props.yscale) {
+				const dx = p.x - selectedX
+				const dy = p.y - selectedY
+				const distance = dx * dx + dy * dy // squared distance is fine for comparison
+				nearestPoints.push({ key, distance })
+			}
+		}
+		// mark new + update existing
+		for (const p of bgData.value) {
+			const key = p.id ?? `__idx_${p.x}_${p.y}`
+			if (!bgPointStates.has(key)) {
+				bgPointStates.set(key, {
+					opacity: 0,
+					target: 0,
+					lastUpdate: now,
+					x: p.x,
+					y: p.y,
+					id: p.id,
+					color: scssVars.c3spurple,
+				})
+			} else {
+				const st = bgPointStates.get(key)!
+				st.target = 0.1 * fullOpacity
+				st.lastUpdate = now
+				st.x = p.x
+				st.y = p.y
+			}
+		}
+		// console.log('bg points', bgPointStates.size)
+		// Keep only the N nearest (adjust N as needed)
+		// if (hasSelection && nearestPoints.length > 0) {
+		// 	const N = 10 // or make this a prop
+		// 	nearestPoints.sort((a, b) => a.distance - b.distance)
+		// 	const nearestKeys = new Set(nearestPoints.slice(0, N).map((p) => p.key))
+
+		// 	// Highlight nearest points (example: boost opacity or change color)
+		// 	for (const key of pointStates.keys()) {
+		// 		const st = pointStates.get(key)!
+		// 		if (nearestKeys.has(key)) {
+		// 			st.target = 1.0 // full opacity for nearest
+		// 			st.color = scssVars.highlight // or add a highlight color
+		// 		}
+		// 	}
+		// }
+
+		// mark removed
+		for (const key of pointStates.keys()) {
+			if (!newIds.has(key)) {
+				const st = pointStates.get(key)!
+				st.target = 0
+				st.lastUpdate = now
+			}
+		}
+	},
+)
 
 function draw() {
-	// console.log('Drawing scatter plot', pointStates.size, 'points', pointStates)
 	if (!canvasRef.value) return
-	const ctx = canvasRef.value.getContext('2d')!
-	ctx.clearRect(0, 0, width.value, height.value)
-
 	const now = performance.now()
 	let anyAnimating = false
+	const ctx = canvasRef.value.getContext('2d')!
+	ctx.clearRect(0, 0, width.value, height.value)
+	const highlights = [] as PointState[]
 
-	const highlights = []
-	for (const st of pointStates.values()) {
-		// ease opacity toward target
+	ctx.globalCompositeOperation = 'source-over'
+	ctx.globalAlpha = 0.01
+	ctx.beginPath()
+
+	for (const st of bgPointStates.values()) {
 		const elapsed = now - st.lastUpdate
 		const progress = Math.min(1, elapsed / fadeDuration)
 		st.opacity += (st.target - st.opacity) * progress
@@ -209,8 +305,34 @@ function draw() {
 
 		if (st.opacity <= 0) continue
 
-		ctx.globalCompositeOperation = 'multiply'
-		if (st.id === props.highlightId) {
+		const cx = xScale.value(st.x)
+		const cy = yScale.value(st.y)
+
+		ctx.fillStyle = st.color
+		ctx.globalAlpha = st.opacity
+
+		ctx.moveTo(cx + 4, cy) // breaks the path so arcs dinnae join
+		ctx.arc(cx, cy, 4, 0, 2 * Math.PI)
+	}
+
+	ctx.fill()
+	ctx.globalCompositeOperation = 'multiply'
+	for (const st of pointStates.values()) {
+		// ease opacity toward target
+		const elapsed = now - st.lastUpdate
+		const progress = Math.min(1, elapsed / fadeDuration)
+		st.opacity += (st.target - st.opacity) * progress
+		st.lastUpdate = now
+		if (Math.abs(st.opacity - st.target) > 0.01) {
+			anyAnimating = true
+			needsRedraw.value = true
+		} else {
+			st.opacity = st.target
+		}
+
+		if (st.opacity <= 0) continue
+
+		if (st.id === props.hoverId) {
 			highlights.push(st)
 		} else {
 			const cx = xScale.value(st.x)
@@ -218,51 +340,56 @@ function draw() {
 			ctx.globalAlpha = st.opacity
 			ctx.beginPath()
 			ctx.arc(cx, cy, 4, 0, 2 * Math.PI)
-			ctx.fillStyle = st.type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
-			ctx.strokeStyle = st.type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
+			ctx.fillStyle = st.color
 			ctx.fill()
-			ctx.stroke()
 		}
 	}
+
+	// Highlights
 	ctx.globalCompositeOperation = 'source-over'
+	ctx.globalAlpha = 1
+	ctx.fillStyle = scssVars.lightbulb
+	ctx.beginPath()
 	for (const st of highlights) {
 		const cx = xScale.value(st.x)
 		const cy = yScale.value(st.y)
-		ctx.globalAlpha = 1
+		ctx.moveTo(cx + 6, cy)
+		ctx.arc(cx, cy, 6, 0, 2 * Math.PI)
+	}
+	ctx.fill()
+
+	// Selected
+	if (props.selectedX !== null && props.selectedY !== null) {
+		const cx = xScale.value(props.selectedX)
+		const cy = yScale.value(props.selectedY)
 		ctx.beginPath()
 		ctx.arc(cx, cy, 6, 0, 2 * Math.PI)
-		ctx.fillStyle = scssVars.lightbulb
-		ctx.strokeStyle = scssVars.lightbulb
 		ctx.fill()
-		ctx.stroke()
 	}
-	ctx.globalAlpha = 1.0
 
-	// prune fully invisible
+	// Prune
 	for (const [key, st] of pointStates) {
 		if (st.target === 0 && st.opacity <= 0.01) pointStates.delete(key)
 	}
 
-	if (anyAnimating) needsRedraw.value = true
-	else needsRedraw.value = false
+	return anyAnimating
 }
 
 function loop() {
 	requestAnimationFrame(loop)
-	if (needsRedraw.value) draw()
+	// console.log('loop tick')
+	if (needsRedraw.value) {
+		const stillAnimating = draw()
+		if (!stillAnimating) {
+			needsRedraw.value = false
+		}
+	}
 }
 onMounted(() => loop())
 </script>
 
 <template>
 	<div ref="containerRef" class="scatter-root">
-		<IconStopwatch v-if="props.xvar === 'duration'" class="xicon" />
-		<IconDimensions v-else-if="props.xvar === 'size'" class="xicon" />
-		<IconTemperature v-else-if="props.xvar === 'intensity'" class="xicon" />
-		<IconClockHour4 v-else-if="props.xvar === 'time'" class="xicon" />
-		<IconStopwatch v-if="props.yvar === 'duration'" class="yicon" />
-		<IconDimensions v-else-if="props.yvar === 'size'" class="yicon" />
-		<IconTemperature v-else-if="props.yvar === 'intensity'" class="yicon" />
 		<canvas
 			ref="canvasRef"
 			class="scatter-canvas"

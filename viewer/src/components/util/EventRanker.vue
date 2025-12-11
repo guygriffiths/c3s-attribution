@@ -57,10 +57,20 @@ watch(
 	() => [props.events, props.sortFunc],
 	() => {
 		rankedEvents.value = [...(props.events || [])].sort(props.sortFunc)
+		eventStore.setHoveringEvent(
+			rankedEvents.value[hoverIndex.value] || null,
+		)
 		// console.log('Ranked events:', [...rankedEvents.value].splice(0, 10).map((e) => `events/event-${e.id}.json`).join(' '))
 	},
 	{ deep: false },
 )
+const hoverIndex = ref(-1)
+const setHover = (idx: number) => {
+	hoverIndex.value = idx
+	eventStore.setHoveringEvent(
+		rankedEvents.value[idx] || null,
+	)
+}
 
 const selectEvent = (event: ExtremeEvent | null) => {
 	if (event) {
@@ -129,8 +139,8 @@ const selectedIndex = computed(() => {
 						hovering: rankedEvents[i - 1]?.id === eventStore.hoveringEvent?.id,
 					}"
 					@click="selectEvent(rankedEvents[i - 1] || null)"
-					@mouseover="eventStore.setHoveringEvent(rankedEvents[i - 1] || null)"
-					@mouseleave="eventStore.setHoveringEvent(null)"
+					@mouseover="setHover(i - 1)"
+					@mouseleave="setHover(-1)"
 					:title="`Duration: ${eventStore.durationForEvent(rankedEvents[i - 1])} days\nSize: ${eventStore.sizeForEvent(rankedEvents[i - 1]).toFixed(2)} km²\nIntensity: ${eventStore.intensityForEvent(rankedEvents[i - 1]).toFixed(2)}`"
 				>
 					{{ i }}
@@ -196,7 +206,7 @@ const selectedIndex = computed(() => {
 						</filter>
 					</defs>
 
-					<transition-group name="ranked-event-list" tag="g">
+					<g>
 						<rect
 							v-for="(event, idx) in rankedEvents.slice(0, eventsInRanker)"
 							class="ranked-event"
@@ -233,7 +243,7 @@ const selectedIndex = computed(() => {
 								) || scssVars.c3sred
 							"
 						/>
-					</transition-group>
+					</g>
 				</svg>
 			</div>
 		</div>
@@ -295,7 +305,7 @@ const selectedIndex = computed(() => {
 			}
 		}
 
-		$rate: $animTime * 0.25;
+		$rate: $animTime * 0.1;
 		.ranked-event {
 			position: relative;
 			transition: transform $rate ease-out;

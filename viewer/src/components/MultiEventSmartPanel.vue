@@ -4,14 +4,15 @@ import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import Histogram from './util/Histogram.vue'
 import ScatterPlot from './util/ScatterPlot.vue'
-import EventRanker from './util/EventRanker.vue'
-import Panel from './util/Panel.vue'
 import {
 	IconLayersIntersect,
 	IconStopwatch,
 	IconDimensions,
 	IconTemperature,
 	IconCalendar,
+	IconArrowsDiagonal,
+	IconZoomScan,
+	IconViewfinder,
 } from '@tabler/icons-vue'
 import { ref, watch, computed } from 'vue'
 import { getBins } from '@/lib/histo-utils'
@@ -21,14 +22,15 @@ const store = useStore()
 const eventStore = useEventStore()
 const timeStore = useTimeStore()
 const scrollerRef = ref<HTMLElement | null>(null)
-const medalsSubRef = ref<HTMLElement | null>(null)
 const scatterSubRef = ref<HTMLElement | null>(null)
 
 const props = defineProps<{
 	eventsOfInterest: ExtremeEvent[]
+	backgroundEvents?: ExtremeEvent[]
+	selectedEvent: ExtremeEventFull | ExtremeEvent | null
 }>()
 
-console.log('TODO: scrollTo on resize, MultiEventPanel')
+// console.log('TODO: scrollTo on resize, MultiEventPanel')
 watch(
 	() => store.showAnalytics,
 	(newVal) => {
@@ -45,34 +47,61 @@ watch(
 	},
 )
 
-const minVar = (focus: string) => {
-	return focus === 'duration'
-		? eventStore.durationRange[0]
-		: focus === 'size'
-			? eventStore.sizeRange[0]
-			: eventStore.intensityRange[0]
+const minVar = (focus: string, axisMode: string) => {
+	return axisMode === 'event' && eventStore.selectedEvent
+		? focus === 'duration'
+			? eventStore.durationForEvent(eventStore.selectedEvent) * 0.9
+			: focus === 'size'
+				? eventStore.sizeForEvent(eventStore.selectedEvent) * 0.9
+				: eventStore.intensityForEvent(eventStore.selectedEvent) * 0.9
+		: focus === 'duration'
+			? eventStore.durationRange[0]
+			: focus === 'size'
+				? eventStore.sizeRange[0]
+				: eventStore.intensityRange[0]
 }
 const xmin = computed(() => {
-	return minVar(store.focusVariable)
+	return minVar(store.focusVariable, axisMode.value)
 })
 const ymin = computed(() => {
-	return minVar(scatterY.value)
+	return minVar(scatterY.value, axisMode.value)
 })
-const maxVar = (focus: string) => {
+const maxVar = (focus: string, axisMode: string) => {
 	return focus === 'duration'
-		? Math.max(eventStore.durationP90 || 0, 13) || eventStore.durationRange[1]
+		? axisMode === 'full'
+			? eventStore.durationRange[1]
+			: axisMode === 'most'
+				? eventStore.durationP90 || eventStore.durationRange[1]
+				: axisMode === 'event' && eventStore.selectedEvent
+					? eventStore.durationForEvent(eventStore.selectedEvent) * 1.1
+					: eventStore.durationP90 || eventStore.durationRange[1]
 		: focus === 'size'
-			? eventStore.sizeP90 || eventStore.sizeRange[1]
-			: Math.max(
-					eventStore.heatIntensityP90 || 0,
-					eventStore.coldIntensityP90 || 0,
-				)
+			? axisMode === 'full'
+				? eventStore.sizeRange[1]
+				: axisMode === 'most'
+					? eventStore.sizeP90 || eventStore.sizeRange[1]
+					: axisMode === 'event' && eventStore.selectedEvent
+						? eventStore.sizeForEvent(eventStore.selectedEvent) * 1.1
+						: eventStore.sizeP90 || eventStore.sizeRange[1]
+			: axisMode === 'full'
+				? eventStore.intensityRange[1]
+				: axisMode === 'most'
+					? Math.max(
+							eventStore.heatIntensityP90 || 0,
+							eventStore.coldIntensityP90 || 0,
+						)
+					: axisMode === 'event' && eventStore.selectedEvent
+						? eventStore.intensityForEvent(eventStore.selectedEvent) * 1.1
+						: Math.max(
+								eventStore.heatIntensityP90 || 0,
+								eventStore.coldIntensityP90 || 0,
+							)
 }
 const xmax = computed(() => {
-	return maxVar(store.focusVariable)
+	return maxVar(store.focusVariable, axisMode.value)
 })
 const ymax = computed(() => {
-	return maxVar(scatterY.value)
+	return maxVar(scatterY.value, axisMode.value)
 })
 
 const valueForEvent = computed(() => {
@@ -90,14 +119,26 @@ const eventsOfInterest = computed(() => {
 			? props.eventsOfInterest.map(eventStore.sizeForEvent)
 			: props.eventsOfInterest.map(eventStore.intensityForEvent)
 })
+const backgroundEvents = computed(() => {
+	return props.backgroundEvents
+		? store.focusVariable === 'duration'
+			? props.backgroundEvents.map(eventStore.durationForEvent)
+			: store.focusVariable === 'size'
+				? props.backgroundEvents.map(eventStore.sizeForEvent)
+				: props.backgroundEvents.map(eventStore.intensityForEvent)
+		: []
+})
+const backgroundEventsY = computed(() => {
+	if (!props.backgroundEvents) return []
+	return scatterY.value === 'intensity'
+		? props.backgroundEvents.map((e) => eventStore.intensityForEvent(e))
+		: scatterY.value === 'duration'
+			? props.backgroundEvents.map((e) => eventStore.durationForEvent(e))
+			: props.backgroundEvents.map((e) => eventStore.sizeForEvent(e))
+})
+
 const types = computed(() => {
 	return props.eventsOfInterest.map((e) => e.event_type)
-})
-const allHot = computed(() => {
-	return props.eventsOfInterest.every((e) => e.event_type === 'hot')
-})
-const allCold = computed(() => {
-	return props.eventsOfInterest.every((e) => e.event_type === 'cold')
 })
 const scatterY = ref<Variable>('intensity')
 const cycleYVar = () => {
@@ -119,6 +160,15 @@ const cycleYVar = () => {
 		else scatterY.value = 'intensity'
 	}
 }
+watch(
+	() => store.focusVariable,
+	() => {
+		// ensure scatterY is not the same as focusVariable
+		if (scatterY.value === store.focusVariable) {
+			cycleYVar()
+		}
+	},
+)
 const ydata = computed(() => {
 	return scatterY.value === 'intensity'
 		? props.eventsOfInterest.map((e) => eventStore.intensityForEvent(e))
@@ -126,12 +176,35 @@ const ydata = computed(() => {
 			? props.eventsOfInterest.map((e) => eventStore.durationForEvent(e))
 			: props.eventsOfInterest.map((e) => eventStore.sizeForEvent(e))
 })
+const selectedX = computed(() => {
+	if (!eventStore.selectedEvent) return null
+	return store.focusVariable === 'duration'
+		? eventStore.durationForEvent(eventStore.selectedEvent)
+		: store.focusVariable === 'size'
+			? eventStore.sizeForEvent(eventStore.selectedEvent)
+			: eventStore.intensityForEvent(eventStore.selectedEvent)
+})
+const selectedY = computed(() => {
+	if (!eventStore.selectedEvent) return null
+	return scatterY.value === 'intensity'
+		? eventStore.intensityForEvent(eventStore.selectedEvent)
+		: scatterY.value === 'duration'
+			? eventStore.durationForEvent(eventStore.selectedEvent)
+			: eventStore.sizeForEvent(eventStore.selectedEvent)
+})
 const ids = computed(() => {
 	return props.eventsOfInterest.map((e) => e.id)
 })
 const bins = computed(() => {
 	const data = eventsOfInterest.value
-	return getBins(data, types.value, xmin.value, xmax.value, 10)
+	return getBins(
+		data,
+		types.value,
+		xmin.value,
+		xmax.value,
+		10,
+		axisMode.value !== 'full',
+	)
 })
 const maxCount = computed(() => {
 	return bins.value.reduce((max, bin) => Math.max(max, bin.count), 0)
@@ -144,11 +217,23 @@ watch(
 		}
 	},
 )
+const axisMode = ref<'full' | 'most' | 'event'>('most')
+const setAxisMode = (mode: 'full' | 'most' | 'event') => {
+	axisMode.value = mode
+}
+
+const xscaleFactor = computed(() => {
+	// TODO Would be better using 90th%ile or similar
+	return 1 / (xmax.value - xmin.value)
+})
+const yscaleFactor = computed(() => {
+	return 1 / (ymax.value - ymin.value)
+})
 </script>
 <template>
 	<div class="multi-event-panel panel">
 		<div class="scroller" ref="scrollerRef">
-			<div class="chart">
+			<div class="chart histo">
 				<div class="yaxis-chart">
 					<div class="axis">
 						<div class="label mono">
@@ -169,6 +254,7 @@ watch(
 						:units="'days'"
 						:highlight-value="valueForEvent"
 						:types="types"
+						:has-tail="axisMode !== 'full'"
 					/>
 				</div>
 				<div class="axis horizontal">
@@ -187,8 +273,7 @@ watch(
 					</div>
 				</div>
 			</div>
-
-			<div class="chart">
+			<div class="chart scatter">
 				<div class="yaxis-chart">
 					<div class="axis">
 						<div class="label mono">{{ niceNumber(ymin) }}</div>
@@ -206,12 +291,18 @@ watch(
 					<ScatterPlot
 						:xdata="eventsOfInterest"
 						:ydata="ydata"
+						:xbg="backgroundEvents"
+						:ybg="backgroundEventsY"
 						:types="types"
 						:xmin="xmin"
 						:xmax="xmax"
 						:ymin="ymin"
 						:ymax="ymax"
+						:xscale="xscaleFactor"
+						:yscale="yscaleFactor"
 						:ids="ids"
+						:selectedX="selectedX"
+						:selectedY="selectedY"
 						:highlightId="eventStore.selectedEventId"
 					/>
 				</div>
@@ -231,7 +322,7 @@ watch(
 					</div>
 				</div>
 			</div>
-			<div class="chart">
+			<div class="chart ts">
 				<div class="yaxis-chart">
 					<div class="axis">
 						<div class="label mono">{{ niceNumber(xmin) }}</div>
@@ -252,24 +343,32 @@ watch(
 					<ScatterPlot
 						:xdata="props.eventsOfInterest.map((e) => e.times[0])"
 						:ydata="eventsOfInterest"
+						:xbg="
+							props.backgroundEvents
+								? props.backgroundEvents.map((e) => e.times[0])
+								: []
+						"
+						:ybg="backgroundEvents"
 						:types="types"
-						:xmin="timeStore.startTime.getTime()"
-						:xmax="timeStore.endTime.getTime()"
+						:xmin="timeStore.startTimeFilter.getTime()"
+						:xmax="timeStore.endTimeFilter.getTime()"
 						:ymin="xmin"
 						:ymax="xmax"
 						:ids="ids"
-						:highlightId="eventStore.selectedEventId"
+						:selectedX="timeStore.selectedTime.getTime()"
+						:selectedY="selectedX"
+						:hoverId="eventStore.hoveringEvent?.id"
 					/>
 				</div>
 				<div class="axis horizontal">
 					<div class="label mono">
-						{{ timeStore.startTime.toISOString().slice(0, 10) }}
+						{{ timeStore.startTimeFilter.toISOString().slice(0, 10) }}
 					</div>
 					<span class="units icon">
 						<IconCalendar />
 					</span>
 					<div class="label mono">
-						{{ timeStore.endTime.toISOString().slice(0, 10) }}
+						{{ timeStore.endTimeFilter.toISOString().slice(0, 10) }}
 					</div>
 				</div>
 			</div>
@@ -278,6 +377,30 @@ watch(
 			<IconChartHistogram class="body" size="1.5rem" />
 			<IconChartSankey class="tail" size="1.25rem" />
 		</div> -->
+		<div class="chart-control">
+			<button
+				class="glassy"
+				:class="{ selected: axisMode === 'most' }"
+				@click="setAxisMode('most')"
+			>
+				<IconZoomScan />
+			</button>
+			<button
+				class="glassy"
+				:class="{ selected: axisMode === 'full' }"
+				@click="setAxisMode('full')"
+			>
+				<IconArrowsDiagonal />
+			</button>
+			<button
+				class="glassy"
+				:class="{ selected: axisMode === 'event' }"
+				:disabled="!selectedX"
+				@click="setAxisMode('event')"
+			>
+				<IconViewfinder />
+			</button>
+		</div>
 	</div>
 </template>
 
@@ -298,6 +421,41 @@ watch(
 	flex-direction: column;
 	padding: 0 0.125rem;
 
+	$controlsHeight: 1.5rem;
+	.chart-control {
+		display: flex;
+		flex-direction: row;
+		justify-content: center;
+		align-items: center;
+		padding: 0;
+		flex: 0 0 0;
+		height: 0;
+		overflow: visible;
+		position: absolute;
+		bottom: 0;
+		width: 100%;
+
+		button {
+			height: $controlsHeight;
+
+			box-shadow: none !important;
+			border-radius: 0;
+			&:first-child {
+				border-top-left-radius: 0.5rem;
+				border-bottom-left-radius: 0.5rem;
+			}
+			&:last-child {
+				border-top-right-radius: 0.5rem;
+				border-bottom-right-radius: 0.5rem;
+			}
+			padding: 0 1rem;
+
+			.tabler-icon {
+				width: 90%;
+			}
+		}
+	}
+
 	.scroller {
 		height: 100%;
 		width: 100%;
@@ -310,10 +468,20 @@ watch(
 		// margin-bottom: 0.25rem;
 		scroll-snap-type: y mandatory;
 		justify-content: space-between;
+		position: relative;
 
 		.chart {
-			scroll-snap-align: center;
 			flex: 0 0 calc(100% - 1.5rem);
+			// &.histo {
+			// 	flex-basis: calc(100% - 1.5rem - $controlsHeight);
+			// 	padding-bottom: 2rem;
+			// }
+			// &.scatter {
+			// 	flex-basis: calc(100% - 1.5rem - $controlsHeight);
+			// 	padding-top: 2rem;
+			// }
+
+			scroll-snap-align: center;
 			padding: 0.25rem;
 			border: none;
 			border-bottom: 1px solid var(--divider);
@@ -337,6 +505,22 @@ watch(
 				width: calc(100% - 2.5rem);
 			}
 
+			.axis .label {
+				flex: 0 0 1rem;
+			}
+			.axis.horizontal .label {
+				flex: 0 0 33%;
+
+				&:first-child {
+					text-align: left;
+				}
+				&:last-child {
+					text-align: right;
+				}
+			}
+			.axis.horizontal .icon {
+				flex: 0 0 33%;
+			}
 			.histogram-root,
 			.scatter-root {
 				flex: 1 1 auto;
@@ -345,29 +529,6 @@ watch(
 				padding: 0 0.5rem;
 			}
 		}
-	}
-}
-</style>
-<style>
-.body {
-	path:nth-child(2),
-	path:nth-child(3),
-	path:nth-child(4),
-	path:nth-child(5) {
-		display: none;
-	}
-
-	path:nth-child(6) {
-		transform: translate(0, 2px);
-	}
-}
-
-.tail {
-	transform: translate(-6px, 7px) scaleY(0.8);
-	path:nth-child(1),
-	path:nth-child(2),
-	path:nth-child(5) {
-		display: none;
 	}
 }
 </style>

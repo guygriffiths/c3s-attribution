@@ -5,7 +5,6 @@ import { useStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { useStore as useEventStore } from '@/store/eventStore'
 import MapComponent from './Map.vue'
-import Histogram from './util/Histogram.vue'
 import EventTypeToggle from './util/EventTypeToggle.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
@@ -15,32 +14,28 @@ import FilterPanel from './FilterPanel.vue'
 import FocusFrame from './util/FocusFrame.vue'
 import ModeToggle from './util/ModeToggle.vue'
 import {
-	clearFilter,
 	getCurrentEvents,
 	getFilteredEvents,
 	getGlobalFilteredEvents,
-	manualGlobalTrigger,
 	onCurrentEventsReady,
 	onGlobalEventsReady,
 	onRegionEventsReady,
 	setColdOnly,
 	setHotOnly,
 	setHotColdBoth,
+	getTimeRangedEvents,
 } from '@/lib/eventsDB'
-import { differenceInDays, format, getTime } from 'date-fns'
+import { differenceInDays } from 'date-fns'
 import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
 import {
 	IconCalendarWeek,
 	IconChartBar,
 	IconChartHistogram,
-	IconChevronsUpLeft,
-	IconChevronUpLeft,
 	IconInfoSquareRounded,
 	IconMenu2,
 	IconX,
 } from '@tabler/icons-vue'
 import EventDayPanel from './EventDayPanel.vue'
-import { get } from '@vueuse/core'
 
 const $l = useLabels()
 const store = useStore()
@@ -54,7 +49,6 @@ const toggleTimePanelExpanded = () => {
 
 const exitFocus = () => {
 	eventStore.selectEvent(null)
-	clearFilter()
 	store.draggingFilter = false
 }
 
@@ -72,6 +66,7 @@ const eventsOfInterest = ref([] as ExtremeEvent[])
 onGlobalEventsReady(() => {
 	globalFilteredEvents.value = getGlobalFilteredEvents()
 	if (globalEventsOfInterest.value) {
+		// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
 		eventsOfInterest.value = globalFilteredEvents.value
 	}
 })
@@ -85,31 +80,52 @@ watch(
 		currentEvents.value = getCurrentEvents(newVal)
 	},
 )
-// watch(
-// 	() => [timeStore.startTimeFilter, timeStore.endTimeFilter],
-// 	() => {
-// 		if (globalEventsOfInterest.value) {
-// 			globalFilteredEvents.value = getGlobalFilteredEvents()
-// 			eventsOfInterest.value = globalFilteredEvents.value
-// 			timeFilteredEventsOfInterest.value = getGlobalTimeFilteredEvents()
-// 		} else {
-// 			eventsOfInterest.value = getFilteredEvents()
-// 			console.log('filtering timeFilteredEventsOfInterest')
-// 			timeFilteredEventsOfInterest.value = getTimeFilteredEvents()
-// 		}
-// 	},
-// )
+const timeRangeEvents = ref([] as ExtremeEvent[])
+let pending = false
+watch(
+	() => [store.viewMode, timeStore.startTimeFilter, timeStore.endTimeFilter],
+	() => {
+		if (pending) return
+		pending = true
+		requestAnimationFrame(() => {
+			pending = false
+			if (
+				store.filteringByPoint ||
+				(store.filteringByRegion && store.regionFilterReady)
+			) {
+				eventsOfInterest.value = getFilteredEvents()
+				timeRangeEvents.value = eventsOfInterest.value.filter(
+					(e) =>
+						e.times[0] <= timeStore.endTimeFilter.getTime() &&
+						e.times[e.times.length - 1] >= timeStore.startTimeFilter.getTime(),
+				)
+			} else {
+				const newEvents = getTimeRangedEvents(
+					timeStore.startTimeFilter,
+					timeStore.endTimeFilter,
+				)
+				if (eventStore.selectedEvent) {
+					// Ensure selected event is included
+					if (!newEvents.find((e) => e.id === eventStore.selectedEvent?.id)) {
+						// @ts-ignore
+						newEvents.push(eventStore.selectedEvent)
+					}
+				}
 
-// onGlobalEventsReady(() => {
-// 	console.log('global event trigger')
-// })
-// onRegionEventsReady(() => {
-// 	console.log('region event trigger')
-// })
+				timeRangeEvents.value = newEvents
+			}
+		})
+	},
+	{ immediate: true },
+)
 
 onRegionEventsReady(() => {
-	console.log('region events ready - Main.vue')
 	eventsOfInterest.value = getFilteredEvents()
+	timeRangeEvents.value = eventsOfInterest.value.filter(
+		(e) =>
+			e.times[0] <= timeStore.endTimeFilter.getTime() &&
+			e.times[e.times.length - 1] >= timeStore.startTimeFilter.getTime(),
+	)
 })
 
 watch(
@@ -122,8 +138,14 @@ watch(
 	],
 	() => {
 		if (globalEventsOfInterest.value) {
+			// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
 			eventsOfInterest.value = globalFilteredEvents.value
+			timeRangeEvents.value = getTimeRangedEvents(
+				timeStore.startTimeFilter,
+				timeStore.endTimeFilter,
+			)
 		} else {
+			// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
 			eventsOfInterest.value = getFilteredEvents()
 		}
 	},
@@ -142,10 +164,13 @@ watch(
 		}
 		if (globalEventsOfInterest.value) {
 			globalFilteredEvents.value = getGlobalFilteredEvents()
+			// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
 			eventsOfInterest.value = globalFilteredEvents.value
 		} else {
+			// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
 			eventsOfInterest.value = getFilteredEvents()
 		}
+		currentEvents.value = getCurrentEvents(timeStore.selectedTime)
 	},
 	{ immediate: true },
 )
@@ -179,7 +204,20 @@ const selectedDayIdx = computed((): number | null => {
 
 		<MapComponent id="map"></MapComponent>
 
-		<div id="logo">LOGO ETC</div>
+		<div id="logo" :class="{ 'disable-pointer-events': store.isFocused }">
+			<img src="@/assets/img/c3s-logo.png" alt="C3S Logo" />
+			<h1>
+				Extreme
+				<span class="eventtype" @click="eventStore.cycleEventType()">{{
+					eventStore.eventTypeMode === 'hot'
+						? 'Heatwave'
+						: eventStore.eventTypeMode === 'cold'
+							? 'Coldwave'
+							: 'Event'
+				}}</span>
+				Explorer
+			</h1>
+		</div>
 
 		<ModeToggle
 			v-model="store.viewMode"
@@ -257,10 +295,15 @@ const selectedDayIdx = computed((): number | null => {
 		<MultiEventSmartPanel
 			id="multi-event-panel"
 			:events-of-interest="
-				store.viewMode === 'timemachine'
-					? currentEvents
-					: eventsOfInterest
+				store.viewMode === 'timemachine' ? currentEvents : timeRangeEvents
 			"
+			:background-events="
+				store.filteringByPoint ||
+				(store.filteringByRegion)
+					? globalFilteredEvents
+					: []
+			"
+			:selectedEvent="eventStore.selectedEvent"
 			class="right panel"
 			:class="{
 				selected: eventStore.eventSelected,
@@ -294,9 +337,7 @@ const selectedDayIdx = computed((): number | null => {
 			:event-store="eventStore"
 			:time-store="timeStore"
 			:events-of-interest="
-				store.viewMode === 'timemachine'
-					? currentEvents
-					: eventsOfInterest
+				store.viewMode === 'timemachine' ? currentEvents : timeRangeEvents
 			"
 			:class="{
 				'disable-transitions': timeStore.isPlaying,
@@ -342,6 +383,7 @@ const selectedDayIdx = computed((): number | null => {
 				:show-bars="timeStore.showBars"
 				:color-for-event="eventStore.colorForEvent"
 				:eventType="eventStore.eventTypeMode"
+				:speed-factor="timeStore.speedFactor"
 				:class="mode"
 				v-model="timeStore.selectedTime"
 				@event-selected="eventStore.selectEvent"
@@ -421,11 +463,31 @@ const selectedDayIdx = computed((): number | null => {
 		position: absolute;
 		top: $panelMargin;
 		left: $panelMargin;
-		width: calc(50% - 2 * $panelMargin - $modeButtonWidth);
+		// width: calc(50% - 2 * $panelMargin - $modeButtonWidth);
 		height: $headerHeight;
 		z-index: 50;
 		pointer-events: none;
 		background: var(--panel-bg);
+		display: flex;
+		align-items: center;
+		padding: 0.125rem 0.5rem;
+		padding: 0.25rem 0.5rem;
+		border-radius: $borderRadius;
+		border-bottom-right-radius: $borderRadius;
+		box-shadow: var(--shadow-md);
+		// z-index: 999;
+
+		img {
+			height: 100%;
+			width: auto;
+			margin-right: 0.5rem;
+		}
+
+		.eventtype {
+			color: var(--primary);
+			cursor: pointer;
+			pointer-events: auto;
+		}
 	}
 
 	#mode-toggle {

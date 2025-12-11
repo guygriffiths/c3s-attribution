@@ -30,23 +30,34 @@ type Props = {
 	highlightValue?: number | null
 	types?: EventType[]
 	variable?: Variable
+	hasTail?: boolean
 }
 
 const props = defineProps<Props>()
 // defaults
 const nbins = props.nbins ?? 10
 
-const bins = computed(() =>
-	props.bins !== null && props.bins !== undefined
-		? props.bins
-		: getBins(
-				props.data,
-				props.types ?? [],
-				props.xmin,
-				props.xmax,
-				nbins,
-				true,
-			),
+const bins = ref<any[] | null>([])
+watch(
+	() => [props.data, props.xmin, props.xmax, props.types, props.bins],
+	() => {
+		requestAnimationFrame(() => {
+			const hasTail = props.hasTail ?? false
+			bins.value =
+				props.bins !== null && props.bins !== undefined
+					? props.bins
+					:
+					 getBins(
+							props.data,
+							props.types ?? [],
+							props.xmin,
+							props.xmax,
+							nbins,
+							hasTail,
+						)
+		})
+	},
+	{ immediate: true },
 )
 
 // responsive width handling

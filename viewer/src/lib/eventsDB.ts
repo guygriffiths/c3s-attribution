@@ -14,6 +14,7 @@ let lastRegionFilter: GeoJSON.Feature<Polygon | MultiPolygon> | null = null
 
 let pixelIndex: Record<number, number[]> = {} // Maps packed pixel IDs to event IDs for fast lookup
 let dateIndex: Record<string, number[]> = {}
+let monthIndex: Record<string, number[]> = {}
 let pixelIndexReady = false
 let dateIndexReady = false
 let globalEventsReady = false
@@ -56,11 +57,12 @@ fetchAndIndexWorker.onmessage = (
 		year: number
 		events: ExtremeEvent[]
 		pixelIndex: Record<number, number[]>
-		dateIndex: Record<string, number[]>
+		dateIndex: Record<number, number[]>
+		monthIndex: Record<string, number[]>
 	}>,
 ) => {
 	retrievedCount++
-	const { year, events, pixelIndex: pIndex, dateIndex: dIndex } = e.data
+	const { year, events, pixelIndex: pIndex, dateIndex: dIndex, monthIndex: mIndex } = e.data
 
 	// console.log(`Main thread received ${events.length} events from worker`)
 
@@ -81,6 +83,15 @@ fetchAndIndexWorker.onmessage = (
 			dateIndex[key] = dateIndex[key].concat(val)
 		} else {
 			dateIndex[key] = val
+		}
+	}
+
+	// Merge month index
+	for (const [key, val] of Object.entries(mIndex)) {
+		if (monthIndex[key]) {
+			monthIndex[key] = monthIndex[key].concat(val)
+		} else {
+			monthIndex[key] = val
 		}
 	}
 
@@ -139,23 +150,6 @@ export async function fetchAndIndexEvents(
 	}
 }
 
-export function finaliseEventFilters() {
-	if (finalised) return
-	finalised = true
-}
-
-export function manualGlobalTrigger() {
-	for (const cb of globalEventsReadyTriggers) {
-		cb()
-	}
-}
-
-export function manualDateTrigger() {
-	for (const cb of currentEventTriggers) {
-		cb()
-	}
-}
-
 export function getEventCount(): number {
 	return _filteredEvents.length
 }
@@ -171,6 +165,7 @@ export function setFilterToPoint(lat: number, lon: number): ExtremeEvent[] {
 	lastResult = lastResult.filter((e) => e) // filter out undefined
 	lastIds = new Set(lastResult.map((e) => e.id))
 	resultReady = true
+	console.log('calling region triggers')
 	regionEventsReadyTriggers.forEach((cb) => cb())
 
 	if (coldOnly) {
@@ -218,6 +213,7 @@ export function setFilterToRegion(
 	lastResult = Array.from(ids).map((idx) => _filteredEvents[idx])
 	lastIds = new Set(lastResult.map((e) => e.id))
 	resultReady = true
+	console.log('calling region triggers')
 	regionEventsReadyTriggers.forEach((cb) => cb())
 
 	if (coldOnly) {
@@ -229,13 +225,13 @@ export function setFilterToRegion(
 	return lastResult
 }
 
-export function setPostFilters(
+export function setFilters(
 	filters: EventStore['filters'],
 	durationGetter: (e: ExtremeEvent) => number = (e) => e.duration,
 	intensityGetter: (e: ExtremeEvent) => number = (e) => e.max_value || 0,
 	sizeGetter: (e: ExtremeEvent) => number = (e) => e.pixel_set.length || 0,
 ) {
-	_filteredEvents = postFilterEvents(
+	_filteredEvents = applyFilters(
 		_events,
 		filters,
 		durationGetter,
@@ -252,7 +248,7 @@ export function setPostFilters(
 	currentEventTriggers.forEach((cb) => cb())
 }
 
-const postFilterEvents = (
+const applyFilters = (
 	events: ExtremeEvent[],
 	filters: EventStore['filters'],
 	durationGetter: (e: ExtremeEvent) => number = (e) => e.duration,
@@ -324,16 +320,6 @@ export function filterResultReady(): boolean {
 	return resultReady
 }
 
-export function restoreFilter() {
-	resultReady = true
-	regionEventsReadyTriggers.forEach((cb) => cb())
-}
-
-export function clearFilter() {
-	resultReady = false
-	regionEventsReadyTriggers.forEach((cb) => cb())
-}
-
 export function getFilteredEvents(): ExtremeEvent[] {
 	if (coldOnly) {
 		return lastResult.filter((e) => e.event_type === 'cold')
@@ -379,8 +365,50 @@ export function getCurrentEvents(time: Date): ExtremeEvent[] {
 	return result
 }
 
+export function getTimeRangedEvents(
+	startTime: Date,
+	endTime: Date,
+): ExtremeEvent[] {
+	if (!startTime || !endTime) return _filteredEvents
+
+	const startYear = startTime.getFullYear()
+	const startMonth = startTime.getMonth()
+	const endYear = endTime.getFullYear()
+	const endMonth = endTime.getMonth()
+
+	const idxs: number[] = []
+
+	for (
+		let y = startYear, m = startMonth;
+		y < endYear || (y === endYear && m <= endMonth);
+		m++
+	) {
+		if (m > 11) {
+			m = 0
+			y++
+		}
+		const key = `${y}-${String(m + 1).padStart(2, '0')}` // "YYYY-MM" format
+		const monthEvents = monthIndex[key]
+		if (monthEvents) idxs.push(...monthEvents)
+	}
+
+	const result: ExtremeEvent[] = []
+	for (const idx of new Set(idxs)) {
+		const ev = _events[idx]
+		if (_filteredIds.has(ev.id)) result.push(ev)
+	}
+
+	if (coldOnly) return result.filter((e) => e.event_type === 'cold')
+	if (hotOnly) return result.filter((e) => e.event_type === 'hot')
+	return result
+}
+
 export function getCurrentDayCounts(): Map<number, Array<number>> {
 	return counts
+}
+
+export function getGlobalFilteredEventsHotColdWet(): ExtremeEvent[] {
+	return _filteredEvents
 }
 
 export function getGlobalFilteredEvents(): ExtremeEvent[] {
@@ -399,6 +427,7 @@ export function setColdOnly() {
 	if (coldOnly) return
 	coldOnly = true
 	hotOnly = false
+	console.log('calling region triggers')
 	regionEventsReadyTriggers.forEach((cb) => cb())
 	globalEventsReadyTriggers.forEach((cb) => cb())
 	currentEventTriggers.forEach((cb) => cb())

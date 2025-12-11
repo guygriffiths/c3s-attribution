@@ -25,9 +25,9 @@ const props = defineProps<{
 const timeString = computed(() =>
 	props.mainStore.viewMode === 'timemachine'
 		? format(props.timeStore.selectedTime, 'dd MMM yy')
-		: props.timeStore.startTimeFilter?.getUTCFullYear() +
+		: format(props.timeStore.startTimeFilter, 'MMM yy') +
 			' - ' +
-			props.timeStore.endTimeFilter?.getUTCFullYear(),
+			format(props.timeStore.endTimeFilter, 'MMM yy'),
 )
 const dateNumber = computed(() => {
 	return props.mainStore.viewMode === 'timemachine'
@@ -72,10 +72,6 @@ const sortFunc = computed(() => {
 
 <template>
 	<div class="event-info panel">
-		<div class="info-row title">
-			<CalendarIcon :size="24" :date="dateNumber" />
-			<span class="value mono">{{ timeString }}</span>
-		</div>
 		<div class="info-row header">
 			<div class="label">
 				<IconTemperatureSun v-if="eventStore.eventTypeMode === 'hot'" />
@@ -85,6 +81,10 @@ const sortFunc = computed(() => {
 					eventsOfInterest.length.toLocaleString()
 				}}</span>
 			</div>
+		</div>
+		<div class="info-row title">
+			<CalendarIcon :size="24" :date="dateNumber" />
+			<span class="value mono">{{ timeString }}</span>
 		</div>
 		<div class="buttons">
 			<span class="award"
@@ -261,5 +261,4 @@ const sortFunc = computed(() => {
 		margin-left: 0.25rem;
 	}
 }
-
 </style>

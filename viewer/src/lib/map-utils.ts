@@ -39,7 +39,7 @@ export const centreMapOnDiv = (
 	// calculate pixel offset from map centre
 	const offsetX = rect.left + rect.width / 2 - mapSize.x / 2
 	const offsetY = 0//rect.top + rect.height / 2 - mapSize.y / 2
-	console.log('centring map on div', rect, mapSize, offsetX, offsetY)
+	// console.log('centring map on div', rect, mapSize, offsetX, offsetY)
 	// pan by the negative of that offset so the div moves to centre
 	if (!uncentre) {
 		map.panBy([-offsetX, -offsetY], {

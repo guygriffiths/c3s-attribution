@@ -57,6 +57,7 @@ self.onmessage = async (
 		years,
 		start,
 	)
+	// console.log('Time reel worker posting message back', newDs)
 
 	self.postMessage({
 		newDs,

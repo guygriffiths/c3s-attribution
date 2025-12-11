@@ -13,8 +13,8 @@ import * as d3 from 'd3'
 import {
 	addHours,
 	differenceInDays,
+	differenceInHours,
 	getDayOfYear,
-	set,
 	setDayOfYear,
 	subHours,
 } from 'date-fns'
@@ -25,32 +25,30 @@ import {
 	onBeforeUnmount,
 	onMounted,
 	onUnmounted,
-	PropType,
 	ref,
 	Ref,
 	watch,
 } from 'vue'
 import {
 	IconCrosshair,
-	IconPlayerPlayFilled,
-	IconPlayerPauseFilled,
-	IconPlayerSkipBackFilled,
-	IconPlayerSkipForwardFilled,
-	IconPlayerTrackNextFilled,
-	IconPlayerTrackPrevFilled,
 	IconArrowsMove,
 	IconArrowBarToRight,
 	IconArrowBarToLeft,
+	IconChevronLeftPipe,
+	IconChevronLeft,
+	IconChevronRight,
+	IconChevronRightPipe,
+	IconPlayerPlay,
+	IconPlayerPause,
 } from '@tabler/icons-vue'
-import { get } from '@vueuse/core'
 
 const $l = useLabels()
 
 const props = defineProps<{
 	start: Date
 	end: Date
-	startFilter: Date | null
-	endFilter: Date | null
+	startFilter: Date
+	endFilter: Date
 	events: ExtremeEvent[]
 	selectedEvent: ExtremeEventFull | null
 	hoverEvent: ExtremeEvent | null
@@ -58,9 +56,8 @@ const props = defineProps<{
 	showBars: boolean
 	eventType: 'hotcold' | 'hot' | 'cold'
 	colorForEvent: (event: ExtremeEvent) => string | null
+	speedFactor: number
 }>()
-
-// console.log('Time Reel: colorForEvent:', props.colorForEvent)
 
 const startYear = computed(() => props.start.getUTCFullYear())
 const endYear = computed(() => props.end.getUTCFullYear())
@@ -114,6 +111,20 @@ const scrollToYear = (year: number) => {
 	}
 }
 const nextDay = () => {
+	if (isTimeline.value) {
+		let newStart = addHours(props.startFilter, 4 * 7 * 24)
+		let newEnd = addHours(props.endFilter, 4 * 7 * 24)
+		if (newEnd > props.end) {
+			newEnd = props.end
+			newStart = subHours(
+				newEnd,
+				differenceInDays(props.endFilter, props.startFilter) * 24,
+			)
+		}
+		emits('update:startFilter', newStart)
+		emits('update:endFilter', newEnd)
+		return
+	}
 	const newVal = addHours(model.value, 24)
 	if (newVal.getUTCFullYear() <= endYear.value) {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
@@ -129,6 +140,20 @@ const nextDay = () => {
 	}
 }
 const prevDay = () => {
+	if (isTimeline.value) {
+		let newStart = subHours(props.startFilter, 4 * 7 * 24)
+		let newEnd = subHours(props.endFilter, 4 * 7 * 24)
+		if (newStart < props.start) {
+			newStart = props.start
+			newEnd = addHours(
+				newStart,
+				differenceInDays(props.endFilter, props.startFilter) * 24,
+			)
+		}
+		emits('update:startFilter', newStart)
+		emits('update:endFilter', newEnd)
+		return
+	}
 	const newVal = subHours(model.value, 24)
 	if (newVal.getUTCFullYear() >= startYear.value) {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
@@ -144,15 +169,35 @@ const prevDay = () => {
 	}
 }
 const startOfYear = () => {
-	if (isZoom && props.selectedEvent) {
+	if (isZoom.value && props.selectedEvent) {
 		setDate(props.selectedEvent.times[0])
+		return
+	} else if (isTimeline.value) {
+		emits(
+			'update:endFilter',
+			addHours(
+				props.start,
+				differenceInHours(props.endFilter, props.startFilter),
+			),
+		)
+		emits('update:startFilter', props.start)
 		return
 	}
 	setDate(Date.UTC(selectedYear.value, 0, 1))
 }
 const endOfYear = () => {
-	if (isZoom && props.selectedEvent) {
+	if (isZoom.value && props.selectedEvent) {
 		setDate(props.selectedEvent.times[props.selectedEvent.times.length - 1])
+		return
+	} else if (isTimeline.value) {
+		emits(
+			'update:startFilter',
+			subHours(
+				props.end,
+				differenceInHours(props.endFilter, props.startFilter),
+			),
+		)
+		emits('update:endFilter', props.end)
 		return
 	}
 	setDate(Date.UTC(selectedYear.value, 11, 31))
@@ -166,8 +211,9 @@ const prevYear = () => {
 
 const playing = ref(false)
 const frameInterval = computed(() => {
-	let FPS = 60
-	if (isZoom.value) FPS = 3
+	let FPS = 15
+	if (isZoom.value) FPS = 2.5 * props.speedFactor
+	if (isTimeline.value) FPS = 60
 	return 1000 / FPS
 })
 
@@ -201,17 +247,32 @@ const togglePlay = () => {
 			if (!playing.value) return
 
 			if (ts - last >= frameInterval.value) {
-				if (
-					model.value.getTime() === props.end.getTime() ||
-					(isZoom.value &&
-						model.value.getTime() ===
-							props.selectedEvent!.times[props.selectedEvent!.times.length - 1])
-				) {
-					// Reached end of event
-					playing.value = false
-					return
+				if (isTimeline.value) {
+					// Timeline mode: stop at end date
+					let newStart = addHours(props.startFilter, props.speedFactor * 3 * 4 * 7 * 24)
+					let newEnd = addHours(props.endFilter, props.speedFactor * 3 * 4 * 7 * 24)
+					if (newEnd > props.end) {
+						newEnd = props.end
+						playing.value = false
+					} else {
+						emits('update:startFilter', newStart)
+						emits('update:endFilter', newEnd)
+					}
 				} else {
-					nextDay()
+					if (
+						model.value.getTime() === props.end.getTime() ||
+						(isZoom.value &&
+							model.value.getTime() ===
+								props.selectedEvent!.times[
+									props.selectedEvent!.times.length - 1
+								])
+					) {
+						// Reached end of event
+						playing.value = false
+						return
+					} else {
+						nextDay()
+					}
 				}
 				last = ts
 			}
@@ -284,7 +345,7 @@ const startDrag = (event: MouseEvent) => {
 	} else {
 		rangeDrag.value = null
 	}
-	if(rangeDrag.value !== null) {
+	if (rangeDrag.value !== null) {
 		rangeDragStartDate = new Date(props.startFilter!)
 		rangeDragEndDate = new Date(props.endFilter!)
 	}
@@ -367,6 +428,26 @@ const endDrag = (event: MouseEvent) => {
 					),
 				)
 			}
+		} else if (isOverview.value) {
+			try {
+				const percentage =
+					(clickXOff - 40) / (scroller.value?.clientWidth! - 40)
+				const totalDays = 365
+				const dayFromStart = Math.floor(
+					1 + Math.max(0, Math.min(1, percentage)) * totalDays,
+				)
+				const newDate = new Date(Date.UTC(selectedYear.value, 0, dayFromStart))
+
+				const clickYOff =
+					event.clientY - (scroller.value?.getBoundingClientRect().top || 0)
+				const ySize = rowHeight.value
+				const yearClicked = Math.floor(clickYOff / ySize) + startYear.value
+				if (yearClicked !== selectedYear.value) {
+					setDate(Date.UTC(yearClicked, newDate.getMonth(), newDate.getDate()))
+				}
+			} catch (e) {
+				console.error('Error handling overview click:', e)
+			}
 		} else {
 			const percentage = clickXOff / (scroller.value?.clientWidth || 1)
 			const totalDays = selectedYear.value % 4 === 0 ? 365 : 364
@@ -412,32 +493,6 @@ const handleDrag = (event: MouseEvent) => {
 		}
 
 		if (dragMode.value === 'horizontal') {
-			// if (rangeDrag.value !== null) {
-			// 	const target = event.target as HTMLElement
-			// 	if (rangeDrag.value === 'start') {
-			// 		const newDate = addHours(startDate, (dx / (scroller.value?.clientWidth || 1)) * 24 * TOTAL_DAYS)
-			// 		if (newDate < (props.endFilter || props.end) && newDate <= model.value) {
-			// 			emits('update:startFilter', newDate)
-			// 		}
-			// 	} else if (rangeDrag.value === 'end') {
-			// 		const newDate = addHours(startDate, (dx / (scroller.value?.clientWidth || 1)) * 24 * TOTAL_DAYS)
-			// 		if (newDate > (props.startFilter || props.start) && newDate >= model.value) {
-			// 			emits('update:endFilter', newDate)
-			// 		}
-			// 	} else if (rangeDrag.value === 'move') {
-			// 		const totalRangeDays =
-			// 			((props.endFilter ? differenceInDays(props.endFilter, props.startFilter || props.start) : differenceInDays(props.end, props.start)) + 1)
-			// 		const newStartDate = addHours(startDate, (dx / (scroller.value?.clientWidth || 1)) * 24 * totalRangeDays)
-			// 		const newEndDate = addHours(newStartDate, totalRangeDays * 24 - 1)
-			// 		if (
-			// 			newStartDate >= props.start &&
-			// 			newEndDate <= props.end
-			// 		) {
-			// 			emits('update:startFilter', newStartDate)
-			// 			emits('update:endFilter', newEndDate)
-			// 		}
-			// 	}
-			// } else {
 			const container = containerRef.value
 			if (container) {
 				if (!isZoom.value) {
@@ -447,16 +502,13 @@ const handleDrag = (event: MouseEvent) => {
 						const daysMoved = Math.round(dx / pixelsPerDay)
 						let newStart = new Date(rangeDragStartDate!)
 						let newEnd = new Date(rangeDragEndDate!)
-						if(rangeDrag.value === 'start' || rangeDrag.value === 'move') {
+						if (rangeDrag.value === 'start' || rangeDrag.value === 'move') {
 							newStart = addHours(rangeDragStartDate!, 24 * daysMoved)
-							if(newStart < props.start) newStart = props.start
+							if (newStart < props.start) newStart = props.start
 						}
-						if(rangeDrag.value === 'end' || rangeDrag.value === 'move') {
-							newEnd = addHours(
-								rangeDragEndDate!,
-								24 * daysMoved,
-							)
-							if(newEnd > props.end) newEnd = props.end
+						if (rangeDrag.value === 'end' || rangeDrag.value === 'move') {
+							newEnd = addHours(rangeDragEndDate!, 24 * daysMoved)
+							if (newEnd > props.end) newEnd = props.end
 						}
 						emits('update:startFilter', newStart)
 						emits('update:endFilter', newEnd)
@@ -693,7 +745,6 @@ watch(isOverview, (newVal) => {
 				if (scroller.value === null) return
 				// @ts-ignore
 				scroller.value!.style.overflow = 'auto'
-				console.log('setting scrollTop tomanully')
 				scroller.value!.scrollTop =
 					(selectedYear.value - startYear.value) * rowHeight.value
 			},
@@ -752,7 +803,7 @@ timeReelWorker.onmessage = (e: MessageEvent) => {
 }
 watch(
 	() => props.events,
-	() => {
+	(newVal) => {
 		timeReelWorker.postMessage({
 			events: props.events.map((e) => ({
 				id: e.id,
@@ -835,8 +886,10 @@ const viewportTransform = computed(() => {
 		const pxPerDay = (timeReelRef.value?.clientWidth || 1) / nDays
 
 		// return 'translate(0, 0)'
+		// console.log( `scale(${scale}, 1) translate(${-(eventStart - 1)}, 0) translate(${xOffset.value / pxPerDay}, 0)`)
 		return `scale(${scale}, 1) translate(${-(eventStart - 1)}, 0) translate(${xOffset.value / pxPerDay}, 0)`
 	} else {
+		// console.log('translate(0, 0)')
 		return 'translate(0, 0)'
 	}
 })
@@ -928,8 +981,9 @@ const dateTranslate = computed(() => {
 		<div
 			class="controls"
 			:class="{
-				hidden: isTimeline || isOverview,
+				hidden: isOverview,
 				zoom: isZoom,
+				timeline: isTimeline,
 			}"
 		>
 			<div class="buttons">
@@ -938,7 +992,7 @@ const dateTranslate = computed(() => {
 					@click="startOfYear"
 					:title="$l.startOfYear"
 				>
-					<IconPlayerTrackPrevFilled />
+					<IconChevronLeftPipe />
 				</button>
 				<button
 					class="glassy color"
@@ -946,7 +1000,7 @@ const dateTranslate = computed(() => {
 					:disabled="selectedYear <= startYear && selectedDay <= 1"
 					:title="$l.prevDay"
 				>
-					<IconPlayerSkipBackFilled />
+					<IconChevronLeft />
 				</button>
 				<button
 					class="glassy color"
@@ -961,8 +1015,8 @@ const dateTranslate = computed(() => {
 					"
 					:class="{ selected: playing }"
 				>
-					<IconPlayerPlayFilled v-if="!playing" />
-					<IconPlayerPauseFilled v-else />
+					<IconPlayerPlay v-if="!playing" />
+					<IconPlayerPause v-else />
 				</button>
 				<button
 					class="glassy color"
@@ -970,30 +1024,18 @@ const dateTranslate = computed(() => {
 					:disabled="selectedYear >= endYear && selectedDay >= 365"
 					:title="$l.nextDay"
 				>
-					<!-- <font-awesome-icon :icon="faForwardStep" /> -->
-					<IconPlayerSkipForwardFilled />
+					<IconChevronRight />
 				</button>
 				<button class="glassy color" @click="endOfYear" :title="$l.endOfYear">
-					<IconPlayerTrackNextFilled />
+					<IconChevronRightPipe />
 				</button>
-				<!-- <button
-					@click="nextYear"
-					:disabled="selectedYear >= endYear"
-					:title="$l.nextYear"
-				>
-					<font-awesome-icon
-						:icon="faForwardStep"
-						style="transform: rotate(90deg)"
-					/>
-				</button> -->
 			</div>
 		</div>
 		<div
 			class="scroller"
 			ref="scrollerRef"
 			@scroll="scrollListener"
-			@mousedown="startDrag"
-			@prevent.default
+			@mousedown.self="startDrag"
 			:class="{
 				timeline: isTimeline,
 				overview: isOverview,
@@ -1190,7 +1232,7 @@ const dateTranslate = computed(() => {
 										:key="box.eventId"
 										vector-effect="non-scaling-stroke"
 										@click="eventClicked(box)"
-										@mouseover="isZoom ? null : eventHovered(box)"
+										@mouseover="eventHovered(box)"
 									></rect>
 									<rect
 										v-if="hoverEvent !== null && year === selectedYear"
@@ -1293,7 +1335,7 @@ const dateTranslate = computed(() => {
 				<div
 					class="needle range off"
 					v-if="isTimeline"
-					:style="`transform: translateX(0px); width: ${Math.round(startNeedleOffsetPx - 6)}px;`"
+					:style="`transform: translateX(0px); width: ${Math.round(startNeedleOffsetPx - 2)}px;`"
 				></div>
 				<div
 					class="needle range off"
@@ -1303,7 +1345,7 @@ const dateTranslate = computed(() => {
 				<div
 					class="needle range"
 					v-if="isTimeline"
-					:style="`transform: translateX(calc(${startNeedleOffsetPx - 5}px)); width: calc(${endNeedleOffsetPx - startNeedleOffsetPx + 1}px);`"
+					:style="`transform: translateX(calc(${startNeedleOffsetPx - 3}px)); width: calc(${endNeedleOffsetPx - startNeedleOffsetPx + 3}px);`"
 					@mousedown="startDrag"
 				>
 					<div class="start-handle handle">
@@ -1379,7 +1421,6 @@ const dateTranslate = computed(() => {
 	}
 	&.overview {
 		.date-info {
-			// display: none;s
 			z-index: 1000;
 		}
 	}
@@ -1435,6 +1476,12 @@ const dateTranslate = computed(() => {
 			}
 		}
 
+		&.timeline {
+			top: calc(100% - 1.75rem);
+			left: 50%;
+			transform: translate(-50%, 0%);
+		}
+
 		&.hidden {
 			display: none;
 		}
@@ -1460,6 +1507,7 @@ const dateTranslate = computed(() => {
 			color: var(--highlight);
 			opacity: 1;
 			z-index: 5;
+			pointer-events: none;
 			cursor: grab;
 
 			.tabler-icon {
@@ -1480,6 +1528,7 @@ const dateTranslate = computed(() => {
 			position: relative;
 			width: 100%;
 			background-color: transparent;
+			pointer-events: none;
 
 			.clipper {
 				position: absolute;
@@ -1488,6 +1537,7 @@ const dateTranslate = computed(() => {
 				width: 100%;
 				height: 100%;
 				overflow: hidden;
+				// pointer-events: none;
 
 				.events-svg {
 					position: absolute;
@@ -1518,6 +1568,7 @@ const dateTranslate = computed(() => {
 				justify-content: flex-start;
 				width: 100%;
 				position: relative;
+				pointer-events: none;
 
 				&.timeline {
 					font-size: 1.5rem;
@@ -1695,7 +1746,7 @@ const dateTranslate = computed(() => {
 					transform: translateX(-50%);
 
 					&.range {
-						background: rgba($lightbulb, 0.05);
+						background: transparent;
 
 						&.off {
 							background: rgba(black, 0.1);
@@ -1708,8 +1759,8 @@ const dateTranslate = computed(() => {
 						height: 100%;
 
 						border-top: 0.5rem solid var(--primary-active);
-						border-right: 0.125rem solid var(--primary-glass); //rgba($lightbulb, 0.25);
-						border-left: 0.125rem solid var(--primary-glass); //rgba($lightbulb, 0.25);
+						border-right: 0.25rem solid rgba($lightbulb, 0.5);
+						border-left: 0.25rem solid rgba($lightbulb, 0.5);
 
 						display: flex;
 						flex-direction: row;
@@ -1744,13 +1795,14 @@ const dateTranslate = computed(() => {
 								// color: black;
 								flex: 1 1 50%;
 								height: 50%;
-								opacity: 0.25;
+								opacity: 0.05;
 								transition: opacity $transition;
 								pointer-events: none;
 							}
 
 							&:hover .tabler-icon {
 								opacity: 0.75;
+								filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 1));
 							}
 						}
 					}
@@ -1829,6 +1881,7 @@ const dateTranslate = computed(() => {
 
 	.events-svg {
 		background-color: transparent;
+		pointer-events: none;
 
 		.year-group {
 			transition: all $transition;
@@ -1850,6 +1903,7 @@ const dateTranslate = computed(() => {
 
 		.event-bar {
 			cursor: pointer;
+			pointer-events: auto;
 			transition: all $transition;
 			stroke-width: 0.5;
 			opacity: 1 !important;

@@ -81,6 +81,7 @@ const xmax = computed(() => {
 const xmin = computed(() => {
 	return Math.min(...minmaxIntensities.value)
 })
+const peakExtremeVals = ref<number[]>([])
 watch(
 	() => props.selectedEvent,
 	(newVal) => {
@@ -95,9 +96,7 @@ watch(
 		const newBins: any = {}
 		let localCount = 0
 		// let minVal = Infinity
-		let maxVal = -Infinity
-		const intensities = eventStore.intensitiesForEvent(selectedEvent.value)
-		// console.log('Intensities for event:', intensities)
+		peakExtremeVals.value = []
 		for (let i = 0; i < days.value.length; i++) {
 			const day = days.value[i]
 			const data = []
@@ -127,8 +126,11 @@ watch(
 			// if (newVal.min_values && newVal.min_values[i]) {
 			// 	minVal = Math.min(minVal, newVal.min_values[i])
 			// }
-			if (newVal) {
-				maxVal = Math.max(maxVal, intensities[i])
+			if (newVal && newVal.max_values && newVal.min_values) {
+				peakExtremeVals.value[i] =
+					eventType.value === 'hot'
+						? intensityForValue(newVal.max_values[i], true)
+						: intensityForValue(newVal.min_values[i], false)
 			}
 			newBins[day] = bins
 		}
@@ -143,43 +145,19 @@ const histogramData = computed(() => {
 	// console.log('recalculating histogram data for day', day, dayBins.value[day])
 	return dayBins.value[day] || []
 })
-const minmaxVals = computed(() => {
-	try {
-		return [
-			intensityForValue(
-				selectedEvent.value.min_values[props.selectedIndex],
-				eventType.value === 'hot',
-			),
-			intensityForValue(
-				selectedEvent.value.max_values[props.selectedIndex],
-				eventType.value === 'hot',
-			),
-		]
-	} catch {
-		return [
-			intensityForValue(
-				selectedEvent.value.min_value,
-				eventType.value === 'hot',
-			),
-			intensityForValue(
-				selectedEvent.value.max_value,
-				eventType.value === 'hot',
-			),
-		]
-	}
-})
-const minVal = computed(() => {
-	return Math.min(...minmaxVals.value)
-})
-const maxVal = computed(() => {
-	return Math.max(...minmaxVals.value)
-})
 const meanVal = computed(() => {
 	try {
 		return intensityForValue(
 			selectedEvent.value.mean_values[props.selectedIndex],
 			eventType.value === 'hot',
 		)
+	} catch {
+		return 0
+	}
+})
+const peakExtremeVal = computed(() => {
+	try {
+		return peakExtremeVals.value[props.selectedIndex] ?? 0
 	} catch {
 		return 0
 	}
@@ -247,9 +225,14 @@ const size = computed(() => {
 				</span>
 			</div>
 			<div class="info-row">
-				<IconTemperaturePlus class="icon" />
+				<IconTemperaturePlus
+					v-if="eventType === 'hot'"
+					class="icon"
+					:class="[eventType]"
+				/>
+				<IconTemperatureMinus v-else class="icon" :class="[eventType]" />
 				<span class="value mono"
-					>{{ niceNumber(maxVal) }}&nbsp;{{
+					>{{ niceNumber(peakExtremeVal || 0) }}&nbsp;{{
 						eventType === 'hot'
 							? eventStore.heatIntensityUnits
 							: eventStore.coldIntensityUnits
@@ -260,16 +243,6 @@ const size = computed(() => {
 				<IconTemperature class="icon" />
 				<span class="value mono"
 					>{{ niceNumber(meanVal) }}&nbsp;{{
-						eventType === 'hot'
-							? eventStore.heatIntensityUnits
-							: eventStore.coldIntensityUnits
-					}}</span
-				>
-			</div>
-			<div class="info-row">
-				<IconTemperatureMinus class="icon" />
-				<span class="value mono"
-					>{{ niceNumber(minVal) }}&nbsp;{{
 						eventType === 'hot'
 							? eventStore.heatIntensityUnits
 							: eventStore.coldIntensityUnits
@@ -358,7 +331,7 @@ const size = computed(() => {
 		}
 
 		.axis {
-			height: calc(100% - 2.5rem)
+			height: calc(100% - 2.5rem);
 		}
 	}
 

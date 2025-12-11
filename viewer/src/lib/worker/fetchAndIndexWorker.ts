@@ -38,6 +38,7 @@ self.onmessage = async (e: MessageEvent) => {
 	// console.log(`Worker built pixel index for ${prefix} ${year}`)
 	
 	const dateIndex: Record<number, number[]> = {}
+	const monthIndex: Record<string, number[]> = {}
 	
 	for (let idx = 0; idx < events.length; idx++) {
 		const event = events[idx]
@@ -46,11 +47,18 @@ self.onmessage = async (e: MessageEvent) => {
 				dateIndex[time] = []
 			}
 			dateIndex[time].push(idx + startI)
+
+			const date = new Date(time)
+			const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+			if (!monthIndex[monthKey]) {
+				monthIndex[monthKey] = []
+			}
+			monthIndex[monthKey].push(idx + startI)
 		}
 	}
 
 	// console.log(`Worker built date index for ${prefix} ${year}`)
 	startI += events.length
 
-	self.postMessage({ year, events, pixelIndex, dateIndex })
+	self.postMessage({ year, events, pixelIndex, dateIndex, monthIndex })
 }

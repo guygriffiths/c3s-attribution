@@ -6,14 +6,16 @@ interface TimeState {
 	startTime: Date
 	endTime: Date
 
-	startTimeFilter: Date | null
-	endTimeFilter: Date | null
+	startTimeFilter: Date
+	endTimeFilter: Date
 
 	showBars: boolean
 
 	timePanelExpanded: boolean
 
 	isPlaying: boolean
+
+	speedFactor: number
 }
 
 export const useStore = defineStore('time', {
@@ -27,8 +29,8 @@ export const useStore = defineStore('time', {
 			endTime: new Date(),
 
 			// Selected range for filtering in heatmap mode
-			startTimeFilter: null,
-			endTimeFilter: null,
+			startTimeFilter: new Date(1979, 0, 1),
+			endTimeFilter: new Date(),
 
 			// Whether to plot individual events as bars in the time reel
 			showBars: true,
@@ -38,6 +40,9 @@ export const useStore = defineStore('time', {
 
 			// Whether animation is currently playing
 			isPlaying: false,
+
+			// Speed factor for time reel animation
+			speedFactor: 1
 		}
 	},
 	getters: {

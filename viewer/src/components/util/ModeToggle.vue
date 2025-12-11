@@ -73,11 +73,11 @@ const ariaLabel = computed(() =>
 	padding: 1.5rem 1rem 0.25rem 1rem;
 
 	&:first-child {
-		border-bottom-left-radius: 2.5 * $borderRadius;
+		border-bottom-left-radius: $borderRadius;
 	}
 
 	&:last-child {
-		border-bottom-right-radius: 2.5 * $borderRadius;
+		border-bottom-right-radius: $borderRadius;
 	}
 }
 </style>

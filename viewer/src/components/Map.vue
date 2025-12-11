@@ -49,6 +49,7 @@ import {
 	onGlobalEventsReady,
 	onCurrentEventsReady,
 	getGlobalFilteredEvents,
+	getTimeRangedEvents,
 } from '@/lib/eventsDB'
 import {
 	IconZoomIn,
@@ -270,13 +271,18 @@ watch(
 watch(
 	() => [
 		eventStore.eventTypeMode,
+		timeStore.startTimeFilter,
+		timeStore.endTimeFilter,
 	],
 	() => {
-		globalHeatmapEvents.value = getGlobalFilteredEvents()
+		globalHeatmapEvents.value = getTimeRangedEvents(
+			timeStore.startTimeFilter,
+			timeStore.endTimeFilter,
+		)
 		currentEvents.value = getCurrentEvents(timeStore.selectedTime)
 		if (store.viewMode === 'heatmap') {
 			try {
-				console.log('calling manualHeatmapUpdate from event type/time filter change')
+				// console.log('calling manualHeatmapUpdate from event type/time filter change')
 				manualHeatmapUpdate()
 			} catch (e) {
 				console.warn('Error updating heatmap renderer', e)
@@ -300,16 +306,16 @@ watch(
 	{ immediate: true },
 )
 
-watch(
-	() => store.showInfoPanel,
-	(newVal) => {
-		if (!mapRef.value) return
-		const el = document.getElementById('event-window')
-		if (!el) return
-		centreMapOnDiv(mapRef.value.leafletObject as L.Map, el, !newVal)
-	},
-	{ immediate: true },
-)
+// watch(
+// 	() => store.showInfoPanel,
+// 	(newVal) => {
+// 		if (!mapRef.value) return
+// 		const el = document.getElementById('event-window')
+// 		if (!el) return
+// 		centreMapOnDiv(mapRef.value.leafletObject as L.Map, el, !newVal)
+// 	},
+// 	{ immediate: true },
+// )
 
 // Watch for events which cause the view to change - e.g. to accomodate a panel etc.
 // This is done by defining #event-window (TODO: currently in Main.vue, but could live here and teleport?)

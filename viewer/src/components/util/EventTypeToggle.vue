@@ -20,9 +20,9 @@ const coldClicked = async () => {
 	await store.setLoading('Loading coldwave events...')
 	model.value = 'cold'
 	setTheme('cold')
-	store.hamburgerMenuOpen = false
 	eventStore.filters.coldIntensity.active = true
 	eventStore.filters.heatIntensity.active = false
+	store.hamburgerMenuOpen = false
 	await store.setLoadingDone()
 }
 
