@@ -352,7 +352,8 @@ class EventletFactory:
         land_sea_mask=None,
         expiry_days=1,
         min_length=3,
-        neighbor_radius=100,
+        neighbor_radius=200,
+        min_samples=1,
         output_path="/data/output-debug/events",
         use_dbscan=False,
         last_slice=None,
@@ -367,6 +368,7 @@ class EventletFactory:
         self.land_sea_mask = land_sea_mask
         self.expiry_days = expiry_days
         self.min_length = min_length
+        self.min_samples = min_samples
         self.active = []
         self.output_queue = deque()
         self.oldest_active_time = None
@@ -438,11 +440,11 @@ class EventletFactory:
         )
 
         if not self.use_dbscan:
-            labels = walk_scan(D, eps=self.radius, min_samples=1)
+            labels = walk_scan(D, eps=self.radius, min_samples=self.min_samples)
         else:
             db = DBSCAN(
                 eps=self.radius,
-                min_samples=1,
+                min_samples=self.min_samples,
                 metric="precomputed",
             )
             labels = db.fit_predict(D)
@@ -850,45 +852,49 @@ def main():
     # for dbscan in [False, True]:
     #     for perc in [98, 99]:
     stat = "max"
-    perc = "99.5"
-    thresh = 0
-    nr = 500
+    perc = "99.0"
+    thresh = 28
+    nr = 200
     heatwave = True
+    
+    for ms in [30, 20, 10, 5]:
+        for nr in [160, 180, 200, 250]:
+            for dbscan in [False, True]:
+                data_var, ref_data, land_sea_mask = load_data(
+                    f"/data/{stat}/era5_daily_{stat}_temperature*2024.nc",
+                    f"/data/climatology/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
+                    f"/data/era5_land_sea_mask.nc",
+                )
+                time_dim = data_var["valid_time"]
+                out_path = f"/data/output-{'dbscan' if dbscan else 'walk'}-{ms}-{stat}-{perc}-{thresh}-nr{nr}-{heatwave and 'hw' or 'cw'}"
+                os.makedirs(out_path, exist_ok=True)
+                os.makedirs(f"{out_path}/events", exist_ok=True)
 
-    data_var, ref_data, land_sea_mask = load_data(
-        f"/data/{stat}/era5_daily_{stat}_temperature*.nc",
-        f"/data/climatology/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
-        f"/data/era5_land_sea_mask.nc",
-    )
-    time_dim = data_var["valid_time"]
-    out_path = f"/data/output-{stat}-{perc}-{thresh}-nr{nr}-{heatwave and 'hw' or 'cw'}"
-    os.makedirs(out_path, exist_ok=True)
-    os.makedirs(f"{out_path}/events", exist_ok=True)
+                last_slice = None
+                if os.path.exists(f"{out_path}/last_slice.pkl"):
+                    with open(f"{out_path}/last_slice.pkl", "rb") as f:
+                        last_slice = pickle.load(f)
 
-    last_slice = None
-    if os.path.exists(f"{out_path}/last_slice.pkl"):
-        with open(f"{out_path}/last_slice.pkl", "rb") as f:
-            last_slice = pickle.load(f)
+                factory = EventletFactory(
+                    data_var,
+                    ref_data=ref_data,
+                    threshold=273.15 + thresh,
+                    over_threshold=heatwave,
+                    land_sea_mask=land_sea_mask,
+                    neighbor_radius=nr,
+                    min_samples=ms,
+                    output_path=out_path,
+                    use_dbscan=False,
+                    last_slice=last_slice,
+                    eventtype='hot' if heatwave else 'cold',
+                    land_only=land_sea_mask is not None,
+                )
 
-    factory = EventletFactory(
-        data_var,
-        ref_data=ref_data,
-        threshold=273.15 + thresh,
-        over_threshold=heatwave,
-        land_sea_mask=land_sea_mask,
-        neighbor_radius=nr,
-        output_path=out_path,
-        use_dbscan=False,
-        last_slice=last_slice,
-        eventtype='hot' if heatwave else 'cold',
-        land_only=land_sea_mask is not None,
-    )
+                for i in range(time_dim.size):
+                    time_val = pd.to_datetime(time_dim[i].values)
+                    factory.process_slice(time_val)
 
-    for i in range(time_dim.size):
-        time_val = pd.to_datetime(time_dim[i].values)
-        factory.process_slice(time_val)
-
-    factory.flush()
+                factory.flush()
 
 
 if __name__ == "__main__":
