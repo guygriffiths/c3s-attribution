@@ -31,6 +31,7 @@ type Props = {
 	types?: EventType[]
 	variable?: Variable
 	hasTail?: boolean
+	title?: string
 }
 
 const props = defineProps<Props>()
@@ -46,8 +47,7 @@ watch(
 			bins.value =
 				props.bins !== null && props.bins !== undefined
 					? props.bins
-					:
-					 getBins(
+					: getBins(
 							props.data,
 							props.types ?? [],
 							props.xmin,
@@ -118,7 +118,11 @@ const domain = computed(() => {
 
 // y values expressed as percentage of total data count
 const counts = computed(() => bins.value!.map((b) => b.length))
-const totalCount = computed(() => Math.max(1, props.data?.length ?? 0))
+const totalCount = computed(() =>
+	props.bins
+		? props.bins.reduce((acc, b) => acc + b.length, 0)
+		: Math.max(1, props.data?.length ?? 0),
+)
 
 // y scale domain: 0 -> auto max or fixed yMaxPct prop
 const maxCountAuto = computed(() =>
@@ -132,7 +136,7 @@ const yMax = computed(() => {
 })
 
 // margins + inner dims
-const margin = { top: 0, right: 0, bottom: 0, left: 0 }
+const margin = { top: 12, right: 0, bottom: 0, left: 0 }
 const innerHeight = computed(() =>
 	Math.max(40, height.value - margin.top - margin.bottom),
 )
@@ -180,7 +184,7 @@ const bars = computed(() => {
 			y,
 			h,
 			pct: (count / totalCount.value) * 100,
-			count: counts.value[idx],
+			count,
 			bin0: b.x0,
 			bin1: b.x1,
 			color:
@@ -193,15 +197,14 @@ const bars = computed(() => {
 							: colorMixer(scssVars.c3sred, b.hotPct, scssVars.c3sblue), // red→blue
 		}
 	})
+	console.log('Histogram bars:', ret)
 	return ret
 })
 </script>
 
 <template>
 	<div ref="containerRef" class="histogram-root">
-		<IconStopwatch v-if="props.variable === 'duration'" />
-		<IconDimensions v-else-if="props.variable === 'size'" />
-		<IconTemperature v-else-if="props.variable === 'intensity'" />
+		<h1 class="chart-title" v-if="props.title">{{ props.title }}</h1>
 		<svg class="histogram-svg" role="img">
 			<filter id="histoBarShadow" height="130%">
 				<feDropShadow
@@ -213,21 +216,6 @@ const bars = computed(() => {
 			</filter>
 			<!-- group for plotting area -->
 			<g :transform="`translate(${margin.left},${margin.top})`">
-				<!-- X axis ticks -->
-				<!-- <g
-					class="x-axis"
-					:transform="`translate(0, ${innerHeight})`"
-					v-if="xmin != null && xmax != null"
-				>
-					<text :x="2" y="12" text-anchor="start">{{ labelFunc(xmin) }}</text>
-					<text :x="innerWidth / 2" y="12" text-anchor="middle">
-						{{ units }}
-					</text>
-					<text :x="innerWidth - 2" y="12" text-anchor="end">
-						{{ labelFunc(bins[bins.length - 1].x0) }}+
-					</text>
-				</g> -->
-
 				<!-- Bars (main loop you can customize) -->
 				<g class="bars">
 					<g
@@ -243,21 +231,18 @@ const bars = computed(() => {
 							:y="b.y - 1"
 							:width="Math.max(3, b.w - 2)"
 							:height="b.h + 3"
-							:data-pct="b.pct"
-							:data-count="b.count"
 							:class="{
 								highlight: highlightBin === b.idx,
 							}"
 							:fill="b.color"
 							filter="url(#histoBarShadow)"
+							v-tooltip="{
+								content: `Range: [${b.bin0.toFixed(2)}, ${b.bin1.toFixed(
+									2,
+								)})<br />Count: ${b.count}<br />Percentage: ${b.pct.toFixed(2)}%`,
+								html: true,
+							}"
 						/>
-						<!-- <circle
-							:opacity="highlightBin === b.idx ? 1 : 0"
-							class="bar-halo"
-							:cx="Math.max(1, b.w - 1) / 2"
-							:cy="b.y"
-							:r="b.w / 3"
-						/> -->
 					</g>
 				</g>
 			</g>

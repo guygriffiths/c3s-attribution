@@ -5,7 +5,6 @@ export { }
 let startI = 0
 self.onmessage = async (e: MessageEvent) => {
 	const { year, prefix } = e.data
-	// console.log('Worker received message', year, prefix)
 
 	const events = await fetch(`${DATA_ROOT}events-${prefix}-${year}.jsonl`)
 		.then((r) => r.text())
@@ -22,7 +21,6 @@ self.onmessage = async (e: MessageEvent) => {
 		)
 		.catch(() => [])
 
-	// console.log(`Worker fetched ${events.length} events for ${prefix} ${year}`)
 	// Build pixel index right here
 	const pixelIndex: Record<number, number[]> = {}
 	for (let idx = 0; idx < events.length; idx++) {

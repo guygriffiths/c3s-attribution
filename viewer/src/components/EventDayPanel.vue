@@ -1,16 +1,14 @@
 <script setup lang="ts">
-import { computed, watch, onMounted, ref, nextTick, toRaw } from 'vue'
+import { computed, watch, ref, toRaw } from 'vue'
 import * as d3 from 'd3'
 
 import CalendarIcon from '@/components/util/CalendarIcon.vue'
 import Histogram from '@/components/util/Histogram.vue'
-import Icon from '@/components/util/Icon.vue'
 import { useStore } from '@/store/store'
 import {
 	useStore as useEventStore,
 	intensityForValue,
 } from '@/store/eventStore'
-import { useStore as useTimeStore } from '@/store/timeStore'
 import {
 	IconDimensions,
 	IconGridDots,
@@ -21,11 +19,11 @@ import {
 import { niceNumber } from '@/lib/utils'
 import { getBins } from '@/lib/histo-utils'
 import { dateStr } from '@/lib/time-utils'
-import scssVars from '@/assets/styles/scssVars.module.scss'
+import { useLabels } from '@/lib/labels'
 
+const $l = useLabels()
 const store = useStore()
 const eventStore = useEventStore()
-const timeStore = useTimeStore()
 
 const props = defineProps<{
 	selectedEvent: ExtremeEventFull | null
@@ -180,80 +178,99 @@ const size = computed(() => {
 				<div class="spinner-ring-inner"></div>
 			</div>
 		</div>
-		<div class="chart">
-			<div class="chart-xaxis">
-				<Histogram
-					:data="histogramData"
-					:bins="dayBins[days[selectedIndex]]"
-					:xmin="xmin"
-					:xmax="xmax"
-					:types="histogramData.map(() => eventType)"
-					:yMaxCount="maxcount"
-				/>
+		<div class="flex-wrapper">
+			<div class="chart">
+				<div class="chart-xaxis">
+					<Histogram
+						:data="histogramData"
+						:bins="dayBins[days[selectedIndex]]"
+						:xmin="xmin"
+						:xmax="xmax"
+						:types="histogramData.map(() => eventType)"
+						:yMaxCount="maxcount"
+						:title="$l.pixelDistDaily"
+					/>
+					<div class="axis">
+						<div class="label mono">
+							{{ niceNumber(xmin) }}
+						</div>
+						<span class="unit-icon" v-tooltip="$l.temperature"
+							><IconTemperature
+								class="icon"
+								:class="{ [eventType]: true }"
+								aria-hidden="true"
+						/></span>
+						<div class="label mono">
+							{{ niceNumber(xmax) }}
+						</div>
+					</div>
+				</div>
 				<div class="axis">
 					<div class="label mono">
-						{{ niceNumber(xmin) }}
+						{{ 0 }}
 					</div>
-					<span class="unit-icon"
-						><IconTemperature class="icon" :class="{ [eventType]: true }"
+					<span class="units icon" v-tooltip="$l.pixelCount"
+						><IconGridDots aria-hidden="true"
 					/></span>
 					<div class="label mono">
-						{{ niceNumber(xmax) }}
+						{{ maxcount }}
 					</div>
 				</div>
 			</div>
-			<div class="axis">
-				<div class="label mono">
-					{{ 0 }}
+			<div class="day-info">
+				<div class="info-row header">
+					<CalendarIcon
+						:size="24"
+						:date="
+							new Date(selectedEvent.times[props.selectedIndex] || 0).getDate()
+						"
+					/>
+					<span class="mono">
+						{{
+							dateStr(new Date(selectedEvent.times[props.selectedIndex] || 0))
+						}}
+					</span>
 				</div>
-				<span class="units icon"><IconGridDots /></span>
-				<div class="label mono">
-					{{ maxcount }}
+				<div
+					class="info-row"
+					v-tooltip="eventType === 'hot' ? $l.maxTempDaily : $l.minTempDaily"
+				>
+					<IconTemperaturePlus
+						v-if="eventType === 'hot'"
+						class="icon"
+						:class="[eventType]"
+						aria-hidden="true"
+					/>
+					<IconTemperatureMinus
+						v-else
+						class="icon"
+						:class="[eventType]"
+						aria-hidden="true"
+					/>
+					<span class="value mono"
+						>{{ niceNumber(peakExtremeVal || 0) }}&nbsp;{{
+							eventType === 'hot'
+								? eventStore.heatIntensityUnits
+								: eventStore.coldIntensityUnits
+						}}</span
+					>
 				</div>
-			</div>
-		</div>
-		<div class="day-info">
-			<div class="info-row header">
-				<CalendarIcon
-					:size="24"
-					:date="
-						new Date(selectedEvent.times[props.selectedIndex] || 0).getDate()
-					"
-				/>
-				<span class="mono">
-					{{ dateStr(new Date(selectedEvent.times[props.selectedIndex] || 0)) }}
-				</span>
-			</div>
-			<div class="info-row">
-				<IconTemperaturePlus
-					v-if="eventType === 'hot'"
-					class="icon"
-					:class="[eventType]"
-				/>
-				<IconTemperatureMinus v-else class="icon" :class="[eventType]" />
-				<span class="value mono"
-					>{{ niceNumber(peakExtremeVal || 0) }}&nbsp;{{
-						eventType === 'hot'
-							? eventStore.heatIntensityUnits
-							: eventStore.coldIntensityUnits
-					}}</span
-				>
-			</div>
-			<div class="info-row">
-				<IconTemperature class="icon" />
-				<span class="value mono"
-					>{{ niceNumber(meanVal) }}&nbsp;{{
-						eventType === 'hot'
-							? eventStore.heatIntensityUnits
-							: eventStore.coldIntensityUnits
-					}}</span
-				>
-			</div>
-			<div class="info-row">
-				<IconDimensions class="icon" />
-				<span class="value mono"
-					>{{ niceNumber(size) }}&nbsp;{{ eventStore.sizeUnits }}</span
-				>
+				<div class="info-row" v-tooltip="$l.meanTempDaily">
+					<IconTemperature class="icon" aria-hidden="true" />
+					<span class="value mono"
+						>{{ niceNumber(meanVal) }}&nbsp;{{
+							eventType === 'hot'
+								? eventStore.heatIntensityUnits
+								: eventStore.coldIntensityUnits
+						}}</span
+					>
+				</div>
+				<div class="info-row" v-tooltip="$l.sizeDaily">
+					<IconDimensions class="icon" />
+					<span class="value mono"
+						>{{ niceNumber(size) }}&nbsp;{{ eventStore.sizeUnits }}</span
+					>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -264,12 +281,7 @@ const size = computed(() => {
 
 .event-day-panel-root {
 	position: relative;
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	justify-content: center;
-	gap: 0.5rem;
-	padding: 0.5rem;
+	container: event-day-panel / size;
 
 	.loading {
 		position: absolute;
@@ -292,79 +304,125 @@ const size = computed(() => {
 		justify-content: center;
 	}
 
-	.chart {
+	.flex-wrapper {
 		width: 100%;
-		display: flex;
-		flex-direction: row;
-		max-height: 100%;
-		flex: 1 1 auto;
 		height: 100%;
 
-		.chart-xaxis {
+		display: flex;
+		flex-direction: row;
+		gap: 0.5rem;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 0.5rem;
+
+		.chart {
+			width: 100%;
 			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
+			flex-direction: row;
+			max-height: 100%;
+			flex: 1 1 auto;
+			height: 100%;
 
-			flex: 0 1 calc(100% - 1.5rem); /* allow shrinking */
+			.chart-xaxis {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
 
-			position: relative;
-			display: flex;
-			align-items: stretch; /* default, just in case */
-			justify-content: center;
-			min-height: 0; /* crucial for flex children that need to shrink */
-			height: 100%; /* let flex handle it */
-			max-height: calc(100% - 0.5rem);
+				flex: 0 1 calc(100% - 1.5rem); /* allow shrinking */
 
-			.histogram-root {
-				flex: 0 1 calc(100% - 2.5rem);
-				height: calc(100% - 2.5rem);
-				background: var(--panel-bg);
+				position: relative;
+				display: flex;
+				align-items: stretch; /* default, just in case */
+				justify-content: center;
+				min-height: 0; /* crucial for flex children that need to shrink */
+				height: 100%; /* let flex handle it */
+				max-height: calc(100% - 0.5rem);
+
+				.histogram-root {
+					flex: 0 1 calc(100% - 2.5rem);
+					height: calc(100% - 2.5rem);
+					background: var(--panel-bg);
+					box-shadow: inset 2px 2px 8px rgba(0, 0, 0, 0.2);
+				}
+
+				.axis {
+					flex-direction: row;
+					flex: 0 0 2.5rem;
+					max-height: 2.5rem;
+					width: 100%;
+				}
 			}
 
 			.axis {
-				flex-direction: row;
-				flex: 0 0 2.5rem;
-				max-height: 2.5rem;
-				width: 100%;
+				height: calc(100% - 2.5rem);
+				.label {
+					flex: 0 1 auto;
+				}
 			}
 		}
 
-		.axis {
-			height: calc(100% - 2.5rem);
+		.day-info {
+			flex: 0 0 auto;
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+			min-width: 8rem;
+
+			.info-row {
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				gap: 0.5rem;
+
+				&.header {
+					font-size: 1rem;
+					font-weight: bold;
+					border-bottom: 1px solid var(--divider);
+					padding-bottom: 0.25rem;
+				}
+
+				.icon {
+					flex: 0 0 auto;
+					width: 1.5rem;
+					height: 1.5rem;
+					color: var(--text-secondary);
+				}
+
+				.value {
+					flex: 1 1 auto;
+					text-align: right;
+				}
+			}
 		}
 	}
+}
 
-	.day-info {
-		flex: 0 0 auto;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		min-width: 8rem;
+@container event-day-panel (min-height: 300px) {
+	.event-day-panel-root {
+		.flex-wrapper {
+			flex-direction: column-reverse;
+			justify-content: space-between;
+			gap: 1.5rem;
+			padding-bottom: 0;
 
-		.info-row {
-			display: flex;
-			flex-direction: row;
-			align-items: center;
-			gap: 0.5rem;
+			.day-info {
+				flex-direction: row;
+				flex-wrap: wrap;
+				justify-content: space-between;
+				gap: 0.25rem 1rem;
+				min-width: auto;
+				padding-top: 0.5rem;
 
-			&.header {
-				font-size: 1rem;
-				font-weight: bold;
-				border-bottom: 1px solid var(--divider);
-				padding-bottom: 0.25rem;
-			}
-
-			.icon {
-				flex: 0 0 auto;
-				width: 1.5rem;
-				height: 1.5rem;
-				color: var(--text-secondary);
-			}
-
-			.value {
-				flex: 1 1 auto;
-				text-align: right;
+				.header {
+					flex: 0 0 100%;
+					span {
+						text-align: center;
+					}
+					display: flex;
+					justify-content: center;
+				}
 			}
 		}
 	}

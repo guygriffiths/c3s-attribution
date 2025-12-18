@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import HeatmapWorker from '@/lib/worker/heatmapRenderWorker?worker'
-import {
-	renderToContext,
-} from '@/lib/worker/heatmapRenderWorker'
-import {  ECMWF_BONN } from '@/lib/utils'
+import { renderToContext } from '@/lib/worker/heatmapRenderWorker'
+import { ECMWF_BONN } from '@/lib/utils'
 import { useStore } from '@/store/store'
 import {
 	colorForValue,
@@ -51,12 +49,10 @@ import {
 	getGlobalFilteredEvents,
 	getTimeRangedEvents,
 } from '@/lib/eventsDB'
-import {
-	IconZoomIn,
-	IconZoomOut,
-	IconZoomReset,
-} from '@tabler/icons-vue'
+import { IconZoomIn, IconZoomOut, IconZoomReset } from '@tabler/icons-vue'
+import { useLabels } from '@/lib/labels'
 
+const $l = useLabels()
 const store = useStore()
 const timeStore = useTimeStore()
 const eventStore = useEventStore()
@@ -501,8 +497,7 @@ const manualHeatmapUpdate = () => {
 		{
 			canvas: offscreen,
 			events: [],
-			mapState: {
-			},
+			mapState: {},
 		},
 		[offscreen],
 	)
@@ -698,29 +693,32 @@ const resetZoom = () => {
 				position="topright"
 				class="zoom-control"
 				:class="{ hidden: eventStore.selectedEvent !== null }"
+				:inert="eventStore.selectedEvent !== null ? 'true' : undefined"
 			>
 				<div class="zoom-buttons">
 					<button
 						class="zoom-button glassy"
 						@click="zoomOut()"
 						:disabled="zoom <= 2"
+						v-tooltip="$l.zoomOut"
 					>
-						<IconZoomOut />
+						<IconZoomOut aria-hidden="true" />
 					</button>
 					<button
 						class="zoom-button glassy"
 						@click="resetZoom()"
-						title="Reset zoom"
+						v-tooltip="$l.resetZoom"
 					>
-						<IconZoomReset />
+						<IconZoomReset aria-hidden="true" />
 					</button>
 
 					<button
 						class="zoom-button glassy"
 						@click="zoomIn()"
 						:disabled="zoom >= 12"
+						v-tooltip="$l.zoomIn"
 					>
-						<IconZoomIn />
+						<IconZoomIn aria-hidden="true" />
 					</button>
 				</div>
 			</LControl>
@@ -728,8 +726,17 @@ const resetZoom = () => {
 				<RegionControl
 					:class="{
 						hidden:
-							store.viewMode !== 'heatmap' || eventStore.selectedEvent !== null,
+							store.viewMode !== 'heatmap' ||
+							eventStore.selectedEvent !== null ||
+							store.maximizeMultiPanel,
 					}"
+					:inert="
+						store.viewMode !== 'heatmap' ||
+						eventStore.selectedEvent !== null ||
+						store.maximizeMultiPanel
+							? 'true'
+							: undefined
+					"
 				/>
 			</LControl>
 			<LControlScale
@@ -754,12 +761,6 @@ const resetZoom = () => {
 	// to jut up against antarctica, grey at the top for arctic ocean
 	.leaflet-container {
 		background: rgb(95, 102, 110);
-	}
-
-	.hovered-event {
-		pointer-events: none;
-		fill: red !important;
-		transform: scaleX(3);
 	}
 
 	&.heatmap {
@@ -787,10 +788,12 @@ const resetZoom = () => {
 	}
 
 	.region-control {
-		transform: translate(0, 1.25rem);
+		pointer-events: all;
+		transform: translate(0.5rem, 1.75rem);
 		&.hidden {
 			transform: translate(-150%, 2rem);
 		}
+		transition: transform $transition;
 	}
 
 	.zoom-control {
@@ -913,23 +916,6 @@ const resetZoom = () => {
 		}
 		:deep(.leaflet-fastEvent-pane) {
 			opacity: 0;
-		}
-	}
-
-	.filter-panel {
-		padding: 1rem;
-		margin-top: -2.75rem;
-	}
-
-	:deep(.region-select) {
-		stroke: rgb(0.25, 0.25, 0.25);
-		stroke-width: 1px;
-		fill: rgba(0, 0, 0, 0.4);
-		cursor: pointer;
-		&:hover {
-			// cursor: pointer;
-			fill: rgba(0, 0, 0, 0.5);
-			stroke-width: 2px;
 		}
 	}
 

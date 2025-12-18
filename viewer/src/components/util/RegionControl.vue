@@ -1,7 +1,15 @@
 <script lang="ts" setup>
 import { useStore } from '@/store/store'
-import { IconLayersSelected, IconMapPin, IconPolygon, IconWorld } from '@tabler/icons-vue'
+import {
+	IconLayersSelected,
+	IconMapPin,
+	IconPolygon,
+	IconWorld,
+} from '@tabler/icons-vue'
 import { ref } from 'vue'
+import { useLabels } from '@/lib/labels'
+
+const $l = useLabels()
 
 const store = useStore()
 
@@ -57,34 +65,37 @@ const ready = ref(true)
 			<button
 				class="glassy"
 				:class="{
-					selected: store.exploreGlobal
+					selected: store.exploreGlobal,
 				}"
-				title="Explore global events"
+				:aria-pressed="store.exploreGlobal"
 				@click="setExploreGlobal"
+				v-tooltip="$l.exploreGlobal"
 			>
-				<IconWorld class="icon" />
+				<IconWorld class="icon" aria-hidden="true" />
 			</button>
 			<button
 				class="glassy"
 				:class="{
 					selected: store.filteringByRegion,
 				}"
-				title="Explore a region of your choice"
+				:aria-pressed="store.filteringByRegion"
 				:disabled="!ready"
 				@click="setDrawingRegion"
+				v-tooltip="$l.selectByRegion"
 			>
-				<IconPolygon class="icon" />
+				<IconPolygon class="icon" aria-hidden="true" />
 			</button>
 			<button
 				class="glassy"
 				:class="{
 					selected: store.filteringByPoint,
 				}"
+				:aria-pressed="store.filteringByPoint"
 				:disabled="!ready"
-				title="Explore events at a point"
 				@click="setSelectingPoint"
+				v-tooltip="$l.selectByPoint"
 			>
-				<IconMapPin class="icon" />
+				<IconMapPin class="icon" aria-hidden="true" />
 			</button>
 		</div>
 	</div>
@@ -105,7 +116,6 @@ const ready = ref(true)
 
 	.label {
 		font-weight: bolder;
-		font-family: 'Raleway', sans-serif;
 		font-size: 1rem;
 		position: absolute;
 		top: -0.75rem;

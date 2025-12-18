@@ -30,12 +30,12 @@ onMounted(() => {
 </script>
 
 <template id="app">
-	<!-- <loading
+	<loading
 		id="loading-overlay"
 		:message="store.loadingMessage || 'Loading...'"
 		:progress="50"
 		:show-progress="false"
-	></loading> -->
+	></loading>
 	<!-- <AppHeader id="header" /> -->
 	<router-view id="main"></router-view>
 	<!-- <AppFooter id="footer" /> -->

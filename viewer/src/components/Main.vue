@@ -33,6 +33,8 @@ import {
 	IconChartHistogram,
 	IconInfoSquareRounded,
 	IconMenu2,
+	IconWindowMaximize,
+	IconWindowMinimize,
 	IconX,
 } from '@tabler/icons-vue'
 import EventDayPanel from './EventDayPanel.vue'
@@ -204,17 +206,34 @@ const selectedDayIdx = computed((): number | null => {
 
 		<MapComponent id="map"></MapComponent>
 
-		<div id="logo" :class="{ 'disable-pointer-events': store.isFocused }">
-			<img src="@/assets/img/c3s-logo.png" alt="C3S Logo" />
-			<h1>
+		<div
+			id="logo"
+			:class="{ 'disable-pointer-events': store.isFocused }"
+			:aria-label="
+				eventStore.eventTypeMode === 'hot'
+					? $l.hotTitle
+					: eventStore.eventTypeMode === 'cold'
+						? $l.coldTitle
+						: $l.hotcoldTitle
+			"
+		>
+			<img src="@/assets/img/c3s-logo.png" alt="C3S Logo" aria-hidden="true" />
+			<h1 aria-hidden="true">
 				Extreme
-				<span class="eventtype" @click="eventStore.cycleEventType()">{{
-					eventStore.eventTypeMode === 'hot'
-						? 'Heatwave'
-						: eventStore.eventTypeMode === 'cold'
-							? 'Coldwave'
-							: 'Event'
-				}}</span>
+				<span
+					class="eventtype"
+					@click="eventStore.cycleEventType()"
+					role="button"
+					tabindex="-1"
+				>
+					{{
+						eventStore.eventTypeMode === 'hot'
+							? 'Heat Event'
+							: eventStore.eventTypeMode === 'cold'
+								? 'Cold Event'
+								: 'Event'
+					}}
+				</span>
 				Explorer
 			</h1>
 		</div>
@@ -232,7 +251,9 @@ const selectedDayIdx = computed((): number | null => {
 				hidden: store.isFocused || timeStore.timePanelExpanded,
 				close: store.hamburgerMenuOpen,
 			}"
+			:inert="store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined"
 			@click="store.hamburgerMenuOpen = !store.hamburgerMenuOpen"
+			v-tooltip="store.hamburgerMenuOpen ? $l.close : $l.hamburger"
 		>
 			<IconMenu2 size="24" aria-hidden="true" v-if="!store.hamburgerMenuOpen" />
 			<IconX size="24" aria-hidden="true" v-else />
@@ -241,8 +262,12 @@ const selectedDayIdx = computed((): number | null => {
 			id="hamburger-menu"
 			class="panel top"
 			:class="{ active: store.hamburgerMenuOpen }"
+			:inert="!store.hamburgerMenuOpen ? 'true' : undefined"
 		>
-			<EventTypeToggle v-model="eventStore.eventTypeMode" />
+			<EventTypeToggle
+				:model-value="eventStore.eventTypeMode"
+				@update:model-value="eventStore.setEventTypeMode"
+			/>
 			<FilterPanel v-model="eventStore.filters" />
 			<!-- <h1>Filters</h1>
 			<h1>Animation speed</h1> -->
@@ -254,19 +279,29 @@ const selectedDayIdx = computed((): number | null => {
 			id="event-day-panel"
 			:selected-event="eventStore.selectedEvent"
 			:selected-index="selectedDayIdx !== null ? selectedDayIdx : 0"
-			class="panel left"
+			class="panel left chart"
 			:class="{
 				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
 			}"
+			:inert="
+				store.viewMode !== 'timemachine' || !eventStore.eventSelected
+					? 'true'
+					: undefined
+			"
 		/>
 		<EventGraphs
 			id="event-graphs"
 			:selected-event="eventStore.selectedEvent"
 			:event-store="eventStore"
-			class="panel left"
+			class="panel left chart"
 			:class="{
 				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
 			}"
+			:inert="
+				store.viewMode !== 'timemachine' || !eventStore.eventSelected
+					? 'true'
+					: undefined
+			"
 			@dateSelected="
 				(date: number) => {
 					timeStore.selectedTime = new Date(date)
@@ -280,10 +315,16 @@ const selectedDayIdx = computed((): number | null => {
 			id="multi-button"
 			class="glassy color"
 			:class="{
-				hidden: store.viewMode !== 'heatmap',
+				hidden: store.viewMode !== 'heatmap' || store.maximizeMultiPanel,
 				close: store.showMultiPanel,
 			}"
+			:inert="
+				store.viewMode !== 'heatmap' || store.maximizeMultiPanel
+					? 'true'
+					: undefined
+			"
 			@click="store.showMultiPanel = !store.showMultiPanel"
+			v-tooltip="store.showMultiPanel ? $l.close : $l.multiEventPanel"
 		>
 			<IconChartHistogram
 				size="24"
@@ -292,14 +333,14 @@ const selectedDayIdx = computed((): number | null => {
 			/>
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
+
 		<MultiEventSmartPanel
 			id="multi-event-panel"
 			:events-of-interest="
 				store.viewMode === 'timemachine' ? currentEvents : timeRangeEvents
 			"
 			:background-events="
-				store.filteringByPoint ||
-				(store.filteringByRegion)
+				store.filteringByPoint || store.filteringByRegion
 					? globalFilteredEvents
 					: []
 			"
@@ -308,8 +349,40 @@ const selectedDayIdx = computed((): number | null => {
 			:class="{
 				selected: eventStore.eventSelected,
 				active: store.showMultiPanel && store.viewMode === 'heatmap',
+				maximize: store.maximizeMultiPanel,
 			}"
-		/>
+			:inert="
+				!store.showMultiPanel || store.viewMode !== 'heatmap' ? 'true' : undefined
+			"
+			><button
+				id="multimax-button"
+				class="glassy color"
+				:class="{
+					hidden: store.viewMode !== 'heatmap',
+					close: store.showMultiPanel,
+				}"
+				:inert="store.viewMode !== 'heatmap' ? 'true' : undefined"
+				@click="store.maximizeMultiPanel = !store.maximizeMultiPanel"
+				v-tooltip="
+					store.maximizeMultiPanel
+						? $l.restoreMultiEventPanel
+						: $l.maximiseMultiEventPanel
+				"
+			>
+				<IconWindowMaximize
+					size="24"
+					aria-hidden="true"
+					v-if="!store.maximizeMultiPanel"
+					style="transform: scaleX(-1)"
+				/>
+				<IconWindowMinimize
+					size="24"
+					aria-hidden="true"
+					style="transform: scaleX(-1)"
+					v-else
+				/>
+			</button>
+		</MultiEventSmartPanel>
 
 		<!-- Event Info Panel -->
 		<button
@@ -318,10 +391,18 @@ const selectedDayIdx = computed((): number | null => {
 			:class="{
 				hidden:
 					timeStore.timePanelExpanded ||
-					(store.isFocused && store.viewMode === 'timemachine'),
+					(store.isFocused && store.viewMode === 'timemachine') ||
+					store.maximizeMultiPanel,
 				close: store.showInfoPanel,
 			}"
+			:inert="
+				timeStore.timePanelExpanded ||
+				(store.isFocused && store.viewMode === 'timemachine') ||
+				store.maximizeMultiPanel
+					? 'true'
+					: undefined"
 			@click="store.showInfoPanel = !store.showInfoPanel"
+			v-tooltip="store.showInfoPanel ? $l.close : $l.showInfoPanel"
 		>
 			<IconInfoSquareRounded
 				size="24"
@@ -344,12 +425,21 @@ const selectedDayIdx = computed((): number | null => {
 				show:
 					store.showInfoPanel &&
 					!timeStore.timePanelExpanded &&
-					!(store.isFocused && store.viewMode === 'timemachine'),
+					!(store.isFocused && store.viewMode === 'timemachine') &&
+					store.maximizeMultiPanel === false,
 			}"
+			:inert="
+				!store.showInfoPanel ||
+				timeStore.timePanelExpanded ||
+				(store.isFocused && store.viewMode === 'timemachine') ||
+				store.maximizeMultiPanel
+					? 'true'
+					: undefined"
 		>
 		</EventInfoPanel>
 		<SelectedEventInfoPanel
 			id="selected-event-info-panel"
+			class="chart"
 			v-if="eventStore.selectedEvent"
 			:selected-event="eventStore.selectedEvent"
 			:event-store="eventStore"
@@ -357,6 +447,8 @@ const selectedDayIdx = computed((): number | null => {
 				show: eventStore.selectedEvent !== null && store.showInfoPanel,
 				single: store.viewMode === 'timemachine' && store.isFocused,
 			}"
+			:inert="
+				eventStore.selectedEvent === null || !store.showInfoPanel ? 'true' : undefined"
 		/>
 
 		<!-- Time Panel -->
@@ -395,6 +487,7 @@ const selectedDayIdx = computed((): number | null => {
 				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
 				class="panel-expand glassy color"
 				@click="toggleTimePanelExpanded"
+				v-tooltip="timeStore.timePanelExpanded ? $l.close : $l.showOverview"
 			>
 				<IconCalendarWeek
 					v-if="!timeStore.timePanelExpanded"
@@ -413,8 +506,10 @@ const selectedDayIdx = computed((): number | null => {
 				class="show-bars glassy"
 				:class="{ selected: timeStore.showBars }"
 				@click="timeStore.showBars = !timeStore.showBars"
+				:aria-pressed="timeStore.showBars"
+				v-tooltip="timeStore.showBars ? $l.hideEventBars : $l.showEventBars"
 			>
-				<IconChartBar class="bar-icon" />
+				<IconChartBar class="bar-icon" aria-hidden="true" />
 			</button>
 		</div>
 
@@ -632,6 +727,27 @@ const selectedDayIdx = computed((): number | null => {
 			}
 		}
 	}
+	#multimax-button {
+		position: absolute;
+		top: 0;
+		left: 0;
+		border-radius: 0;
+		border-top-left-radius: $borderRadius;
+		border-bottom-right-radius: $borderRadius;
+		width: 1.5rem;
+		height: 1.5rem;
+		padding: 0;
+		z-index: 250;
+		box-shadow: none !important;
+		opacity: 0.5;
+		&:hover {
+			opacity: 1;
+		}
+
+		.tabler-icon {
+			width: 1.25rem;
+		}
+	}
 	#multi-event-panel {
 		z-index: 150;
 		width: calc($infoWidth * 2 + $panelMargin);
@@ -644,15 +760,23 @@ const selectedDayIdx = computed((): number | null => {
 		backdrop-filter: $frosty;
 		overflow: visible;
 		background: var(--panel-bg);
+		transition: all $transition;
 
 		&.selected {
 			background-color: var(--panel-bg-dark);
+		}
+
+		&.maximize {
+			width: calc(100% - 2 * $panelMargin);
+			height: calc(100vh - 3 * $panelMargin - #{$smallTimePanelHeight} - 3rem);
+			right: $panelMargin;
+			bottom: calc(2 * $panelMargin + #{$smallTimePanelHeight});
 		}
 	}
 
 	#info-button {
 		position: absolute;
-		top: calc(2 * $panelMargin + 2rem);
+		top: calc($panelMargin + 3rem);
 		right: $panelMargin;
 		border-radius: 100%;
 		width: 2.5rem;

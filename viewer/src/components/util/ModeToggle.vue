@@ -6,17 +6,11 @@ import {
 	IconStack3,
 	IconStopwatch,
 } from '@tabler/icons-vue'
-import { useStore } from '@/store/store'
-import { computed } from 'vue'
+import { useLabels } from '@/lib/labels'
+
+const $l = useLabels()
 
 const mode = defineModel<ViewMode>({ required: true })
-const store = useStore()
-
-const ariaLabel = computed(() =>
-	mode.value === 'heatmap'
-		? 'Switch to timeline mode'
-		: 'Switch to heatmap mode',
-)
 </script>
 
 <template>
@@ -25,8 +19,8 @@ const ariaLabel = computed(() =>
 			class="mode-button glassy"
 			:class="{ [mode]: true, selected: mode === 'timemachine' }"
 			@click="mode = 'timemachine'"
-			:aria-label="ariaLabel"
 			:aria-pressed="mode === 'timemachine'"
+			v-tooltip="$l.selectTimeMachineMode"
 			role="switch"
 		>
 			<IconCalendarTime
@@ -40,8 +34,8 @@ const ariaLabel = computed(() =>
 			class="mode-button glassy"
 			:class="{ [mode]: true, selected: mode === 'heatmap' }"
 			@click="mode = 'heatmap'"
-			aria-label="Select heatmap mode"
 			:aria-pressed="mode === 'heatmap'"
+			v-tooltip="$l.selectHeatmapMode"
 			role="switch"
 		>
 			<IconLayersIntersect

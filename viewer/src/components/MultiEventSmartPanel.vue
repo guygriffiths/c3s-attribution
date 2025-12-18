@@ -17,7 +17,9 @@ import {
 import { ref, watch, computed } from 'vue'
 import { getBins } from '@/lib/histo-utils'
 import { niceNumber } from '@/lib/utils'
+import { useLabels } from '@/lib/labels'
 
+const $l = useLabels()
 const store = useStore()
 const eventStore = useEventStore()
 const timeStore = useTimeStore()
@@ -229,9 +231,26 @@ const xscaleFactor = computed(() => {
 const yscaleFactor = computed(() => {
 	return 1 / (ymax.value - ymin.value)
 })
+
+const getXYScatterTitle = computed(() => {
+	const xLabel =
+		store.focusVariable === 'duration'
+			? $l.value.duration
+			: store.focusVariable === 'size'
+				? $l.value.size
+				: $l.value.intensity
+	const yLabel =
+		scatterY.value === 'duration'
+			? $l.value.duration
+			: scatterY.value === 'size'
+				? $l.value.size
+				: $l.value.intensity
+	return `${yLabel} vs ${xLabel}`
+})
 </script>
 <template>
 	<div class="multi-event-panel panel">
+		<slot />
 		<div class="scroller" ref="scrollerRef">
 			<div class="chart histo">
 				<div class="yaxis-chart">
@@ -239,7 +258,9 @@ const yscaleFactor = computed(() => {
 						<div class="label mono">
 							{{ 0 }}
 						</div>
-						<span class="units icon"><IconLayersIntersect /></span>
+						<span class="units icon" v-tooltip="$l.nEvents"
+							><IconLayersIntersect aria-hidden="true"
+						/></span>
 						<div class="label mono">
 							{{ maxCount }}
 						</div>
@@ -255,6 +276,13 @@ const yscaleFactor = computed(() => {
 						:highlight-value="valueForEvent"
 						:types="types"
 						:has-tail="axisMode !== 'full'"
+						:title="
+							store.focusVariable === 'duration'
+								? $l.durationHisto
+								: store.focusVariable === 'size'
+									? $l.sizeHisto
+									: $l.intensityHisto
+						"
 					/>
 				</div>
 				<div class="axis horizontal">
@@ -262,10 +290,29 @@ const yscaleFactor = computed(() => {
 						{{ niceNumber(xmin) }}
 					</div>
 					<span class="units icon">
-						<button @click="store.cycleSorts" class="cycle-sort-button glassy">
-							<IconStopwatch v-if="store.focusVariable === 'duration'" />
-							<IconDimensions v-else-if="store.focusVariable === 'size'" />
-							<IconTemperature v-else />
+						<button
+							@click="store.cycleSorts"
+							class="cycle-sort-button glassy"
+							v-tooltip="
+								(store.focusVariable === 'duration'
+									? $l.duration
+									: store.focusVariable === 'size'
+										? $l.size
+										: $l.intensity) +
+								' (' +
+								$l.cycleSortVariable +
+								')'
+							"
+						>
+							<IconStopwatch
+								v-if="store.focusVariable === 'duration'"
+								aria-hidden="true"
+							/>
+							<IconDimensions
+								v-else-if="store.focusVariable === 'size'"
+								aria-hidden="true"
+							/>
+							<IconTemperature v-else aria-hidden="true" />
 						</button>
 					</span>
 					<div class="label mono">
@@ -278,10 +325,23 @@ const yscaleFactor = computed(() => {
 					<div class="axis">
 						<div class="label mono">{{ niceNumber(ymin) }}</div>
 						<span class="units icon">
-							<button @click="cycleYVar" class="cycle-sort-button glassy">
-								<IconStopwatch v-if="scatterY === 'duration'" />
-								<IconDimensions v-else-if="scatterY === 'size'" />
-								<IconTemperature v-else />
+							<button
+								@click="cycleYVar"
+								class="cycle-sort-button glassy"
+								v-tooltip="
+									(scatterY === 'duration'
+										? $l.duration
+										: scatterY === 'size'
+											? $l.size
+											: $l.intensity) +
+									' (' +
+									$l.cycleSortVariable +
+									')'
+								"
+							>
+								<IconStopwatch v-if="scatterY === 'duration'" aria-hidden="true" />
+								<IconDimensions v-else-if="scatterY === 'size'" aria-hidden="true" />
+								<IconTemperature v-else aria-hidden="true" />
 							</button>
 						</span>
 						<div class="label mono">
@@ -304,6 +364,7 @@ const yscaleFactor = computed(() => {
 						:selectedX="selectedX"
 						:selectedY="selectedY"
 						:highlightId="eventStore.selectedEventId"
+						:title="getXYScatterTitle"
 					/>
 				</div>
 				<div class="axis horizontal">
@@ -311,10 +372,19 @@ const yscaleFactor = computed(() => {
 						{{ niceNumber(xmin) }}
 					</div>
 					<span class="units icon">
-						<button @click="store.cycleSorts" class="cycle-sort-button glassy">
-							<IconStopwatch v-if="store.focusVariable === 'duration'" />
-							<IconDimensions v-else-if="store.focusVariable === 'size'" />
-							<IconTemperature v-else />
+						<button @click="store.cycleSorts" class="cycle-sort-button glassy" v-tooltip="
+								(store.focusVariable === 'duration'
+									? $l.duration
+									: store.focusVariable === 'size'
+										? $l.size
+										: $l.intensity) +
+								' (' +
+								$l.cycleSortVariable +
+								')'
+							">
+							<IconStopwatch v-if="store.focusVariable === 'duration'" aria-hidden="true"/>
+							<IconDimensions v-else-if="store.focusVariable === 'size'" aria-hidden="true"/>
+							<IconTemperature v-else aria-hidden="true"/>
 						</button>
 					</span>
 					<div class="label mono">
@@ -330,10 +400,20 @@ const yscaleFactor = computed(() => {
 							<button
 								@click="store.cycleSorts"
 								class="cycle-sort-button glassy"
+								v-tooltip="
+								(store.focusVariable === 'duration'
+									? $l.duration
+									: store.focusVariable === 'size'
+										? $l.size
+										: $l.intensity) +
+								' (' +
+								$l.cycleSortVariable +
+								')'
+							"
 							>
-								<IconStopwatch v-if="store.focusVariable === 'duration'" />
-								<IconDimensions v-else-if="store.focusVariable === 'size'" />
-								<IconTemperature v-else />
+								<IconStopwatch v-if="store.focusVariable === 'duration'" aria-hidden="true" />
+								<IconDimensions v-else-if="store.focusVariable === 'size'" aria-hidden="true" />
+								<IconTemperature v-else aria-hidden="true" />
 							</button>
 						</span>
 						<div class="label mono">
@@ -358,14 +438,21 @@ const yscaleFactor = computed(() => {
 						:selectedX="timeStore.selectedTime.getTime()"
 						:selectedY="selectedX"
 						:hoverId="eventStore.hoveringEvent?.id"
+						:title="
+							store.focusVariable === 'duration'
+								? $l.durationTimeSeries
+								: store.focusVariable === 'size'
+									? $l.sizeTimeSeries
+									: $l.intensityTimeSeries
+						"
 					/>
 				</div>
 				<div class="axis horizontal">
 					<div class="label mono">
 						{{ timeStore.startTimeFilter.toISOString().slice(0, 10) }}
 					</div>
-					<span class="units icon">
-						<IconCalendar />
+					<span class="units icon" v-tooltip="$l.time">
+						<IconCalendar aria-hidden="true" />
 					</span>
 					<div class="label mono">
 						{{ timeStore.endTimeFilter.toISOString().slice(0, 10) }}
@@ -382,23 +469,26 @@ const yscaleFactor = computed(() => {
 				class="glassy"
 				:class="{ selected: axisMode === 'most' }"
 				@click="setAxisMode('most')"
+				v-tooltip="$l.focusOnMostEvents"
 			>
-				<IconZoomScan />
+				<IconZoomScan aria-hidden="true" />
 			</button>
 			<button
 				class="glassy"
 				:class="{ selected: axisMode === 'full' }"
 				@click="setAxisMode('full')"
+				v-tooltip="$l.focusOnAllEvents"
 			>
-				<IconArrowsDiagonal />
+				<IconArrowsDiagonal aria-hidden="true" />
 			</button>
 			<button
 				class="glassy"
 				:class="{ selected: axisMode === 'event' }"
 				:disabled="!selectedX"
 				@click="setAxisMode('event')"
+				v-tooltip="$l.focusOnSelectedEvent"
 			>
-				<IconViewfinder />
+				<IconViewfinder aria-hidden="true" />
 			</button>
 		</div>
 	</div>
@@ -419,7 +509,7 @@ const yscaleFactor = computed(() => {
 .multi-event-panel {
 	display: flex;
 	flex-direction: column;
-	padding: 0 0.125rem;
+	padding: 0.75rem 0.5rem;
 
 	$controlsHeight: 1.5rem;
 	.chart-control {
@@ -482,8 +572,9 @@ const yscaleFactor = computed(() => {
 			// }
 
 			scroll-snap-align: center;
-			padding: 0.25rem;
+			padding: 0.5rem 1rem 0.25rem 0.25rem;
 			border: none;
+			// border: 1px solid orange;
 			border-bottom: 1px solid var(--divider);
 			width: 100%;
 			display: flex;
@@ -498,6 +589,7 @@ const yscaleFactor = computed(() => {
 				justify-content: space-between;
 				gap: 0.5rem;
 				align-items: center;
+				// border: 1px solid red;
 			}
 
 			.axis.horizontal {
@@ -524,9 +616,10 @@ const yscaleFactor = computed(() => {
 			.histogram-root,
 			.scatter-root {
 				flex: 1 1 auto;
-				// border: 1px solid blue;
+				border: 1px solid var(--divider);
 				background: var(--panel-bg);
-				padding: 0 0.5rem;
+				padding: 0;
+				box-shadow: inset 2px 2px 8px rgba(0, 0, 0, 0.2);
 			}
 		}
 	}

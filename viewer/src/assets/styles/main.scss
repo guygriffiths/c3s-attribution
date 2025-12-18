@@ -7,6 +7,15 @@
 	-moz-osx-font-smoothing: grayscale;
 }
 
+*:focus {
+	outline: none;
+}
+
+*:focus-visible {
+	outline: 2px solid var(--highlight);
+	outline-offset: 0px;
+}
+
 h1 {
 	font-size: 1.5rem;
 }
@@ -35,6 +44,39 @@ body {
 	pointer-events: none !important;
 	user-select: none !important;
 	cursor: default !important;
+}
+
+.chart-title {
+	position: absolute;
+	margin: 8px;
+	top: 0;
+	right: 0;
+	text-align: right;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: var(--text-tertiary);
+	pointer-events: none;
+	user-select: none;
+	z-index: 10;
+	opacity: 0.2;
+	transition: opacity $transition;
+}
+
+.chart:hover .chart-title {
+	opacity: 1;
+	text-shadow:
+		0 0 0.125rem white,
+		0 0 0.125rem white,
+		0 0 0.125rem white,
+		0 0 0.25rem white,
+		0 0 0.25rem white,
+		0 0 0.25rem white,
+		0 0 0.5rem white,
+		0 0 0.5rem white,
+		0 0 0.5rem white,
+		0 0 1rem white,
+		0 0 1rem white,
+		0 0 1rem white;
 }
 
 button {

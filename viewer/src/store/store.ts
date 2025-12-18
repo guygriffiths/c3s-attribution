@@ -29,6 +29,7 @@ interface State {
 
 	showInfoPanel: boolean // Whether to show the current event rankings
 	showMultiPanel: boolean // Whether to show the multi-event summary panel
+	maximizeMultiPanel: boolean // Whether to maximize the multi-event summary panel
 	showAnalytics: boolean // Whether to show the analytics view in the ME panel
 
 	hamburgerMenuOpen: boolean // Whether the side hamburger menu is open
@@ -73,6 +74,7 @@ export const useStore = defineStore('main', {
 
 			showInfoPanel: false,
 			showMultiPanel: true,
+			maximizeMultiPanel: false,
 			showAnalytics: false,
 
 			hamburgerMenuOpen: false,

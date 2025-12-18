@@ -13,6 +13,9 @@ import {
 } from '@tabler/icons-vue'
 import EventRanker from './util/EventRanker.vue'
 import CalendarIcon from './util/CalendarIcon.vue'
+import { useLabels } from '@/lib/labels'
+
+const $l = useLabels()
 
 const props = defineProps<{
 	selectedEvent: ExtremeEvent | ExtremeEventFull | null
@@ -73,38 +76,81 @@ const sortFunc = computed(() => {
 <template>
 	<div class="event-info panel">
 		<div class="info-row header">
-			<div class="label">
-				<IconTemperatureSun v-if="eventStore.eventTypeMode === 'hot'" />
-				<IconTemperatureSnow v-else-if="eventStore.eventTypeMode === 'cold'" />
-				<IconTemperature v-else />
-				<span class="value">{{
+			<div
+				class="label"
+				v-tooltip="
+					eventsOfInterest.length.toLocaleString() +
+					' ' +
+					(eventStore.eventTypeMode === 'hot'
+						? $l.heatwaveEvents
+						: eventStore.eventTypeMode === 'cold'
+							? $l.coldwaveEvents
+							: $l.allTemperatureEvents)
+				"
+			>
+				<IconTemperatureSun
+					v-if="eventStore.eventTypeMode === 'hot'"
+					aria-hidden="true"
+				/>
+				<IconTemperatureSnow
+					v-else-if="eventStore.eventTypeMode === 'cold'"
+					aria-hidden="true"
+				/>
+				<IconTemperature v-else aria-hidden="true" />
+				<span class="value" aria-hidden="true">{{
 					eventsOfInterest.length.toLocaleString()
 				}}</span>
 			</div>
 		</div>
 		<div class="info-row title">
-			<CalendarIcon :size="24" :date="dateNumber" />
+			<CalendarIcon :size="24" :date="dateNumber" aria-hidden="true" />
 			<span class="value mono">{{ timeString }}</span>
 		</div>
 		<div class="buttons">
-			<span class="award"
+			<span
+				class="award"
+				v-tooltip="
+					eventsOfInterest.length < 100
+						? $l.rankingForTopEvents
+						: $l.rankingForTop100Events
+				"
 				><IconAward /> {{ eventsOfInterest.length < 100 ? '' : '100' }}
 			</span>
 			<button
 				@click="props.mainStore.cycleSorts"
 				class="cycle-sort-button glassy"
+				v-tooltip="
+					(mainStore.focusVariable === 'duration'
+						? $l.rankedByDuration
+						: mainStore.focusVariable === 'size'
+							? $l.rankedBySize
+							: $l.rankedByIntensity) +
+					' (' +
+					$l.cycleSortVariable +
+					')'
+				"
 			>
-				<IconStopwatch v-if="mainStore.focusVariable === 'duration'" />
-				<IconDimensions v-else-if="mainStore.focusVariable === 'size'" />
-				<IconTemperature v-else />
+				<IconStopwatch
+					v-if="mainStore.focusVariable === 'duration'"
+					aria-hidden="true"
+				/>
+				<IconDimensions
+					v-else-if="mainStore.focusVariable === 'size'"
+					aria-hidden="true"
+				/>
+				<IconTemperature v-else aria-hidden="true" />
 			</button>
-			<button @click="toggleAscDesc" class="cycle-sort-button glassy">
-				<IconSortDescendingSmallBig v-if="sortDesc" />
-				<IconSortAscendingSmallBig v-else />
+			<button
+				@click="toggleAscDesc"
+				class="cycle-sort-button glassy"
+				v-tooltip="sortDesc ? $l.sortAscending : $l.sortDescending"
+			>
+				<IconSortDescendingSmallBig v-if="sortDesc" aria-hidden="true" />
+				<IconSortAscendingSmallBig v-else aria-hidden="true" />
 			</button>
 		</div>
 		<div class="info-row">
-			<div class="medals-carousel">
+			<div class="ranker-container">
 				<EventRanker
 					:events="eventsOfInterest"
 					:sort-func="sortFunc"
@@ -188,6 +234,8 @@ const sortFunc = computed(() => {
 		display: flex;
 		justify-content: center;
 		padding: 0.25rem;
+		user-select: none;
+
 		.tabler-icon {
 			width: 2rem;
 		}
@@ -215,7 +263,7 @@ const sortFunc = computed(() => {
 		}
 	}
 
-	.medals-carousel {
+	.ranker-container {
 		z-index: 5;
 		/* overflow: hidden; */
 		width: 100%;
@@ -227,9 +275,8 @@ const sortFunc = computed(() => {
 		justify-content: center;
 
 		.event-ranker-root {
-			flex: 1 1 34%;
+			flex: 0 0 100%;
 			overflow: hidden;
-			/* This is 10 events at 24px each - see ROW_HEIGHT in EventRanker.vue */
 			height: 160px;
 			z-index: 7;
 		}

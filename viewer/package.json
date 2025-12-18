@@ -38,6 +38,7 @@
 		"d3": "^7.9.0",
 		"date-fns": "^4.1.0",
 		"flatbush": "^4.4.1",
+		"floating-vue": "^5.2.2",
 		"js-cookie": "^3.0.5",
 		"leaflet": "^1.9.4",
 		"leaflet-draw": "^1.0.4",

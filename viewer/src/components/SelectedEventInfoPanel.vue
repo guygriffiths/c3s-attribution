@@ -13,7 +13,6 @@ import {
 	IconTemperatureMinus,
 	IconTemperaturePlus,
 } from '@tabler/icons-vue'
-import { dayStr } from '@/lib/time-utils'
 
 const props = defineProps<{
 	selectedEvent: ExtremeEvent | ExtremeEventFull
@@ -28,9 +27,9 @@ const timeRange = computed(() => {
 	const start = new Date(props.selectedEvent.times[0])
 	const end = new Date(props.selectedEvent.times.at(-1) || start)
 	if (start.getMonth() === end.getMonth()) {
-		return `${format(start, 'dd')} → ${format(end, 'dd MMM')}`
+		return `${format(start, 'do')} → ${format(end, 'do MMM yyyy')}`
 	}
-	return `${format(start, 'dd MMM')} → ${format(end, 'dd MMM')}`
+	return `${format(start, 'do MMM')} → ${format(end, 'do MMM yyyy')}`
 	// return `${start.toLocaleDateString()} → ${end.toLocaleDateString()}`
 })
 
@@ -49,49 +48,73 @@ const downloadEvent = () => {
 
 <template>
 	<div class="event-info panel">
-		<button class="download-button glassy color" @click="downloadEvent">
-			<IconDownload class="icon" />
+		<button
+			class="download-button glassy color"
+			@click="downloadEvent"
+			v-tooltip="$l.downloadEventData"
+		>
+			<IconDownload class="icon" aria-hidden="true" />
 		</button>
 		<div class="info-row header">
 			<IconTemperatureSun
 				v-if="props.selectedEvent.event_type === 'hot'"
 				class="icon"
+				aria-hidden="true"
 			/>
 			<IconTemperatureSnow
 				v-else-if="props.selectedEvent.event_type === 'cold'"
 				class="icon"
+				aria-hidden="true"
 			/>
-			<IconTemperature class="icon" v-else />
-			<h2 class="mono">{{ timeRange }}</h2>
+			<IconTemperature class="icon" aria-hidden="true" v-else />
+			<h2 class="label mono">{{ timeRange }}</h2>
 		</div>
-		<div class="info-row">
-			<IconStopwatch class="icon" />
+		<div class="info-row" v-tooltip="$l.duration">
+			<IconStopwatch class="icon" aria-hidden="true" />
 			<!-- <span class="label">{{ $l.duration }}:</span> -->
 			<span class="value mono"
-				>{{ eventStore.durationForEvent(props.selectedEvent) }} days
+				>{{ eventStore.durationForEvent(props.selectedEvent) }}
+				{{ eventStore.durationUnits }}
 			</span>
 		</div>
-		<div class="info-row">
-			<IconDimensions class="icon" />
+		<div class="info-row" v-tooltip="$l.size">
+			<IconDimensions class="icon" aria-hidden="true" />
 			<!-- <span class="label">{{ $l.size }}:</span> -->
 			<span class="value mono"
-				>{{ eventStore.sizeForEvent(props.selectedEvent).toFixed(2) }}km²</span
+				>{{ eventStore.sizeForEvent(props.selectedEvent).toFixed(2)
+				}}{{ eventStore.sizeUnits }}</span
 			>
 		</div>
-		<div class="info-row">
-			<IconTemperaturePlus v-if="props.selectedEvent.event_type === 'hot'" class="icon" />
-			<IconTemperatureMinus v-else-if="props.selectedEvent.event_type === 'cold'" class="icon" />
-			<IconTemperature class="icon" v-else />
+		<div
+			class="info-row"
+			v-tooltip="
+				props.selectedEvent.event_type === 'hot'
+					? $l.maxTemp
+					: props.selectedEvent.event_type === 'cold'
+						? $l.minTemp
+						: $l.meanTemp
+			"
+		>
+			<IconTemperaturePlus
+				v-if="props.selectedEvent.event_type === 'hot'"
+				class="icon"
+				aria-hidden="true"
+			/>
+			<IconTemperatureMinus
+				v-else-if="props.selectedEvent.event_type === 'cold'"
+				class="icon"
+				aria-hidden="true"
+			/>
+			<IconTemperature class="icon" v-else aria-hidden="true" />
 			<!-- <span class="label">{{ $l.intensity }}:</span> -->
 			<span class="value mono"
-				>+{{
-					eventStore.intensityForEvent(props.selectedEvent).toFixed(2)
-				}}°C</span
+				>{{ eventStore.intensityForEvent(props.selectedEvent).toFixed(2)
+				}}{{ eventStore.intensityUnits }}</span
 			>
 		</div>
 
-		<div class="info-row">
-			<IconReport class="icon" /><span class="value mono">N/A</span>
+		<div class="info-row" v-tooltip="$l.reportId">
+			<IconReport class="icon" aria-hidden="true" /><span class="value mono">N/A</span>
 		</div>
 		<slot></slot>
 	</div>
@@ -155,12 +178,19 @@ const downloadEvent = () => {
 	&.header {
 		position: relative;
 		z-index: 10;
+		margin-left: 0.5rem;
 		.label {
 			/* margin-bottom: 0.5rem; */
-			font-size: 1.2rem;
+			font-size: 1.1rem;
 			font-weight: bold;
 			display: flex;
 			align-items: center;
+			justify-content: flex-end;
+			text-wrap: wrap;
+			flex-shrink: 1;
+			margin-top: 0;
+			margin-bottom: 0;
+			text-align: center;
 			/* position: absolute;
 			left: 50%;
 			transform: translateX(-50%); */

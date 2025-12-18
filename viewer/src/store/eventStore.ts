@@ -180,6 +180,15 @@ export const useStore = defineStore('events', {
 				return [0, 1]
 			}
 		},
+		intensityUnits: (state: State) => {
+			if (state.eventTypeMode === 'hot') {
+				return state.heatIntensityUnits
+			} else if (state.eventTypeMode === 'cold') {
+				return state.coldIntensityUnits
+			} else {
+				return '°C'
+			}
+		},
 		eventSelected: (state: State) => {
 			return state.selectedEventId !== null // && state.selectedEvent !== undefined
 		},
@@ -281,14 +290,14 @@ export const useStore = defineStore('events', {
 				return
 			}
 			await mainStore.setLoading('Selecting event...')
-			mainStore.setEventLoading()
 			// if (this.selectedEvent?.id === id) {
-			if (this.selectedEventId === event.id) {
-				this.selectedEvent = null
-				this.selectedEventId = null
-				mainStore.setLoadingDone()
-			} else {
-				// mainStore.setLoading()
+				if (this.selectedEventId === event.id) {
+					// this.selectedEvent = null
+					// this.selectedEventId = null
+					mainStore.setLoadingDone()
+					return
+				} else {
+				mainStore.setEventLoading()
 				this.selectedEventId = event.id
 				this.selectedEvent = event as ExtremeEventFull
 				// console.log('Selected event is now', this.selectedEvent, JSON.stringify(event))
@@ -322,9 +331,14 @@ export const useStore = defineStore('events', {
 		setHoveringEvent(event: ExtremeEvent | null) {
 			this.hoveringEvent = event
 		},
-		setEventTypeMode(mode: 'hot' | 'cold' | 'hotcold') {
-			this.eventTypeMode = mode
+		async setEventTypeMode(
+			mode: 'hot' | 'cold' | 'hotcold' | null | undefined,
+		) {
+			const mainStore = useMainStore()
+			await mainStore.setLoading('Changing event type...')
+			this.eventTypeMode = mode || 'hot'
 			setTheme(mode === 'hot' ? 'hot' : mode === 'cold' ? 'cold' : 'hotcold')
+			mainStore.setLoadingDone()
 		},
 		cycleEventType() {
 			if (this.eventTypeMode === 'hot') {
@@ -336,7 +350,6 @@ export const useStore = defineStore('events', {
 			}
 		},
 		async runFilters() {
-			// console.log('Running event filters')
 			const mainStore = useMainStore()
 			await mainStore.setLoading()
 			setFilters(
@@ -383,7 +396,6 @@ export const useStore = defineStore('events', {
 				if (events.length > 0) {
 					if (!this.firstEventSetLoaded) {
 						this.firstEventSetLoaded = true
-						// console.log('First event set loaded, clearing loading state')
 						mainStore.setLoadingDone()
 						setTimeout(() => {
 							mainStore.showInfoPanel = true

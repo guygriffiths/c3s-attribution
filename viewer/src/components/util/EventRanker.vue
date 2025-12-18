@@ -3,6 +3,10 @@ import { computed, ref, watch } from 'vue'
 import { useStore as useEventStore } from '@/store/eventStore'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import * as d3 from 'd3'
+import { useLabels } from '@/lib/labels'
+
+const $l = useLabels()
+
 const eventStore = useEventStore()
 
 const ROW_SIZE = 24
@@ -57,9 +61,7 @@ watch(
 	() => [props.events, props.sortFunc],
 	() => {
 		rankedEvents.value = [...(props.events || [])].sort(props.sortFunc)
-		eventStore.setHoveringEvent(
-			rankedEvents.value[hoverIndex.value] || null,
-		)
+		eventStore.setHoveringEvent(rankedEvents.value[hoverIndex.value] || null)
 		// console.log('Ranked events:', [...rankedEvents.value].splice(0, 10).map((e) => `events/event-${e.id}.json`).join(' '))
 	},
 	{ deep: false },
@@ -67,9 +69,7 @@ watch(
 const hoverIndex = ref(-1)
 const setHover = (idx: number) => {
 	hoverIndex.value = idx
-	eventStore.setHoveringEvent(
-		rankedEvents.value[idx] || null,
-	)
+	eventStore.setHoveringEvent(rankedEvents.value[idx] || null)
 }
 
 const selectEvent = (event: ExtremeEvent | null) => {
@@ -141,7 +141,10 @@ const selectedIndex = computed(() => {
 					@click="selectEvent(rankedEvents[i - 1] || null)"
 					@mouseover="setHover(i - 1)"
 					@mouseleave="setHover(-1)"
-					:title="`Duration: ${eventStore.durationForEvent(rankedEvents[i - 1])} days\nSize: ${eventStore.sizeForEvent(rankedEvents[i - 1]).toFixed(2)} km²\nIntensity: ${eventStore.intensityForEvent(rankedEvents[i - 1]).toFixed(2)}`"
+					v-tooltip="{
+						content: `${$l.duration}: ${eventStore.durationForEvent(rankedEvents[i - 1])} ${eventStore.durationUnits}<br />${$l.size}: ${eventStore.sizeForEvent(rankedEvents[i - 1]).toFixed(2)} ${eventStore.sizeUnits}<br />${$l.intensity}: ${eventStore.intensityForEvent(rankedEvents[i - 1]).toFixed(2)} ${eventStore.intensityUnits}`,
+						html: true,
+					}"
 				>
 					{{ i }}
 				</div>
@@ -174,11 +177,12 @@ const selectedIndex = computed(() => {
 						)
 					"
 					@mouseleave="eventStore.setHoveringEvent(null)"
-					:title="
-						eventStore.selectedEvent
-							? `Duration: ${eventStore.durationForEvent(eventStore.selectedEvent)} days\nSize: ${eventStore.sizeForEvent(eventStore.selectedEvent).toFixed(2)} km²\nIntensity: ${eventStore.intensityForEvent(eventStore.selectedEvent).toFixed(2)}`
-							: ''
-					"
+					v-tooltip="{
+						content: eventStore.selectedEvent
+							? `${$l.duration}: ${eventStore.durationForEvent(eventStore.selectedEvent)} ${eventStore.durationUnits}<br />${$l.size}: ${eventStore.sizeForEvent(eventStore.selectedEvent).toFixed(2)} ${eventStore.sizeUnits}<br />${$l.intensity}: ${eventStore.intensityForEvent(eventStore.selectedEvent).toFixed(2)} ${eventStore.intensityUnits}`
+							: '',
+						html: true,
+					}"
 				>
 					{{ selectedIndex }}
 				</div>
@@ -309,7 +313,7 @@ const selectedIndex = computed(() => {
 		.ranked-event {
 			position: relative;
 			transition: transform $rate ease-out;
-			
+
 			rx: 2;
 			// stroke: black;
 			// stroke-width: 0.5;

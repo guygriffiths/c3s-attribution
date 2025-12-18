@@ -8,8 +8,10 @@ import { useStore as useTimeStore } from '@/store/timeStore'
 import { IconDimensions, IconTemperature } from '@tabler/icons-vue'
 import { niceNumber } from '@/lib/utils'
 import { dateStr } from '@/lib/time-utils'
-import scssVars from '@/assets/styles/scssVars.module.scss'
+import { useLabels } from '@/lib/labels'
+import { circle } from 'leaflet'
 
+const $l = useLabels()
 const store = useStore()
 const eventStore = useEventStore()
 const timeStore = useTimeStore()
@@ -50,7 +52,7 @@ const sizeScale = computed(() => {
 	return d3
 		.scaleLinear()
 		.domain([0, d3.max(areaData ? areaData.value : []) || 1])
-		.range([height.value - 3, chartTopMargin +3])
+		.range([height.value - 3, chartTopMargin + 3])
 })
 const intensityScale = computed(() =>
 	d3
@@ -59,7 +61,7 @@ const intensityScale = computed(() =>
 			d3.min(intensityData.value) || 0,
 			d3.max(intensityData.value) || 1,
 		])
-		.range([height.value-5, chartTopMargin+5]),
+		.range([height.value - 5, chartTopMargin + 5]),
 )
 
 const selectedIndex = computed(() => {
@@ -111,6 +113,9 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 			</div>
 		</div>
 		<div class="chart">
+			<h1 class="chart-title">
+				{{ $l.eventIntensityTS }}
+			</h1>
 			<div class="axis">
 				<div class="label mono">
 					{{ niceNumber(intensityScale.domain()[0]) }}
@@ -163,12 +168,29 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 									.join(' ')
 							"
 						/>
+						<circle 
+							v-for="(value, i) in intensityData" 
+							:key="i"
+							:cx="xScale(i.toString())! + xScale.bandwidth() / 2"
+							:cy="intensityScale(value)"
+							r="5"
+							:class="{
+								selected: i === selectedIndex,
+								[eventType]: true,
+							}"
+							class="line-point"
+							@click="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
+							@keydown.space.prevent="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
+							v-tooltip="dateStr(new Date(props.selectedEvent?.times[i] || 0)) + ': ' + niceNumber(value) + ' ' + (selectedEvent?.event_type === 'hot' ? eventStore.heatIntensityUnits : eventStore.coldIntensityUnits)"	/>
 					</template>
 				</g>
 			</svg>
 		</div>
 		<div class="spacer"></div>
 		<div class="chart">
+			<h1 class="chart-title">
+				{{ $l.eventSizeTS }}
+			</h1>
 			<div class="axis">
 				<div class="label mono">{{ niceNumber(sizeScale.domain()[0]) }}</div>
 				<span class="unit-icon"
@@ -213,11 +235,8 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 							class="area-bar"
 							filter="url(#egBarShadow)"
 							@click="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
-						>
-							<title>
-								{{ dateStr(new Date(props.selectedEvent?.times[i] || 0)) }} :
-								{{ niceNumber(value) }} {{ eventStore.sizeUnits }}
-							</title>
+							@keydown.space.prevent="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
+							v-tooltip="dateStr(new Date(props.selectedEvent?.times[i] || 0)) + ': ' + niceNumber(value) + ' ' + eventStore.sizeUnits"
 						</rect>
 					</template>
 				</g>
@@ -291,12 +310,12 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 
 			.label {
 				user-select: none;
-				font-size: 0.85rem;
 				color: var(--text-secondary);
+				flex: 0 0 auto;
 			}
 
 			.icon {
-				flex: 0 0 auto;
+				flex: 0 0 1.25rem;
 				width: 1.25rem;
 				height: 1.25rem;
 				margin: 0.25rem 0;
@@ -318,6 +337,7 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 		.intensity-chart {
 			flex: 1 1 75%;
 			background: var(--panel-bg);
+			box-shadow: inset 2px 2px 8px rgba(0, 0, 0, 0.2);
 			// display: block;
 			// width: 100%; /* remove !important */
 			// height: 100%; /* optional: depends on parent */
@@ -327,7 +347,8 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 	}
 }
 
-svg {
+.size-chart,
+.intensity-chart {
 	font-family: sans-serif;
 	font-size: 12px;
 	user-select: none;
@@ -351,6 +372,24 @@ svg {
 		}
 	}
 
+	.line-point {
+		cursor: default;
+		stroke: none;
+		opacity: 0;
+		&.selected {
+			cursor: pointer;
+			opacity: 1;
+			r:4;
+			fill: var(--primary-glass-shine);
+			&.hot {
+				fill: var(--theme-hot-primary-glass-shine);
+			}
+			&.cold {
+				fill: var(--theme-cold-primary-glass-shine);
+			}
+		}
+	}
+
 	.intensity-line {
 		&.hot {
 			stroke: var(--theme-hot-primary);
@@ -361,23 +400,8 @@ svg {
 	}
 
 	.graph-bg {
-		cursor: pointer;
 		fill: white;
-	}
-
-	.graph-bg-transition-enter-active {
-		transition: all $animTime ease-in-out calc($animTime + $settleTime);
-	}
-	.graph-bg-transition-leave-active {
-		transition: all $animTime ease-in-out;
-	}
-	.graph-bg-transition-enter-from,
-	.graph-bg-transition-leave-to {
-		height: 0;
-	}
-	.graph-bg-transition-enter-to,
-	.graph-bg-transition-leave-from {
-		height: 100%;
+		cursor: pointer;
 	}
 }
 </style>

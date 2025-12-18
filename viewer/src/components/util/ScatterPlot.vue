@@ -19,6 +19,7 @@ type Props = {
 	hoverId?: string | null
 	xscale?: number
 	yscale?: number
+	title?: string
 }
 
 const props = defineProps<Props>()
@@ -165,6 +166,8 @@ watch(
 	[
 		() => props.xdata,
 		() => props.ydata,
+		() => props.xbg,
+		() => props.ybg,
 		() => props.types,
 		() => props.ids,
 		width,
@@ -311,8 +314,8 @@ function draw() {
 		ctx.fillStyle = st.color
 		ctx.globalAlpha = st.opacity
 
-		ctx.moveTo(cx + 4, cy) // breaks the path so arcs dinnae join
-		ctx.arc(cx, cy, 4, 0, 2 * Math.PI)
+		ctx.moveTo(cx + 2, cy) // breaks the path so arcs dinnae join
+		ctx.arc(cx, cy, 2, 0, 2 * Math.PI)
 	}
 
 	ctx.fill()
@@ -339,7 +342,7 @@ function draw() {
 			const cy = yScale.value(st.y)
 			ctx.globalAlpha = st.opacity
 			ctx.beginPath()
-			ctx.arc(cx, cy, 4, 0, 2 * Math.PI)
+			ctx.arc(cx, cy, 3, 0, 2 * Math.PI)
 			ctx.fillStyle = st.color
 			ctx.fill()
 		}
@@ -389,7 +392,8 @@ onMounted(() => loop())
 </script>
 
 <template>
-	<div ref="containerRef" class="scatter-root">
+	<div ref="containerRef" class="scatter-root chart">
+		<h1 class="chart-title" v-if="props.title">{{ props.title }}</h1>
 		<canvas
 			ref="canvasRef"
 			class="scatter-canvas"
@@ -400,10 +404,13 @@ onMounted(() => loop())
 </template>
 
 <style scoped lang="scss">
+@use '@/assets/styles/scssVars.module.scss' as *;
+
 .scatter-root {
 	width: 100%;
 	height: 100%;
 	position: relative;
+
 
 	.tabler-icon {
 		width: min(35%, 2.5rem);

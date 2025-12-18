@@ -8,6 +8,7 @@ import {
 	monthsForYear,
 	TOTAL_DAYS,
 	intervalToMs,
+	dateStr,
 } from '@/lib/time-utils'
 import * as d3 from 'd3'
 import {
@@ -249,8 +250,14 @@ const togglePlay = () => {
 			if (ts - last >= frameInterval.value) {
 				if (isTimeline.value) {
 					// Timeline mode: stop at end date
-					let newStart = addHours(props.startFilter, props.speedFactor * 3 * 4 * 7 * 24)
-					let newEnd = addHours(props.endFilter, props.speedFactor * 3 * 4 * 7 * 24)
+					let newStart = addHours(
+						props.startFilter,
+						props.speedFactor * 3 * 4 * 7 * 24,
+					)
+					let newEnd = addHours(
+						props.endFilter,
+						props.speedFactor * 3 * 4 * 7 * 24,
+					)
 					if (newEnd > props.end) {
 						newEnd = props.end
 						playing.value = false
@@ -990,22 +997,28 @@ const dateTranslate = computed(() => {
 				<button
 					class="glassy color"
 					@click="startOfYear"
-					:title="$l.startOfYear"
+					v-tooltip="
+						isTimeline
+							? $l.startOfTimeline
+							: selectedEvent
+								? $l.startOfEvent
+								: $l.startOfYear
+					"
 				>
-					<IconChevronLeftPipe />
+					<IconChevronLeftPipe aria-hidden="true" />
 				</button>
 				<button
 					class="glassy color"
 					@click.stop="prevDay"
 					:disabled="selectedYear <= startYear && selectedDay <= 1"
-					:title="$l.prevDay"
+					v-tooltip="isTimeline ? $l.prevTimestep : $l.prevDay"
 				>
-					<IconChevronLeft />
+					<IconChevronLeft aria-hidden="true" />
 				</button>
 				<button
 					class="glassy color"
 					@click="togglePlay"
-					:title="$l.play"
+					v-tooltip="playing ? $l.pause : $l.play"
 					:disabled="
 						isZoom &&
 						(!props.selectedEvent ||
@@ -1015,19 +1028,29 @@ const dateTranslate = computed(() => {
 					"
 					:class="{ selected: playing }"
 				>
-					<IconPlayerPlay v-if="!playing" />
-					<IconPlayerPause v-else />
+					<IconPlayerPlay aria-hidden="true" v-if="!playing" />
+					<IconPlayerPause aria-hidden="true" v-else />
 				</button>
 				<button
 					class="glassy color"
 					@click="nextDay"
 					:disabled="selectedYear >= endYear && selectedDay >= 365"
-					:title="$l.nextDay"
+					v-tooltip="isTimeline ? $l.nextTimestep : $l.nextDay"
 				>
-					<IconChevronRight />
+					<IconChevronRight aria-hidden="true" />
 				</button>
-				<button class="glassy color" @click="endOfYear" :title="$l.endOfYear">
-					<IconChevronRightPipe />
+				<button
+					class="glassy color"
+					@click="endOfYear"
+					v-tooltip="
+						isTimeline
+							? $l.endOfTimeline
+							: selectedEvent
+								? $l.endOfEvent
+								: $l.endOfYear
+					"
+				>
+					<IconChevronRightPipe aria-hidden="true" />
 				</button>
 			</div>
 		</div>
@@ -1046,7 +1069,8 @@ const dateTranslate = computed(() => {
 			<div
 				class="scrubber"
 				v-if="isOverview"
-				:style="`transform: ${scrubberTranslate};`"
+				:style="`transform: ${scrubberTranslate}; pointer-events: auto;`"
+				@mousedown="startDrag"
 			>
 				<IconCrosshair />
 			</div>
@@ -1348,13 +1372,13 @@ const dateTranslate = computed(() => {
 					:style="`transform: translateX(calc(${startNeedleOffsetPx - 3}px)); width: calc(${endNeedleOffsetPx - startNeedleOffsetPx + 3}px);`"
 					@mousedown="startDrag"
 				>
-					<div class="start-handle handle">
+					<div class="start-handle handle" v-tooltip="$l.startHandle">
 						<IconArrowBarToLeft />
 					</div>
-					<div class="grab-area handle">
+					<div class="grab-area handle" v-tooltip="$l.grabHandle">
 						<IconArrowsMove />
 					</div>
-					<div class="end-handle handle">
+					<div class="end-handle handle" v-tooltip="$l.endHandle">
 						<IconArrowBarToRight />
 					</div>
 				</div>
@@ -1519,6 +1543,12 @@ const dateTranslate = computed(() => {
 			}
 		}
 
+		&.dragging {
+			.scrubber {
+				cursor: grabbing;
+			}
+		}
+
 		&.eventzoom,
 		&.timeline {
 			overflow-y: hidden;
@@ -1592,6 +1622,7 @@ const dateTranslate = computed(() => {
 				background: transparent;
 				backdrop-filter: blur(1px);
 				opacity: 0.6;
+				cursor: move;
 			}
 			.event-line {
 				stroke-width: 2;

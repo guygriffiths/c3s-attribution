@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineModel } from 'vue'
+import { computed, defineModel } from 'vue'
 import { useLabels } from '@/lib/labels'
 import {
 	IconDimensions,
@@ -54,7 +54,7 @@ const resetSize = async () => {
 	await store.setLoading('Resetting size filter...')
 	model.value.size.value = 0
 	model.value.size.minimum = true
-	store.setLoadingDone()	
+	store.setLoadingDone()
 }
 const resetHeatIntensity = async () => {
 	await store.setLoading('Resetting heat intensity filter...')
@@ -88,6 +88,26 @@ const toggleColdLtGt = async () => {
 	model.value.coldIntensity.minimum = !model.value.coldIntensity.minimum
 	store.setLoadingDone()
 }
+
+const durationTooltip = computed(() => {
+	return `${$l.value.duration} ${model.value.duration.minimum ? $l.value.greaterThan : $l.value.lessThan} ${model.value.duration.value} days`
+})
+
+const sizeTooltip = computed(() => {
+	return `${$l.value.size} ${model.value.size.minimum ? $l.value.greaterThan : $l.value.lessThan} ${model.value.size.value} km²`
+})
+
+const heatIntensityTooltip = computed(() => {
+	return `${$l.value.intensity} ${
+		model.value.heatIntensity.minimum ? $l.value.greaterThan : $l.value.lessThan
+	} ${model.value.heatIntensity.value} °C`
+})
+
+const coldIntensityTooltip = computed(() => {
+	return `${$l.value.intensity} ${
+		model.value.coldIntensity.minimum ? $l.value.greaterThan : $l.value.lessThan
+	} ${model.value.coldIntensity.value} °C`
+})
 </script>
 
 <template>
@@ -95,11 +115,22 @@ const toggleColdLtGt = async () => {
 		<IconFilter class="header-icon" />
 
 		<div class="filters">
-			<div class="filter-row">
-				<IconStopwatch />
-				<button @click="toggleDurationLtGt" class="ltgt-button">
-					<IconMathEqualGreater v-if="model.duration.minimum" />
-					<IconMathEqualLower v-else />
+			<div class="filter-row" v-tooltip="durationTooltip">
+				<IconStopwatch v-tooltip.bottom="$l.duration" />
+				<button
+					@click="toggleDurationLtGt"
+					class="ltgt-button"
+					v-tooltip.bottom="
+						model.duration.minimum
+							? $l.switchTo + ' ' + $l.lessThan
+							: $l.switchTo + ' ' + $l.greaterThan
+					"
+				>
+					<IconMathEqualGreater
+						v-if="model.duration.minimum"
+						aria-hidden="true"
+					/>
+					<IconMathEqualLower v-else aria-hidden="true" />
 				</button>
 				<NumberSelect
 					v-model="model.duration.value"
@@ -109,24 +140,33 @@ const toggleColdLtGt = async () => {
 					class="number-input"
 					@loading-start="store.setLoading('Updating duration filter...')"
 					@loading-end="store.setLoadingDone()"
+					v-tooltip.bottom="$l.durationNumberOfDays"
 				/>
 				<span class="units">days</span>
 				<button
 					@click="resetDuration"
 					class="reset-button"
-					:disabled="model.duration.value === 3"
+					:disabled="
+						model.duration.value === 3 && model.duration.minimum === true
+					"
+					v-tooltip.bottom="$l.resetFilter"
 				>
-					<IconRefreshAlert />
+					<IconRefreshAlert aria-hidden="true" />
 				</button>
 			</div>
-			<div class="filter-row">
-				<IconDimensions />
+			<div class="filter-row" v-tooltip="sizeTooltip">
+				<IconDimensions v-tooltip.bottom="$l.size" />
 				<button
 					@click="toggleSizeLtGt"
 					class="ltgt-button"
+					v-tooltip.bottom="
+						model.size.minimum
+							? $l.switchTo + ' ' + $l.lessThan
+							: $l.switchTo + ' ' + $l.greaterThan
+					"
 				>
-					<IconMathEqualGreater v-if="model.size.minimum" />
-					<IconMathEqualLower v-else />
+					<IconMathEqualGreater v-if="model.size.minimum" aria-hidden="true" />
+					<IconMathEqualLower v-else aria-hidden="true" />
 				</button>
 				<NumberSelect
 					v-model="model.size.value"
@@ -136,69 +176,114 @@ const toggleColdLtGt = async () => {
 					class="number-input"
 					@loading-start="store.setLoading('Updating size filter...')"
 					@loading-end="store.setLoadingDone()"
+					v-tooltip.bottom="$l.sizeNumberOfSquareKilometers"
 				/>
-				<span class="units">km² </span>
-				<button @click="resetSize" class="reset-button">
-					<IconRefreshAlert />
+				<span class="units">km²</span>
+				<button
+					@click="resetSize"
+					:disabled="model.size.value === 0 && model.size.minimum === true"
+					class="reset-button"
+					v-tooltip.bottom="$l.resetFilter"
+				>
+					<IconRefreshAlert aria-hidden="true" />
 				</button>
 			</div>
-			<div class="filter-row" v-if="model.heatIntensity.active">
-				<button @click="cycleHeatMode">
+			<div
+				class="filter-row"
+				v-if="model.heatIntensity.active"
+				v-tooltip="heatIntensityTooltip"
+			>
+				<button @click="cycleHeatMode" v-tooltip.bottom="$l.intensityCycle">
 					<IconTemperature
 						v-if="model.heatIntensity.type === 'mean'"
 						class="hot"
+						aria-hidden="true"
 					/>
 					<IconTemperaturePlus
 						v-if="model.heatIntensity.type === 'max'"
 						class="hot"
+						aria-hidden="true"
 					/>
 					<IconTemperatureMinus
 						v-if="model.heatIntensity.type === 'min'"
 						class="hot"
+						aria-hidden="true"
 					/>
 				</button>
 				<button
 					@click="toggleHeatLtGt"
 					class="ltgt-button hot"
+					v-tooltip.bottom="
+						model.heatIntensity.minimum
+							? $l.switchTo + ' ' + $l.lessThan
+							: $l.switchTo + ' ' + $l.greaterThan
+					"
 				>
-					<IconMathEqualGreater v-if="model.heatIntensity.minimum" />
+					<IconMathEqualGreater
+						v-if="model.heatIntensity.minimum"
+						aria-hidden="true"
+					/>
 					<IconMathEqualLower v-else />
 				</button>
 				<NumberSelect
 					v-model="model.heatIntensity.value"
-					:min="0"
-					:max="50"
+					:min="28"
+					:max="55"
 					:step="1"
 					class="number-input"
 					@loading-start="store.setLoading('Updating heat intensity filter...')"
 					@loading-end="store.setLoadingDone()"
+					v-tooltip.bottom="$l.intensityNumberOfDegrees"
 				/>
 				<span class="units"> °C </span>
-				<button @click="resetHeatIntensity" class="reset-button hot">
-					<IconRefreshAlert />
+				<button
+					@click="resetHeatIntensity"
+					class="reset-button hot"
+					v-tooltip.bottom="$l.resetFilter"
+					:disabled="
+						model.heatIntensity.value === 28 &&
+						model.heatIntensity.minimum === true
+					"
+				>
+					<IconRefreshAlert aria-hidden="true" />
 				</button>
 			</div>
-			<div class="filter-row" v-if="model.coldIntensity.active">
-				<button @click="cycleColdMode">
+			<div
+				class="filter-row"
+				v-if="model.coldIntensity.active"
+				v-tooltip="coldIntensityTooltip"
+			>
+				<button @click="cycleColdMode" v-tooltip.bottom="$l.intensityCycle">
 					<IconTemperature
 						v-if="model.coldIntensity.type === 'mean'"
 						class="cold"
+						aria-hidden="true"
 					/>
 					<IconTemperaturePlus
 						v-if="model.coldIntensity.type === 'max'"
 						class="cold"
+						aria-hidden="true"
 					/>
 					<IconTemperatureMinus
 						v-if="model.coldIntensity.type === 'min'"
 						class="cold"
+						aria-hidden="true"
 					/>
 				</button>
 				<button
 					@click="toggleColdLtGt"
 					class="ltgt-button cold"
+					v-tooltip.bottom="
+						model.coldIntensity.minimum
+							? $l.switchTo + ' ' + $l.lessThan
+							: $l.switchTo + ' ' + $l.greaterThan
+					"
 				>
-					<IconMathEqualGreater v-if="model.coldIntensity.minimum" />
-					<IconMathEqualLower v-else />
+					<IconMathEqualGreater
+						v-if="model.coldIntensity.minimum"
+						aria-hidden="true"
+					/>
+					<IconMathEqualLower v-else aria-hidden="true" />
 				</button>
 				<NumberSelect
 					v-model="model.coldIntensity.value"
@@ -208,10 +293,19 @@ const toggleColdLtGt = async () => {
 					class="number-input"
 					@loading-start="store.setLoading('Updating cold intensity filter...')"
 					@loading-end="store.setLoadingDone()"
+					v-tooltip.bottom="$l.intensityNumberOfDegrees"
 				/>
 				<span class="units"> °C </span>
-				<button @click="resetColdIntensity" class="reset-button cold">
-					<IconRefreshAlert />
+				<button
+					@click="resetColdIntensity"
+					class="reset-button cold"
+					v-tooltip.bottom="$l.resetFilter"
+					:disabled="
+						model.coldIntensity.value === 2 &&
+						model.coldIntensity.minimum === false
+					"
+				>
+					<IconRefreshAlert aria-hidden="true" />
 				</button>
 			</div>
 		</div>
@@ -281,10 +375,6 @@ const toggleColdLtGt = async () => {
 		align-items: center;
 		justify-content: center;
 		text-shadow: var(--text-on-primary-shadow);
-		:disabled {
-			color: red;
-			background-color: aqua;
-		}
 
 		.tabler-icon {
 			color: var(--primary);
@@ -304,6 +394,10 @@ const toggleColdLtGt = async () => {
 			.tabler-icon {
 				width: 1rem;
 				height: 1rem;
+			}
+			&:disabled {
+				opacity: 0.5;
+				cursor: not-allowed;
 			}
 		}
 	}

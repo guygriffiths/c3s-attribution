@@ -7,9 +7,12 @@ import {
 	IconTemperatureSnow,
 	IconTemperatureSun,
 } from '@tabler/icons-vue'
-import { nextTick, ref } from 'vue'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
+import { useLabels } from '@/lib/labels'
+
+const $l = useLabels()
+
 const store = useStore()
 const eventStore = useEventStore()
 const model = defineModel({
@@ -22,7 +25,7 @@ const coldClicked = async () => {
 	setTheme('cold')
 	eventStore.filters.coldIntensity.active = true
 	eventStore.filters.heatIntensity.active = false
-	store.hamburgerMenuOpen = false
+	// store.hamburgerMenuOpen = false
 	await store.setLoadingDone()
 }
 
@@ -30,7 +33,7 @@ const hotClicked = async () => {
 	await store.setLoading('Loading heatwave events...')
 	model.value = 'hot'
 	setTheme('hot')
-	store.hamburgerMenuOpen = false
+	// store.hamburgerMenuOpen = false
 	eventStore.filters.heatIntensity.active = true
 	eventStore.filters.coldIntensity.active = false
 	await store.setLoadingDone()
@@ -40,7 +43,7 @@ const bothClickedfromMiddle = async () => {
 	await store.setLoading('Loading all temperature events...')
 	model.value = 'hotcold'
 	setTheme('hotcold')
-	store.hamburgerMenuOpen = false
+	// store.hamburgerMenuOpen = false
 	eventStore.filters.heatIntensity.active = true
 	eventStore.filters.coldIntensity.active = true
 	await store.setLoadingDone()
@@ -53,24 +56,27 @@ const bothClickedfromMiddle = async () => {
 			class="left cold glassy"
 			@click="coldClicked"
 			:class="{ selected: model === 'cold' }"
+			v-tooltip="$l.selectColdwaveEvents"
 		>
-			<IconTemperatureSnow class="icon left" />
+			<IconTemperatureSnow class="icon left" aria-hidden="true" />
 		</button>
 		<button
 			class="middle glassy"
 			@click="bothClickedfromMiddle"
 			:class="{ selected: model === 'hotcold' }"
+			v-tooltip="$l.selectAllTemperatureEvents"
 		>
-			<IconSnowflake class="icon leftmerge" />
-			<IconTemperature class="icon thin" />
-			<IconSun class="icon rightmerge" />
+			<IconSnowflake class="icon leftmerge" aria-hidden="true"/>
+			<IconTemperature class="icon thin" aria-hidden="true"/>
+			<IconSun class="icon rightmerge" aria-hidden="true"/>
 		</button>
 		<button
 			class="right hot glassy"
 			@click="hotClicked"
 			:class="{ selected: model === 'hot' }"
+			v-tooltip="$l.selectHeatwaveEvents"
 		>
-			<IconTemperatureSun class="icon right" />
+			<IconTemperatureSun class="icon right" aria-hidden="true" />
 		</button>
 	</div>
 </template>
