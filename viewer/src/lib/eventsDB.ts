@@ -6,45 +6,82 @@ import type { MultiPolygon, Polygon } from 'geojson'
 import { nextTick } from 'vue'
 import { packPixelToInt } from './utils'
 
+/**
+ * Event indexing and filtering.
+ * The filtering chain is as follows:
+ *
+ * _events: all events loaded
+ * _parameterFilterEvents: events after applying parameter filters (duration, intensity, size, hot/cold event type)
+ * _spatiallyFilteredEvents: events after applying spatial filters (point, region) to parameter filtered events
+ * _fullyFilteredEvents: events after applying time filter to spatially and parameter filtered events
+ *
+ * Each of these is cached in variables, and updated when filters above it in the chain change.
+ *
+ * Some have a corresponding Set of IDs for fast lookup during downstream filtering.
+ *
+ */
+
 let _events: ExtremeEvent[] = []
-let _filteredEvents: ExtremeEvent[] = []
-let _filteredIds: Set<string> = new Set()
-let lastPointFilter: [number, number] | null = null
-let lastRegionFilter: GeoJSON.Feature<Polygon | MultiPolygon> | null = null
+export const getAllEvents = (): ExtremeEvent[] => _events
+
+let _parameterFilterEvents: ExtremeEvent[] = []
+let _parameterFilterEventIds: Set<string> = new Set()
+export const getParameterFilteredEvents = (): ExtremeEvent[] =>
+	_parameterFilterEvents
+
+let _spatiallyFilteredEvents: ExtremeEvent[] = []
+let _spatiallyFilteredEventIds: Set<string> = new Set()
+export const getSpatiallyFilteredEvents = (): ExtremeEvent[] =>
+	_spatiallyFilteredEvents
+
+let _timeFilteredEvents: ExtremeEvent[] = []
+let _timeFilteredEventIds: Set<string> = new Set()
+export const getTimeFilteredEvents = (): ExtremeEvent[] => _timeFilteredEvents
+
+let _spaceTimeFilteredEvents: ExtremeEvent[] = []
+export const getSpaceTimeFilteredEvents = (): ExtremeEvent[] =>
+	_spaceTimeFilteredEvents
+
+let _parameterFilters: EventStore['filters'] | null = null
+let _hotOn = true
+let _coldOn = true
+let _pointFilter: [number, number] | null = null
+let _regionFilter: GeoJSON.Feature<Polygon | MultiPolygon> | null = null
+let _timeFilter: { start: Date; end: Date } | null = null
+
+let _durationGetter: (e: ExtremeEvent) => number = (e) => e.duration
+let _heatIntensityGetter: (e: ExtremeEvent) => number = (e) => e.max_value || 0
+let _coldIntensityGetter: (e: ExtremeEvent) => number = (e) => e.max_value || 0
+let _sizeGetter: (e: ExtremeEvent) => number = (e) => e.total_area || 0
 
 let pixelIndex: Record<number, number[]> = {} // Maps packed pixel IDs to event IDs for fast lookup
 let dateIndex: Record<string, number[]> = {}
 let monthIndex: Record<string, number[]> = {}
 let pixelIndexReady = false
+
 let dateIndexReady = false
 let globalEventsReady = false
-let lastResult: ExtremeEvent[] = []
-let lastIds: Set<string> = new Set()
-let resultReady = false
-let counts: Map<number, Array<number>> = new Map()
-let finalised = false
 
-const regionEventsReadyTriggers: Array<() => void> = []
-const globalEventsReadyTriggers: Array<() => void> = []
-const currentEventTriggers: Array<() => void> = []
-export function onRegionEventsReady(cb: () => void) {
-	regionEventsReadyTriggers.push(cb)
-	if (lastResult.length > 0) {
-		cb()
-	}
+const globalEventsChangedTriggers: Array<() => void> = []
+const parameterFilterChangedTriggers: Array<() => void> = []
+const spatialFilterChangedTriggers: Array<() => void> = []
+const timeFilterChangedTriggers: Array<() => void> = []
+const spaceTimeFilterChangedTriggers: Array<() => void> = []
+
+export function onGlobalEventsChanged(cb: () => void) {
+	globalEventsChangedTriggers.push(cb)
 }
-export function onGlobalEventsReady(cb: () => void) {
-	// console.log('Registering global events ready callback', cb)
-	globalEventsReadyTriggers.push(cb)
-	if (globalEventsReady) {
-		cb()
-	}
+export function onParameterFilterChanged(cb: () => void) {
+	parameterFilterChangedTriggers.push(cb)
 }
-export function onCurrentEventsReady(cb: () => void) {
-	currentEventTriggers.push(cb)
-	if (dateIndexReady) {
-		cb()
-	}
+export function onSpatialFilterChanged(cb: () => void) {
+	spatialFilterChangedTriggers.push(cb)
+}
+export function onTimeFilterChanged(cb: () => void) {
+	timeFilterChangedTriggers.push(cb)
+}
+export function onSpaceTimeFilterChanged(cb: () => void) {
+	spaceTimeFilterChangedTriggers.push(cb)
 }
 
 let retrievedCount = 0
@@ -62,15 +99,17 @@ fetchAndIndexWorker.onmessage = (
 	}>,
 ) => {
 	retrievedCount++
-	const { year, events, pixelIndex: pIndex, dateIndex: dIndex, monthIndex: mIndex } = e.data
+	const {
+		year,
+		events,
+		pixelIndex: pIndex,
+		dateIndex: dIndex,
+		monthIndex: mIndex,
+	} = e.data
 
 	// console.log(`Main thread received ${events.length} events from worker`)
 
 	_events.push(...events)
-	_filteredEvents = _events
-	for (const event of events) {
-		_filteredIds.add(event.id)
-	}
 
 	// Merge pixel index
 	for (const [key, val] of Object.entries(pIndex)) {
@@ -104,12 +143,19 @@ fetchAndIndexWorker.onmessage = (
 	if (year === latestYear || retrievedCount === postedCount) {
 		const mainStore = useMainStore()
 		mainStore.setLoading()
-		for (const cb of globalEventsReadyTriggers) {
+		for (const cb of globalEventsChangedTriggers) {
 			cb()
 		}
-		for (const cb of currentEventTriggers) {
-			cb()
-		}
+		// Trigger a build of the entire filter chain
+		//
+		// This starts with parameter filters, which triggers spatial filter rebuild,
+		// which in turn triggers time filter rebuild
+		//
+		// Each stage notifies its own listeners when done
+		//
+		// This will populate all the filtered event arrays
+		buildParameterFilterResults()
+
 		nextTick(async () => {
 			await new Promise((resolve) => requestAnimationFrame(resolve))
 			await new Promise((resolve) => requestAnimationFrame(resolve))
@@ -150,202 +196,234 @@ export async function fetchAndIndexEvents(
 	}
 }
 
-export function getEventCount(): number {
-	return _filteredEvents.length
+export function pixelIndexInitialised(): boolean {
+	return pixelIndexReady
 }
 
-export function setFilterToPoint(lat: number, lon: number): ExtremeEvent[] {
-	resultReady = false
-	lastPointFilter = [lat, lon]
-	lastRegionFilter = null
-	lastResult = (pixelIndex[packPixelToInt(lat, lon)] || [])
-		.map((idx) => _events[idx])
-		.filter((e) => _filteredIds.has(e.id))
-	// TODO Find out why this is occasionally undefined
-	lastResult = lastResult.filter((e) => e) // filter out undefined
-	lastIds = new Set(lastResult.map((e) => e.id))
-	resultReady = true
-	console.log('calling region triggers')
-	regionEventsReadyTriggers.forEach((cb) => cb())
-
-	if (coldOnly) {
-		return lastResult.filter((e) => e.event_type === 'cold')
-	}
-	if (hotOnly) {
-		return lastResult.filter((e) => e.event_type === 'hot')
-	}
-	return lastResult
-}
-
-/**
- * Region lookup – return all events overlapping a GeoJSON region
- */
-export function setFilterToRegion(
-	region: GeoJSON.Feature<Polygon | MultiPolygon>,
-): ExtremeEvent[] {
-	resultReady = false
-	lastRegionFilter = region
-	lastPointFilter = null
-	// Gather pixels overlappin region → union their event IDs
-	const ids = new Set<number>()
-	const geom = region.geometry
-	const poly = polygon(geom.coordinates as number[][][]) // assume Polygon
-	const bounds = bbox(poly) as [number, number, number, number]
-
-	for (let lat = Math.floor(bounds[1] * 4) / 4; lat <= bounds[3]; lat += 0.25) {
-		for (
-			let lon = Math.floor(bounds[0] * 4) / 4;
-			lon <= bounds[2];
-			lon += 0.25
-		) {
-			const p = point([lon, lat])
-			if (booleanPointInPolygon(p, poly)) {
-				const packed = packPixelToInt(lat, lon)
-				const evIds = pixelIndex[packed]
-				if (evIds) {
-					evIds.forEach((id) => ids.add(id))
-				}
-			}
-		}
-	}
-
-	// // `ids` now contains all unique event IDs that intersect the polygon
-	lastResult = Array.from(ids).map((idx) => _filteredEvents[idx])
-	lastIds = new Set(lastResult.map((e) => e.id))
-	resultReady = true
-	console.log('calling region triggers')
-	regionEventsReadyTriggers.forEach((cb) => cb())
-
-	if (coldOnly) {
-		return lastResult.filter((e) => e.event_type === 'cold')
-	}
-	if (hotOnly) {
-		return lastResult.filter((e) => e.event_type === 'hot')
-	}
-	return lastResult
-}
-
-export function setFilters(
-	filters: EventStore['filters'],
-	durationGetter: (e: ExtremeEvent) => number = (e) => e.duration,
-	intensityGetter: (e: ExtremeEvent) => number = (e) => e.max_value || 0,
-	sizeGetter: (e: ExtremeEvent) => number = (e) => e.pixel_set.length || 0,
-) {
-	_filteredEvents = applyFilters(
-		_events,
-		filters,
-		durationGetter,
-		intensityGetter,
-		sizeGetter,
-	)
-	_filteredIds = new Set(_filteredEvents.map((e) => e.id))
-	if (lastPointFilter !== null) {
-		setFilterToPoint(lastPointFilter[0], lastPointFilter[1])
-	} else if (lastRegionFilter !== null) {
-		setFilterToRegion(lastRegionFilter)
-	}
-	globalEventsReadyTriggers.forEach((cb) => cb())
-	currentEventTriggers.forEach((cb) => cb())
-}
-
-const applyFilters = (
-	events: ExtremeEvent[],
+export function setParameterFilters(
 	filters: EventStore['filters'],
 	durationGetter: (e: ExtremeEvent) => number = (e) => e.duration,
 	heatIntensityGetter: (e: ExtremeEvent) => number = (e) => e.max_value || 0,
 	coldIntensityGetter: (e: ExtremeEvent) => number = (e) => e.max_value || 0,
 	sizeGetter: (e: ExtremeEvent) => number = (e) => e.total_area || 0,
-): ExtremeEvent[] => {
-	const fe = events.filter((event: ExtremeEvent, i) => {
-		const durF = filters.duration
-		if (durF.minimum && durationGetter(event) < durF.value) return false
-		if (!durF.minimum && durationGetter(event) > durF.value) return false
-		const hIntenF = filters.heatIntensity
-		if (hIntenF.active && event.event_type === 'hot') {
-			switch (hIntenF.type) {
-				case 'intensity':
-					// use intensityGetter
-					break
-				case 'min':
-					heatIntensityGetter = (e) => e.min_value - 273.15
-					break
-				case 'mean':
-					heatIntensityGetter = (e) => e.mean_value - 273.15
-					break
-				case 'max':
-					heatIntensityGetter = (e) => e.max_value - 273.15
-					break
-			}
-			if (hIntenF.minimum && heatIntensityGetter(event) < hIntenF.value)
-				return false
-			if (!hIntenF.minimum && heatIntensityGetter(event) > hIntenF.value)
-				return false
-		}
-		const cIntenF = filters.coldIntensity
-		if (cIntenF.active && event.event_type === 'cold') {
-			switch (cIntenF.type) {
-				case 'intensity':
-					// use intensityGetter
-					break
-				case 'min':
-					coldIntensityGetter = (e) => e.min_value - 273.15
-					break
-				case 'mean':
-					coldIntensityGetter = (e) => e.mean_value - 273.15
-					break
-				case 'max':
-					coldIntensityGetter = (e) => e.max_value - 273.15
-					break
-			}
-			if (cIntenF.minimum && coldIntensityGetter(event) < cIntenF.value)
-				return false
-			if (!cIntenF.minimum && coldIntensityGetter(event) > cIntenF.value)
-				return false
-		}
-		const sizeF = filters.size
-		if (sizeF.minimum && sizeGetter(event) < sizeF.value) return false
-		if (!sizeF.minimum && sizeGetter(event) > sizeF.value) return false
+) {
+	_parameterFilters = filters
+	_durationGetter = durationGetter
+	_heatIntensityGetter = heatIntensityGetter
+	_coldIntensityGetter = coldIntensityGetter
+	_sizeGetter = sizeGetter
+	buildParameterFilterResults()
+}
 
+export function setEventTypeFilter(hotOn: boolean, coldOn: boolean) {
+	_hotOn = hotOn
+	_coldOn = coldOn
+	buildParameterFilterResults()
+}
+
+const buildParameterFilterResults = (): ExtremeEvent[] => {
+	if (!_parameterFilters) {
+		_parameterFilterEvents = _events
+	} else {
+		_parameterFilterEvents = _events.filter((event: ExtremeEvent, i) => {
+			const durF = _parameterFilters!.duration
+			if (durF.minimum && _durationGetter(event) < durF.value) return false
+			if (!durF.minimum && _durationGetter(event) > durF.value) return false
+			const hIntenF = _parameterFilters!.heatIntensity
+			if (hIntenF.active && event.event_type === 'hot') {
+				switch (hIntenF.type) {
+					case 'intensity':
+						// use intensityGetter
+						break
+					case 'min':
+						_heatIntensityGetter = (e) => e.min_value - 273.15
+						break
+					case 'mean':
+						_heatIntensityGetter = (e) => e.mean_value - 273.15
+						break
+					case 'max':
+						_heatIntensityGetter = (e) => e.max_value - 273.15
+						break
+				}
+				if (hIntenF.minimum && _heatIntensityGetter(event) < hIntenF.value)
+					return false
+				if (!hIntenF.minimum && _heatIntensityGetter(event) > hIntenF.value)
+					return false
+			}
+			const cIntenF = _parameterFilters!.coldIntensity
+			if (cIntenF.active && event.event_type === 'cold') {
+				switch (cIntenF.type) {
+					case 'intensity':
+						// use intensityGetter
+						break
+					case 'min':
+						_coldIntensityGetter = (e) => e.min_value - 273.15
+						break
+					case 'mean':
+						_coldIntensityGetter = (e) => e.mean_value - 273.15
+						break
+					case 'max':
+						_coldIntensityGetter = (e) => e.max_value - 273.15
+						break
+				}
+				if (cIntenF.minimum && _coldIntensityGetter(event) < cIntenF.value)
+					return false
+				if (!cIntenF.minimum && _coldIntensityGetter(event) > cIntenF.value)
+					return false
+			}
+			const sizeF = _parameterFilters!.size
+			if (sizeF.minimum && _sizeGetter(event) < sizeF.value) return false
+			if (!sizeF.minimum && _sizeGetter(event) > sizeF.value) return false
+
+			return true
+		})
+	}
+	_parameterFilterEvents = _parameterFilterEvents.filter((e) => {
+		if (e.event_type === 'hot' && !_hotOn) return false
+		if (e.event_type === 'cold' && !_coldOn) return false
 		return true
 	})
+	_parameterFilterEventIds = new Set(_parameterFilterEvents.map((e) => e.id))
 
-	return fe
+	// Notify listeners
+	parameterFilterChangedTriggers.forEach((cb) => cb())
+	// The parameter filter has changed, so downstream filters need to be rebuilt
+	buildSpatialFilterResults()
+	buildTimeFilterResults()
+	return _parameterFilterEvents
 }
 
-export function pixelIndexInitialised(): boolean {
-	return pixelIndexReady
+export function setFilterToPoint(lat: number, lon: number): ExtremeEvent[] {
+	_pointFilter = [lat, lon]
+	_regionFilter = null
+
+	return buildSpatialFilterResults()
 }
 
-export function filterResultReady(): boolean {
-	return resultReady
+export function setFilterToRegion(
+	region: GeoJSON.Feature<Polygon | MultiPolygon>,
+): ExtremeEvent[] {
+	_regionFilter = region
+	_pointFilter = null
+
+	return buildSpatialFilterResults()
 }
 
-export function getFilteredEvents(): ExtremeEvent[] {
-	if (coldOnly) {
-		return lastResult.filter((e) => e.event_type === 'cold')
+const buildSpatialFilterResults = (): ExtremeEvent[] => {
+	if (_pointFilter) {
+		const lat = _pointFilter![0]
+		const lon = _pointFilter![1]
+		const packed = packPixelToInt(lat, lon)
+		const evIdxs = pixelIndex[packed]
+		if (!evIdxs) {
+			_spatiallyFilteredEvents = []
+		} else {
+			_spatiallyFilteredEvents = _events.filter((e, idx) => {
+				if (evIdxs.includes(idx) && _parameterFilterEventIds.has(e.id)) {
+					return true
+				}
+				return false
+			})
+		}
+	} else if (_regionFilter) {
+		// Gather pixels overlappin region → union their event IDs
+		const evIdxs = new Set<number>()
+		const geom = _regionFilter.geometry
+		// TODO This assumes Polygon, need to handle MultiPolygon
+		const poly = polygon(geom.coordinates as number[][][])
+		const bounds = bbox(poly) as [number, number, number, number]
+
+		for (
+			let lat = Math.floor(bounds[1] * 4) / 4;
+			lat <= bounds[3];
+			lat += 0.25
+		) {
+			for (
+				let lon = Math.floor(bounds[0] * 4) / 4;
+				lon <= bounds[2];
+				lon += 0.25
+			) {
+				const p = point([lon, lat])
+				if (booleanPointInPolygon(p, poly)) {
+					const packed = packPixelToInt(lat, lon)
+					const evIds = pixelIndex[packed]
+					if (evIds) {
+						evIds.forEach((idx) => evIdxs.add(idx))
+					}
+				}
+			}
+		}
+
+		_spatiallyFilteredEvents = _events.filter((e, idx) => {
+			if (evIdxs.has(idx) && _parameterFilterEventIds.has(e.id)) {
+				return true
+			}
+			return false
+		})
+	} else {
+		_spatiallyFilteredEvents = _parameterFilterEvents
 	}
-	if (hotOnly) {
-		return lastResult.filter((e) => e.event_type === 'hot')
-	}
-	return lastResult
+	_spatiallyFilteredEventIds = new Set(
+		_spatiallyFilteredEvents.map((e) => e.id),
+	)
+
+	// Notify listeners
+	spatialFilterChangedTriggers.forEach((cb) => cb())
+	// The spatial filter has changed, so downstream filters need to be rebuilt
+	buildSpaceTimeFilterResults()
+	return _spatiallyFilteredEvents
 }
 
-export function getFilteredIds(): Set<string> {
-	if (coldOnly) {
-		return new Set(
-			lastResult.filter((e) => e.event_type === 'cold').map((e) => e.id),
-		)
-	}
-	if (hotOnly) {
-		return new Set(
-			lastResult.filter((e) => e.event_type === 'hot').map((e) => e.id),
-		)
-	}
-	return lastIds
+export function setTimeRangeFilter(start: Date, end: Date): ExtremeEvent[] {
+	_timeFilter = { start, end }
+	return buildTimeFilterResults()
 }
 
-export function getCurrentEvents(time: Date): ExtremeEvent[] {
-	if (!time) return _filteredEvents
+const buildTimeFilterResults = (): ExtremeEvent[] => {
+	if (_timeFilter) {
+		const startTime = _timeFilter.start.getTime()
+		const endTime = _timeFilter.end.getTime()
+
+		_timeFilteredEvents = _parameterFilterEvents.filter((e) => {
+			const eventStart = e.times[0]
+			const eventEnd = e.times[e.times.length - 1]
+			if (eventEnd < startTime || eventStart > endTime) {
+				return false
+			}
+			return true
+		})
+	} else {
+		_timeFilteredEvents = _parameterFilterEvents
+	}
+	_timeFilteredEventIds = new Set(_timeFilteredEvents.map((e) => e.id))
+
+	// Notify listeners
+	timeFilterChangedTriggers.forEach((cb) => cb())
+	// The time filter has changed, so downstream filters need to be rebuilt
+	buildSpaceTimeFilterResults()
+	return _timeFilteredEvents
+}
+
+const buildSpaceTimeFilterResults = (): ExtremeEvent[] => {
+	_spaceTimeFilteredEvents = _spatiallyFilteredEvents.filter((e) =>
+		_timeFilteredEventIds.has(e.id),
+	)
+	// Notify listeners
+	spaceTimeFilterChangedTriggers.forEach((cb) => cb())
+	return _spaceTimeFilteredEvents
+}
+
+export function getCurrentEvents(
+	time: Date,
+	spatiallyFiltered: boolean,
+): ExtremeEvent[] {
+	if (!time) {
+		if (spatiallyFiltered) {
+			return _spatiallyFilteredEvents
+		} else {
+			return _parameterFilterEvents
+		}
+	}
 
 	const idxs = dateIndex[time.getTime()]
 	if (!idxs) return []
@@ -353,94 +431,11 @@ export function getCurrentEvents(time: Date): ExtremeEvent[] {
 	const result: ExtremeEvent[] = []
 	for (const idx of idxs) {
 		const ev = _events[idx]
-		if (_filteredIds.has(ev.id)) result.push(ev)
-	}
-
-	if (coldOnly) {
-		return result.filter((e) => e.event_type === 'cold')
-	}
-	if (hotOnly) {
-		return result.filter((e) => e.event_type === 'hot')
-	}
-	return result
-}
-
-export function getTimeRangedEvents(
-	startTime: Date,
-	endTime: Date,
-): ExtremeEvent[] {
-	if (!startTime || !endTime) return _filteredEvents
-
-	const startYear = startTime.getFullYear()
-	const startMonth = startTime.getMonth()
-	const endYear = endTime.getFullYear()
-	const endMonth = endTime.getMonth()
-
-	const idxs: number[] = []
-
-	for (
-		let y = startYear, m = startMonth;
-		y < endYear || (y === endYear && m <= endMonth);
-		m++
-	) {
-		if (m > 11) {
-			m = 0
-			y++
+		if (spatiallyFiltered) {
+			if (_spatiallyFilteredEventIds.has(ev.id)) result.push(ev)
+		} else {
+			if (_parameterFilterEventIds.has(ev.id)) result.push(ev)
 		}
-		const key = `${y}-${String(m + 1).padStart(2, '0')}` // "YYYY-MM" format
-		const monthEvents = monthIndex[key]
-		if (monthEvents) idxs.push(...monthEvents)
 	}
-
-	const result: ExtremeEvent[] = []
-	for (const idx of new Set(idxs)) {
-		const ev = _events[idx]
-		if (_filteredIds.has(ev.id)) result.push(ev)
-	}
-
-	if (coldOnly) return result.filter((e) => e.event_type === 'cold')
-	if (hotOnly) return result.filter((e) => e.event_type === 'hot')
 	return result
-}
-
-export function getCurrentDayCounts(): Map<number, Array<number>> {
-	return counts
-}
-
-export function getGlobalFilteredEventsHotColdWet(): ExtremeEvent[] {
-	return _filteredEvents
-}
-
-export function getGlobalFilteredEvents(): ExtremeEvent[] {
-	if (coldOnly) {
-		return _filteredEvents.filter((e) => e.event_type === 'cold')
-	}
-	if (hotOnly) {
-		return _filteredEvents.filter((e) => e.event_type === 'hot')
-	}
-	return _filteredEvents
-}
-
-let coldOnly = false
-let hotOnly = false
-export function setColdOnly() {
-	if (coldOnly) return
-	coldOnly = true
-	hotOnly = false
-	console.log('calling region triggers')
-	regionEventsReadyTriggers.forEach((cb) => cb())
-	globalEventsReadyTriggers.forEach((cb) => cb())
-	currentEventTriggers.forEach((cb) => cb())
-}
-
-export function setHotOnly() {
-	if (hotOnly) return
-	hotOnly = true
-	coldOnly = false
-}
-
-export function setHotColdBoth() {
-	if (!hotOnly && !coldOnly) return
-	hotOnly = false
-	coldOnly = false
 }

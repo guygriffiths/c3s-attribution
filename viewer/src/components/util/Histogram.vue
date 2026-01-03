@@ -187,6 +187,7 @@ const bars = computed(() => {
 			count,
 			bin0: b.x0,
 			bin1: b.x1,
+			endless: b.endless,
 			color:
 				b.coldPct === 0 && b.hotPct === 0
 					? 'var(--primary)'
@@ -197,9 +198,15 @@ const bars = computed(() => {
 							: colorMixer(scssVars.c3sred, b.hotPct, scssVars.c3sblue), // red→blue
 		}
 	})
-	console.log('Histogram bars:', ret)
 	return ret
 })
+
+const tooltipForBin = (b: any) => {
+	return {
+		content: `Range: ${b.endless ? '>' : '['}${b.bin0.toFixed(2)} ${b.endless ? '' : ', ' + b.bin1.toFixed(2) + ')'}<br />Count: ${b.count}<br />Percentage: ${b.pct.toFixed(2)}%`,
+		html: true,
+	}
+}
 </script>
 
 <template>
@@ -228,7 +235,7 @@ const bars = computed(() => {
 						<rect
 							class="bar-rect"
 							:x="1"
-							:y="b.y - 1"
+							:y="b.y - 3"
 							:width="Math.max(3, b.w - 2)"
 							:height="b.h + 3"
 							:class="{
@@ -236,12 +243,7 @@ const bars = computed(() => {
 							}"
 							:fill="b.color"
 							filter="url(#histoBarShadow)"
-							v-tooltip="{
-								content: `Range: [${b.bin0.toFixed(2)}, ${b.bin1.toFixed(
-									2,
-								)})<br />Count: ${b.count}<br />Percentage: ${b.pct.toFixed(2)}%`,
-								html: true,
-							}"
+							v-tooltip="tooltipForBin(b)"
 						/>
 					</g>
 				</g>

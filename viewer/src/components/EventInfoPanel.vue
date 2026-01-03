@@ -75,19 +75,19 @@ const sortFunc = computed(() => {
 
 <template>
 	<div class="event-info panel">
-		<div class="info-row header">
-			<div
-				class="label"
-				v-tooltip="
-					eventsOfInterest.length.toLocaleString() +
-					' ' +
-					(eventStore.eventTypeMode === 'hot'
-						? $l.heatwaveEvents
-						: eventStore.eventTypeMode === 'cold'
-							? $l.coldwaveEvents
-							: $l.allTemperatureEvents)
-				"
-			>
+		<div
+			class="info-row header"
+			v-tooltip="
+				eventsOfInterest.length.toLocaleString() +
+				' ' +
+				(eventStore.eventTypeMode === 'hot'
+					? $l.heatwaveEvents
+					: eventStore.eventTypeMode === 'cold'
+						? $l.coldwaveEvents
+						: $l.allTemperatureEvents)
+			"
+		>
+			<div class="label">
 				<IconTemperatureSun
 					v-if="eventStore.eventTypeMode === 'hot'"
 					aria-hidden="true"

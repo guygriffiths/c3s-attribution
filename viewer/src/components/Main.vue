@@ -13,18 +13,6 @@ import SelectedEventInfoPanel from './SelectedEventInfoPanel.vue'
 import FilterPanel from './FilterPanel.vue'
 import FocusFrame from './util/FocusFrame.vue'
 import ModeToggle from './util/ModeToggle.vue'
-import {
-	getCurrentEvents,
-	getFilteredEvents,
-	getGlobalFilteredEvents,
-	onCurrentEventsReady,
-	onGlobalEventsReady,
-	onRegionEventsReady,
-	setColdOnly,
-	setHotOnly,
-	setHotColdBoth,
-	getTimeRangedEvents,
-} from '@/lib/eventsDB'
 import { differenceInDays } from 'date-fns'
 import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
 import {
@@ -38,6 +26,18 @@ import {
 	IconX,
 } from '@tabler/icons-vue'
 import EventDayPanel from './EventDayPanel.vue'
+import {
+	getCurrentEvents,
+	getParameterFilteredEvents,
+	getSpaceTimeFilteredEvents,
+	getSpatiallyFilteredEvents,
+	getTimeFilteredEvents,
+	onParameterFilterChanged,
+	onSpatialFilterChanged,
+	onTimeFilterChanged,
+	setEventTypeFilter,
+	setTimeRangeFilter,
+} from '@/lib/eventsDB'
 
 const $l = useLabels()
 const store = useStore()
@@ -54,102 +54,79 @@ const exitFocus = () => {
 	store.draggingFilter = false
 }
 
-const globalEventsOfInterest = computed((): boolean => {
-	return (
-		store.viewMode === 'timemachine' ||
-		store.exploreGlobal ||
-		(!(store.filteringByRegion && store.regionFilterReady) &&
-			!store.filteringByPoint)
-	)
-})
-
-const globalFilteredEvents = ref([] as ExtremeEvent[])
-const eventsOfInterest = ref([] as ExtremeEvent[])
-onGlobalEventsReady(() => {
-	globalFilteredEvents.value = getGlobalFilteredEvents()
-	if (globalEventsOfInterest.value) {
-		// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
-		eventsOfInterest.value = globalFilteredEvents.value
-	}
-})
-const currentEvents = ref([] as ExtremeEvent[])
-onCurrentEventsReady(() => {
-	currentEvents.value = getCurrentEvents(timeStore.selectedTime)
+// Time reel events. These are filtered spatially and manually, but not temporally
+const timeReelEvents = ref([] as ExtremeEvent[])
+onSpatialFilterChanged(() => {
+	timeReelEvents.value = getSpatiallyFilteredEvents()
 })
 watch(
-	() => timeStore.selectedTime,
-	(newVal) => {
-		currentEvents.value = getCurrentEvents(newVal)
-	},
-)
-const timeRangeEvents = ref([] as ExtremeEvent[])
-let pending = false
-watch(
-	() => [store.viewMode, timeStore.startTimeFilter, timeStore.endTimeFilter],
+	() => [store.exploreGlobal],
 	() => {
-		if (pending) return
-		pending = true
-		requestAnimationFrame(() => {
-			pending = false
-			if (
-				store.filteringByPoint ||
-				(store.filteringByRegion && store.regionFilterReady)
-			) {
-				eventsOfInterest.value = getFilteredEvents()
-				timeRangeEvents.value = eventsOfInterest.value.filter(
-					(e) =>
-						e.times[0] <= timeStore.endTimeFilter.getTime() &&
-						e.times[e.times.length - 1] >= timeStore.startTimeFilter.getTime(),
-				)
-			} else {
-				const newEvents = getTimeRangedEvents(
-					timeStore.startTimeFilter,
-					timeStore.endTimeFilter,
-				)
-				if (eventStore.selectedEvent) {
-					// Ensure selected event is included
-					if (!newEvents.find((e) => e.id === eventStore.selectedEvent?.id)) {
-						// @ts-ignore
-						newEvents.push(eventStore.selectedEvent)
-					}
-				}
-
-				timeRangeEvents.value = newEvents
-			}
-		})
+		if (store.exploreGlobal) {
+			timeReelEvents.value = getParameterFilteredEvents()
+		} else {
+			timeReelEvents.value = getSpatiallyFilteredEvents()
+		}
 	},
 	{ immediate: true },
 )
 
-onRegionEventsReady(() => {
-	eventsOfInterest.value = getFilteredEvents()
-	timeRangeEvents.value = eventsOfInterest.value.filter(
-		(e) =>
-			e.times[0] <= timeStore.endTimeFilter.getTime() &&
-			e.times[e.times.length - 1] >= timeStore.startTimeFilter.getTime(),
-	)
+// Summary events. These are filtered spatially, manually, and temporally (either at a day - timemchine, or over a range - heatmap)
+const summaryEvents = ref([] as ExtremeEvent[])
+onTimeFilterChanged(() => {
+	if (store.viewMode === 'timemachine') {
+		summaryEvents.value = getCurrentEvents(timeStore.selectedTime, true)
+	} else {
+		summaryEvents.value = getSpaceTimeFilteredEvents()
+		if (eventStore.selectedEvent) {
+			// Ensure selected event is included
+			if (
+				!summaryEvents.value.find((e) => e.id === eventStore.selectedEvent?.id)
+			) {
+				// @ts-ignore
+				summaryEvents.value.push(eventStore.selectedEvent)
+			}
+		}
+	}
+})
+watch(
+	() => [store.viewMode, timeStore.selectedTime],
+	() => {
+		if (store.viewMode === 'timemachine') {
+			summaryEvents.value = getCurrentEvents(timeStore.selectedTime, true)
+		} else {
+			summaryEvents.value = getSpaceTimeFilteredEvents()
+			if (eventStore.selectedEvent) {
+				// Ensure selected event is included
+				if (
+					!summaryEvents.value.find(
+						(e) => e.id === eventStore.selectedEvent?.id,
+					)
+				) {
+					// @ts-ignore
+					summaryEvents.value.push(eventStore.selectedEvent)
+				}
+			}
+		}
+	},
+	{ immediate: true },
+)
+// Used as background events in MultiEventSmartPanel when filtering spatially
+const globalFilteredEvents = ref([] as ExtremeEvent[])
+
+onParameterFilterChanged(() => {
+	globalFilteredEvents.value = getParameterFilteredEvents()
+	if (store.exploreGlobal) {
+		// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
+		timeReelEvents.value = globalFilteredEvents.value
+	}
 })
 
+let pending = false
 watch(
-	() => [
-		store.filteringByRegion,
-		store.regionFilterReady,
-		store.filteringByPoint,
-		store.exploreGlobal,
-		store.viewMode,
-	],
+	() => [timeStore.startTimeFilter, timeStore.endTimeFilter],
 	() => {
-		if (globalEventsOfInterest.value) {
-			// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
-			eventsOfInterest.value = globalFilteredEvents.value
-			timeRangeEvents.value = getTimeRangedEvents(
-				timeStore.startTimeFilter,
-				timeStore.endTimeFilter,
-			)
-		} else {
-			// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
-			eventsOfInterest.value = getFilteredEvents()
-		}
+		setTimeRangeFilter(timeStore.startTimeFilter, timeStore.endTimeFilter)
 	},
 	{ immediate: true },
 )
@@ -158,21 +135,12 @@ watch(
 	() => [eventStore.eventTypeMode],
 	() => {
 		if (eventStore.eventTypeMode === 'cold') {
-			setColdOnly()
+			setEventTypeFilter(false, true)
 		} else if (eventStore.eventTypeMode === 'hot') {
-			setHotOnly()
+			setEventTypeFilter(true, false)
 		} else {
-			setHotColdBoth()
+			setEventTypeFilter(true, true)
 		}
-		if (globalEventsOfInterest.value) {
-			globalFilteredEvents.value = getGlobalFilteredEvents()
-			// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
-			eventsOfInterest.value = globalFilteredEvents.value
-		} else {
-			// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
-			eventsOfInterest.value = getFilteredEvents()
-		}
-		currentEvents.value = getCurrentEvents(timeStore.selectedTime)
 	},
 	{ immediate: true },
 )
@@ -251,7 +219,9 @@ const selectedDayIdx = computed((): number | null => {
 				hidden: store.isFocused || timeStore.timePanelExpanded,
 				close: store.hamburgerMenuOpen,
 			}"
-			:inert="store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined"
+			:inert="
+				store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined
+			"
 			@click="store.hamburgerMenuOpen = !store.hamburgerMenuOpen"
 			v-tooltip="store.hamburgerMenuOpen ? $l.close : $l.hamburger"
 		>
@@ -336,9 +306,7 @@ const selectedDayIdx = computed((): number | null => {
 
 		<MultiEventSmartPanel
 			id="multi-event-panel"
-			:events-of-interest="
-				store.viewMode === 'timemachine' ? currentEvents : timeRangeEvents
-			"
+			:events-of-interest="summaryEvents"
 			:background-events="
 				store.filteringByPoint || store.filteringByRegion
 					? globalFilteredEvents
@@ -352,7 +320,9 @@ const selectedDayIdx = computed((): number | null => {
 				maximize: store.maximizeMultiPanel,
 			}"
 			:inert="
-				!store.showMultiPanel || store.viewMode !== 'heatmap' ? 'true' : undefined
+				!store.showMultiPanel || store.viewMode !== 'heatmap'
+					? 'true'
+					: undefined
 			"
 			><button
 				id="multimax-button"
@@ -400,7 +370,8 @@ const selectedDayIdx = computed((): number | null => {
 				(store.isFocused && store.viewMode === 'timemachine') ||
 				store.maximizeMultiPanel
 					? 'true'
-					: undefined"
+					: undefined
+			"
 			@click="store.showInfoPanel = !store.showInfoPanel"
 			v-tooltip="store.showInfoPanel ? $l.close : $l.showInfoPanel"
 		>
@@ -417,9 +388,7 @@ const selectedDayIdx = computed((): number | null => {
 			:main-store="store"
 			:event-store="eventStore"
 			:time-store="timeStore"
-			:events-of-interest="
-				store.viewMode === 'timemachine' ? currentEvents : timeRangeEvents
-			"
+			:events-of-interest="summaryEvents"
 			:class="{
 				'disable-transitions': timeStore.isPlaying,
 				show:
@@ -434,7 +403,8 @@ const selectedDayIdx = computed((): number | null => {
 				(store.isFocused && store.viewMode === 'timemachine') ||
 				store.maximizeMultiPanel
 					? 'true'
-					: undefined"
+					: undefined
+			"
 		>
 		</EventInfoPanel>
 		<SelectedEventInfoPanel
@@ -448,7 +418,10 @@ const selectedDayIdx = computed((): number | null => {
 				single: store.viewMode === 'timemachine' && store.isFocused,
 			}"
 			:inert="
-				eventStore.selectedEvent === null || !store.showInfoPanel ? 'true' : undefined"
+				eventStore.selectedEvent === null || !store.showInfoPanel
+					? 'true'
+					: undefined
+			"
 		/>
 
 		<!-- Time Panel -->
@@ -468,7 +441,7 @@ const selectedDayIdx = computed((): number | null => {
 				:end="timeStore.endTime"
 				v-model:startFilter="timeStore.startTimeFilter"
 				v-model:endFilter="timeStore.endTimeFilter"
-				:events="eventsOfInterest"
+				:events="timeReelEvents"
 				:selected-event="eventStore.selectedEvent"
 				:hover-event="eventStore.hoveringEvent"
 				:mode="mode"
@@ -627,10 +600,10 @@ const selectedDayIdx = computed((): number | null => {
 	}
 
 	$eventGap: calc(
-		100% - $smallTimePanelHeight - 4.5 * $panelMargin - 0.5 * $infoHeight -
+		100vh - $smallTimePanelHeight - 4 * $panelMargin - 0.5 * $infoHeight -
 			$headerHeight
 	);
-	$eventPanelHeight: calc($eventGap * 0.5 - 0.5 * $panelMargin);
+	$eventPanelHeight: calc($eventGap * 0.5 - $panelMargin);
 	#event-day-panel {
 		position: absolute;
 		width: $eventPanelWidth;
@@ -717,12 +690,12 @@ const selectedDayIdx = computed((): number | null => {
 
 		&.close {
 			transform: translateY(
-				calc($headerHeight + 2.5 * $panelMargin + $infoHeight)
+				calc($headerHeight + 3 * $panelMargin + $infoHeight)
 			);
 			&.hidden {
 				transform: translate(
 					200%,
-					calc($headerHeight + 2.5 * $panelMargin + $infoHeight)
+					calc($headerHeight + 3 * $panelMargin + $infoHeight)
 				);
 			}
 		}
@@ -749,10 +722,10 @@ const selectedDayIdx = computed((): number | null => {
 		}
 	}
 	#multi-event-panel {
-		z-index: 150;
+		z-index: 180;
 		width: calc($infoWidth * 2 + $panelMargin);
 		height: calc(
-			100vh - 4 * $panelMargin - #{$smallTimePanelHeight} - $infoHeight - 3rem
+			100vh - 5 * $panelMargin - #{$smallTimePanelHeight} - $infoHeight - 3rem
 		);
 		right: calc($panelMargin);
 		bottom: calc(2 * $panelMargin + #{$smallTimePanelHeight});
@@ -776,7 +749,7 @@ const selectedDayIdx = computed((): number | null => {
 
 	#info-button {
 		position: absolute;
-		top: calc($panelMargin + 3rem);
+		top: calc($headerHeight + 2 * $panelMargin);
 		right: $panelMargin;
 		border-radius: 100%;
 		width: 2.5rem;
@@ -795,14 +768,14 @@ const selectedDayIdx = computed((): number | null => {
 		z-index: 250;
 		transition: all $transition;
 		position: absolute;
-		top: calc(3rem + 1 * $panelMargin);
+		top: calc($headerHeight + 2 * $panelMargin);
 		right: $panelMargin;
 
 		.event-info {
 			width: 100%;
 		}
 
-		transform: translate(0, calc(-150% - 2 * $panelMargin));
+		transform: translate(0, calc(-200% - 2 * $panelMargin));
 		&.show {
 			transform: translate(0, 0);
 		}
@@ -811,7 +784,7 @@ const selectedDayIdx = computed((): number | null => {
 		z-index: 250;
 		transition: all $transition;
 		position: absolute;
-		top: calc(3rem + $panelMargin);
+		top: calc($headerHeight + 2 * $panelMargin);
 		right: calc($infoWidth + 2 * $panelMargin);
 		transform: translate(0, calc(-250% - 2 * $panelMargin));
 		height: $infoHeight !important;

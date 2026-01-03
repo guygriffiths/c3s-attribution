@@ -42,12 +42,12 @@ import {
 	getCurrentEvents,
 	setFilterToRegion,
 	setFilterToPoint,
-	getEventCount,
-	getFilteredEvents,
-	onGlobalEventsReady,
-	onCurrentEventsReady,
-	getGlobalFilteredEvents,
-	getTimeRangedEvents,
+	onParameterFilterChanged,
+	onSpatialFilterChanged,
+	getParameterFilteredEvents,
+	getSpatiallyFilteredEvents,
+	onTimeFilterChanged,
+	getTimeFilteredEvents,
 } from '@/lib/eventsDB'
 import { IconZoomIn, IconZoomOut, IconZoomReset } from '@tabler/icons-vue'
 import { useLabels } from '@/lib/labels'
@@ -133,25 +133,45 @@ const drawControl = computed(
 )
 
 const currentEvents = ref<ExtremeEvent[]>([])
-onCurrentEventsReady(() => {
-	// This gets called when the time index is ready
-	// console.log('Map.vue - Current events ready, updating for selected time')
-	currentEvents.value = getCurrentEvents(timeStore.selectedTime)
+onParameterFilterChanged(() => {
+	globalHeatmapEvents.value = getParameterFilteredEvents()
+	currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
+	if (store.viewMode === 'heatmap') {
+		try {
+			manualHeatmapUpdate()
+		} catch (e) {
+			console.warn('Error updating heatmap renderer', e)
+		}
+	}
 })
-const eventPointFilter = ref<[number, number] | null>(null)
-const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
-let regionFilteredEvents = [] as ExtremeEvent[]
-const globalHeatmapEvents = shallowRef([] as ExtremeEvent[])
-onGlobalEventsReady(() => {
-	// Triggered when the global events have changed.
-	// This is on first load, or when any of the high-level filters change
-	globalHeatmapEvents.value = getGlobalFilteredEvents()
+onSpatialFilterChanged(() => {
+	// This will only happen in heatmap mode
+
+	// When the spatial filter changes, we need to update the current events
+	regionFilteredEvents = getSpatiallyFilteredEvents()
+	try {
+		// @ts-ignore
+		fastRenderer._update()
+	} catch (e) {
+		console.warn('Error updating fast renderer', e)
+	}
+})
+onTimeFilterChanged(() => {
+	// This will only happen in heatmap mode
+
+	// When the time filter changes, we need to update the current events
+	globalHeatmapEvents.value = getTimeFilteredEvents()
 	try {
 		manualHeatmapUpdate()
 	} catch (e) {
 		console.warn('Error updating heatmap renderer', e)
 	}
 })
+
+const eventPointFilter = ref<[number, number] | null>(null)
+const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
+let regionFilteredEvents = [] as ExtremeEvent[]
+const globalHeatmapEvents = shallowRef([] as ExtremeEvent[])
 
 const drawRegion = () => {
 	drawControl.value.enable()
@@ -207,13 +227,6 @@ const updatePointSelector = (event: LeafletMouseEvent) => {
 	rafId = requestAnimationFrame(() => {
 		const { lat, lng } = (event.target as L.Marker).getLatLng()
 		setFilterToPoint(lat, lng)
-		regionFilteredEvents = getFilteredEvents()
-		try {
-			// @ts-ignore
-			fastRenderer._update()
-		} catch (e) {
-			console.warn('Error updating fast renderer', e)
-		}
 	})
 }
 
@@ -221,13 +234,6 @@ const pointSelectorSettled = (event: any) => {
 	if (mapRef.value) {
 		const { lat, lng } = (event.target as L.Marker).getLatLng()
 		setFilterToPoint(lat, lng)
-		regionFilteredEvents = getFilteredEvents()
-		try {
-			// @ts-ignore
-			fastRenderer._update()
-		} catch (e) {
-			console.warn('Error updating fast renderer', e)
-		}
 
 		store.lastPoint = [lat, lng]
 		store.draggingFilter = false
@@ -256,7 +262,7 @@ watch(
 watch(
 	() => timeStore.selectedTime,
 	(newVal) => {
-		currentEvents.value = getCurrentEvents(newVal)
+		currentEvents.value = getCurrentEvents(newVal, true)
 		// if (wmtsUrl.value) {
 		// 	updateWmtsUrl(newVal.toISOString().split('T')[0])
 		// }
@@ -264,43 +270,43 @@ watch(
 )
 
 // If we change what kind of events are being shown, update the heatmap and filtered events
-watch(
-	() => [
-		eventStore.eventTypeMode,
-		timeStore.startTimeFilter,
-		timeStore.endTimeFilter,
-	],
-	() => {
-		globalHeatmapEvents.value = getTimeRangedEvents(
-			timeStore.startTimeFilter,
-			timeStore.endTimeFilter,
-		)
-		currentEvents.value = getCurrentEvents(timeStore.selectedTime)
-		if (store.viewMode === 'heatmap') {
-			try {
-				// console.log('calling manualHeatmapUpdate from event type/time filter change')
-				manualHeatmapUpdate()
-			} catch (e) {
-				console.warn('Error updating heatmap renderer', e)
-			}
-			if (store.filteringByPoint || store.filteringByRegion) {
-				regionFilteredEvents = getFilteredEvents().filter(
-					(event) =>
-						new Date(event.times[event.times.length - 1]) >=
-							timeStore.startTimeFilter! &&
-						new Date(event.times[0]) <= timeStore.endTimeFilter!,
-				)
-				try {
-					// @ts-ignore
-					fastRenderer._update()
-				} catch (e) {
-					console.warn('Error updating fast renderer', e)
-				}
-			}
-		}
-	},
-	{ immediate: true },
-)
+// watch(
+// 	() => [
+// 		eventStore.eventTypeMode,
+// 		timeStore.startTimeFilter,
+// 		timeStore.endTimeFilter,
+// 	],
+// 	() => {
+// 		globalHeatmapEvents.value = getTimeRangedEvents(
+// 			timeStore.startTimeFilter,
+// 			timeStore.endTimeFilter,
+// 		)
+// 		currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
+// 		if (store.viewMode === 'heatmap') {
+// 			try {
+// 				// console.log('calling manualHeatmapUpdate from event type/time filter change')
+// 				manualHeatmapUpdate()
+// 			} catch (e) {
+// 				console.warn('Error updating heatmap renderer', e)
+// 			}
+// 			if (store.filteringByPoint || store.filteringByRegion) {
+// 				regionFilteredEvents = getFilteredEvents().filter(
+// 					(event) =>
+// 						new Date(event.times[event.times.length - 1]) >=
+// 							timeStore.startTimeFilter! &&
+// 						new Date(event.times[0]) <= timeStore.endTimeFilter!,
+// 				)
+// 				try {
+// 					// @ts-ignore
+// 					fastRenderer._update()
+// 				} catch (e) {
+// 					console.warn('Error updating fast renderer', e)
+// 				}
+// 			}
+// 		}
+// 	},
+// 	{ immediate: true },
+// )
 
 // watch(
 // 	() => store.showInfoPanel,
@@ -474,7 +480,10 @@ const addEventPanes = () => {
 				})
 			}
 			ctx.closePath()
-			const alpha = Math.min(0.25, Math.max(0.1, 1000 / getEventCount()))
+			const alpha = Math.min(
+				0.25,
+				Math.max(0.1, 1000 / regionFilteredEvents.length),
+			)
 			ctx.fillStyle = (
 				event.event_type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
 			)
@@ -657,7 +666,7 @@ const resetZoom = () => {
 			<!-- Selectable elements etc -->
 			<!-- The actual selected region -->
 			<LGeoJson
-				v-if="eventRegionFilter && store.viewMode === 'heatmap'"
+				v-if="eventRegionFilter"
 				:key="`region-draw`"
 				:geojson="eventRegionFilter"
 				:options-style="
@@ -671,15 +680,20 @@ const resetZoom = () => {
 			></LGeoJson>
 
 			<!-- Point to select by -->
-			<div v-if="store.filteringByPoint && store.viewMode === 'heatmap'">
+			<div v-if="store.filteringByPoint">
 				<LMarker
 					ref="markerRef"
 					:lat-lng="eventPointFilter || store.lastPoint || ECMWF_BONN"
-					:draggable="true"
+					:draggable="store.viewMode === 'heatmap'"
 					:icon="
 						(eventStore.eventTypeMode === 'cold'
 							? markerIconCold
 							: markerIconHot) as any
+					"
+					:options-style="
+						() => ({
+							className: store.viewMode === 'heatmap' ? 'active' : 'inactive',
+						})
 					"
 					@movestart="pointSelectorMoveStarted"
 					@move="updatePointSelector"
@@ -794,6 +808,14 @@ const resetZoom = () => {
 			transform: translate(-150%, 2rem);
 		}
 		transition: transform $transition;
+	}
+
+	:deep(.region-select) {
+		stroke: var(--contrast);
+		stroke-width: 1;
+		fill: $c3sgrey;
+		fill-opacity: 0.1;
+		pointer-events: none;
 	}
 
 	.zoom-control {

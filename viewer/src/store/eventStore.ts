@@ -1,9 +1,9 @@
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
 	fetchAndIndexEvents,
-	getGlobalFilteredEventsHotColdWet,
-	onGlobalEventsReady,
-	setFilters,
+	getParameterFilteredEvents,
+	onParameterFilterChanged,
+	setParameterFilters
 } from '@/lib/eventsDB'
 import {
 	DATA_ROOT,
@@ -352,7 +352,7 @@ export const useStore = defineStore('events', {
 		async runFilters() {
 			const mainStore = useMainStore()
 			await mainStore.setLoading()
-			setFilters(
+			setParameterFilters(
 				this.filters,
 				this.durationForEvent,
 				this.sizeForEvent,
@@ -389,8 +389,8 @@ export const useStore = defineStore('events', {
 			// 	{ immediate: true },
 			// )
 
-			onGlobalEventsReady(() => {
-				const events = getGlobalFilteredEventsHotColdWet()
+			onParameterFilterChanged(() => {
+				const events = getParameterFilteredEvents()
 				// console.trace('global events ready, count:', events.length)
 				// this.refilterEventsDB()
 				if (events.length > 0) {

@@ -40,11 +40,13 @@ export const getBins = (
 			hotPct: hotCount / total,
 			coldPct: coldCount / total,
 			count: binIdx.length,
+			endless: false,
 		})
 	})
 
 	if (longtail && binned.length > 0) {
 		binned[binned.length - 1].x1 = xmax
+		binned[binned.length - 1].endless = true
 	}
 	// console.log('getBins', { binned })
 

@@ -34,6 +34,8 @@ interface State {
 
 	hamburgerMenuOpen: boolean // Whether the side hamburger menu is open
 
+	mainHelpOpen: boolean // Whether the main help dialog is open
+
 	focusVariable: Variable
 }
 
@@ -80,6 +82,8 @@ export const useStore = defineStore('main', {
 			hamburgerMenuOpen: false,
 
 			focusVariable: 'size',
+
+			mainHelpOpen: false,
 		}
 	},
 	getters: {

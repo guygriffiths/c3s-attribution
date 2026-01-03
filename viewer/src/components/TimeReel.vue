@@ -204,10 +204,22 @@ const endOfYear = () => {
 	setDate(Date.UTC(selectedYear.value, 11, 31))
 }
 const nextYear = () => {
-	setDate(Date.UTC(selectedYear.value + 1, 0, selectedDay.value))
+	const newYear = selectedYear.value + 1
+	setDate(Date.UTC(newYear, 0, selectedDay.value))
+	autoScrolling.value = true
+	scrollToYear(newYear - 1)
+	nextTick(() => {
+		autoScrolling.value = false
+	})
 }
 const prevYear = () => {
-	setDate(Date.UTC(selectedYear.value - 1, 0, selectedDay.value))
+	const newYear = selectedYear.value - 1
+	setDate(Date.UTC(newYear, 0, selectedDay.value))
+	autoScrolling.value = true
+	scrollToYear(newYear - 1)
+	nextTick(() => {
+		autoScrolling.value = false
+	})
 }
 
 const playing = ref(false)
@@ -668,15 +680,33 @@ onMounted(() => {
 	const handleKey = (e: KeyboardEvent) => {
 		if (isTimeline.value) return
 		// TODO Should all of this go in a global key handler? Perhaps not, since people use arrow keys on maps?
-		if (e.key === 'ArrowLeft') prevDay()
-		else if (e.key === 'ArrowRight') nextDay()
-		// else if (e.key === 'PageUp') prevYear()
-		// else if (e.key === 'PageDown') nextYear()
-		else if (e.key === 'ArrowUp') prevYear()
-		else if (e.key === 'ArrowDown') nextYear()
-		// else if (e.key === 'R') nextYear()
-		else if (e.key === 'Home') setDate(props.start.getTime())
-		else if (e.key === 'End') setDate(props.end.getTime())
+		if (e.key === 'ArrowLeft') {
+			e.preventDefault()
+			prevDay()
+		} else if (e.key === 'ArrowRight') {
+			e.preventDefault()
+			nextDay()
+		}
+		// else if (e.key === 'PageUp') {prevYear()}
+		// else if (e.key === 'PageDown') {nextYear()}
+		else if (e.key === 'ArrowUp') {
+			e.preventDefault()
+			prevYear()
+		} else if (e.key === 'ArrowDown') {
+			e.preventDefault()
+			nextYear()
+		} else if (e.key === ' ') {
+			e.preventDefault()
+			togglePlay()
+		}
+		// else if (e.key === 'R') {nextYear()}
+		else if (e.key === 'Home') {
+			e.preventDefault()
+			setDate(props.start.getTime())
+		} else if (e.key === 'End') {
+			e.preventDefault()
+			setDate(props.end.getTime())
+		}
 	}
 	window.addEventListener('keydown', handleKey)
 	// @ts-ignore
