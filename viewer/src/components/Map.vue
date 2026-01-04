@@ -821,9 +821,9 @@ const resetZoom = () => {
 	.zoom-control {
 		transition: transform $transition;
 		margin: $panelMargin;
-		transform: translate(calc(0rem - 2rem - $panelMargin), 0);
+		transform: translate(calc(0rem - 2.5rem - $panelMargin), 0);
 		&.hidden {
-			transform: translate(calc(0rem - 2rem), -200%);
+			transform: translate(calc(0rem - 2.5rem), -200%);
 		}
 		.zoom-buttons {
 			display: flex;

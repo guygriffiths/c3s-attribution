@@ -43,8 +43,8 @@ const labelsEn = {
 	exploreGlobal: 'Explore global events',
 	selectByPoint: 'Select events at a point',
 	selectByRegion: 'Select events in a region',
-	selectTimeMachineMode: 'Explore events over time',
-	selectHeatmapMode: 'Explore events by location',
+	selectTimeMachineMode: 'Time Machine - explore events over time',
+	selectHeatmapMode: 'Overview - explore events by location',
 	lessThan: 'less than or equal to',
 	greaterThan: 'greater than or equal to',
 	resetFilter: 'Reset filter',
@@ -104,6 +104,7 @@ const labelsEn = {
 	nEvents: 'Number of Events',
 	loading: 'Loading data...',
 	noEvents: 'No events found for the selected filters and time range.',
+	help: 'Show welcome information',
 	months: {
 		jan: 'Jan',
 		feb: 'Feb',

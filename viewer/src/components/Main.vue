@@ -17,13 +17,18 @@ import { differenceInDays } from 'date-fns'
 import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
 import {
 	IconCalendarWeek,
+	IconCalendarTime,
 	IconChartBar,
 	IconChartHistogram,
+	IconChevronCompactUp,
 	IconInfoSquareRounded,
 	IconMenu2,
 	IconWindowMaximize,
 	IconWindowMinimize,
 	IconX,
+	IconLayersIntersect,
+	IconEye,
+	IconEyePin,
 } from '@tabler/icons-vue'
 import EventDayPanel from './EventDayPanel.vue'
 import {
@@ -44,7 +49,6 @@ const store = useStore()
 const timeStore = useTimeStore()
 const eventStore = useEventStore()
 
-onMounted(async () => {})
 const toggleTimePanelExpanded = () => {
 	timeStore.timePanelExpanded = !timeStore.timePanelExpanded
 }
@@ -185,25 +189,165 @@ const selectedDayIdx = computed((): number | null => {
 						: $l.hotcoldTitle
 			"
 		>
-			<img src="@/assets/img/c3s-logo.png" alt="C3S Logo" aria-hidden="true" />
-			<h1 aria-hidden="true">
-				Extreme
-				<span
-					class="eventtype"
-					@click="eventStore.cycleEventType()"
-					role="button"
-					tabindex="-1"
+			<div class="title-wrapper" :class="{ square: store.mainHelpOpen }">
+				<img
+					src="@/assets/img/c3s-logo.png"
+					alt="C3S Logo"
+					aria-hidden="true"
+				/>
+				<h1 aria-hidden="true">
+					Extreme
+					<span
+						class="eventtype"
+						@click="eventStore.cycleEventType()"
+						role="button"
+						tabindex="-1"
+					>
+						{{
+							eventStore.eventTypeMode === 'hot'
+								? 'Heat Event'
+								: eventStore.eventTypeMode === 'cold'
+									? 'Cold Event'
+									: 'Event'
+						}}
+					</span>
+					Explorer
+					<button
+						class="expand glassy color"
+						@click="store.mainHelpOpen = !store.mainHelpOpen"
+						v-tooltip="$l.help"
+						:class="{ disabled: store.mainHelpOpen }"
+					>
+						<IconInfoSquareRounded size="20" aria-hidden="true" />
+					</button>
+				</h1>
+			</div>
+			<div class="welcome" :class="{ hidden: !store.mainHelpOpen }">
+				<div class="scroll-wrap">
+					<p>
+						Welcome to the C3S Extreme Event Explorer! Explore extreme
+						temperature events from {{ new Date().getFullYear() }} all the way
+						back to 1979.
+					</p>
+					<p>
+						This is a prototype tool developed as part of the Copernicus Climate
+						Change Service (C3S). When the final version is released in Spring
+						2026, it will feature fuller interactive help. For now, a brief
+						overview of the main features is provided below.
+					</p>
+					<h3>
+						<button class="glassy color decoration">
+							<IconCalendarTime size="24" aria-hidden="true" />
+						</button>
+						Time Machine - Navigate through time effortlessly and explore
+						individual events in detail
+					</h3>
+					<ul>
+						<li>
+							Use the time reel to intuitively and quickly navigate through
+							time.
+							<ul>
+								<li>Scroll through years with your mouse or trackpad</li>
+								<li>
+									Click and drag the reel to scrub through the selected year
+								</li>
+								<li>
+									Use the navigation buttons to step through time, or animate
+									the passing of time
+								</li>
+								<li>
+									Explore the full timeline and use the scrubber to quickly
+									explore and jump to specific dates
+								</li>
+								<li>
+									Select events directly from the time reel to jump to the start
+									of that event and see it in more detail
+								</li>
+							</ul>
+						</li>
+						<li>
+							See a daily summary of events, ranked by either size, temperature,
+							or duration
+						</li>
+						<li>
+							Select an event from the daily ranking, the map, or the time reel
+							to see detailed graphs and information, and to download the raw
+							event data
+						</li>
+						<li>
+							Filter events or explore extreme cold events using the hamburger
+							menu
+						</li>
+					</ul>
+					<h3>
+						<button class="glassy color decoration">
+							<IconEyePin size="24" aria-hidden="true" />
+						</button>
+						Overview - Visualise thousands of historical events simultaneously
+					</h3>
+					<ul>
+						<li>
+							Select a time range to view the footprints of thousands of events
+							at once
+							<ul>
+								<li>
+									The time reel has now transformed into a single timeline of
+									events
+								</li>
+								<li>
+									By default the last 20 years are selected, but the sliding
+									window can be moved and resized
+								</li>
+								<li>
+									The map and graphs will update in real-time as you adjust the
+									time range
+								</li>
+								<li>
+									Trends over time can easily be visualised by using the
+									animation controls
+								</li>
+							</ul>
+						</li>
+						<li>
+							Select a particular geographical region to focus on
+							<ul>
+								<li>
+									Draw a region on the map to filter events whose pixels lie
+									within it
+								</li>
+								<li>
+									Use the point selector to focus on events at a specific
+									location
+								</li>
+								<li style="font-style: italic; opacity: 0.8">
+									Coming spring 2026: Upload GeoJSON regions for accurate custom
+									filtering
+								</li>
+							</ul>
+						</li>
+						<li>
+							The summary will now show not just a selected daily ranking, but a
+							ranking of all events in the selected time range
+						</li>
+						<li>
+							View histograms and plots of event characteristics over the
+							selected time range
+						</li>
+						<li>
+							Select an event from the ranking table, or from Time Machine mode,
+							to see its entire footprint of extreme temperatures, and to see it
+							put into context on the graphs and ranking table.
+						</li>
+					</ul>
+				</div>
+				<button
+					class="glassy collapse"
+					@click="store.mainHelpOpen = false"
+					v-tooltip="$l.close"
 				>
-					{{
-						eventStore.eventTypeMode === 'hot'
-							? 'Heat Event'
-							: eventStore.eventTypeMode === 'cold'
-								? 'Cold Event'
-								: 'Event'
-					}}
-				</span>
-				Explorer
-			</h1>
+					<IconChevronCompactUp size="24" aria-hidden="true" />
+				</button>
+			</div>
 		</div>
 
 		<ModeToggle
@@ -532,29 +676,130 @@ const selectedDayIdx = computed((): number | null => {
 		top: $panelMargin;
 		left: $panelMargin;
 		// width: calc(50% - 2 * $panelMargin - $modeButtonWidth);
-		height: $headerHeight;
-		z-index: 50;
+		z-index: 200;
 		pointer-events: none;
-		background: var(--panel-bg);
 		display: flex;
-		align-items: center;
-		padding: 0.125rem 0.5rem;
-		padding: 0.25rem 0.5rem;
-		border-radius: $borderRadius;
-		border-bottom-right-radius: $borderRadius;
-		box-shadow: var(--shadow-md);
-		// z-index: 999;
+		flex-direction: column;
+		gap: 0;
 
-		img {
-			height: 100%;
-			width: auto;
-			margin-right: 0.5rem;
+		button.expand {
+			position: absolute;
+			bottom: 0;
+			right: 0;
+			padding: 0;
+			transform: translate(50%, 50%);
+			display: flex;
+			pointer-events: all;
+			transition: all $animTime $animEase $animTime;
+			z-index: 10;
+			&.disabled {
+				transition: all 0 $animEase;
+				opacity: 0;
+				pointer-events: none;
+			}
+
+			svg {
+				margin: 0;
+			}
+		}
+		align-items: flex-start;
+		.title-wrapper {
+			z-index: 5;
+			background: var(--panel-bg);
+			border-radius: $borderRadius;
+			box-shadow: var(--shadow-md);
+			backdrop-filter: $frosty;
+			padding: 0.25rem 0.5rem;
+			display: flex;
+			align-items: center;
+			height: $headerHeight;
+			transition: all $animTime $animEase $animTime;
+
+			&.square {
+				transition: all 0s $animEase;
+				border-bottom-left-radius: 0;
+				border-bottom-right-radius: 0;
+				box-shadow: none;
+			}
+
+			img {
+				height: 100%;
+				width: auto;
+				margin-right: 0.5rem;
+			}
+
+			.eventtype {
+				color: var(--primary);
+				cursor: pointer;
+				pointer-events: auto;
+			}
 		}
 
-		.eventtype {
-			color: var(--primary);
-			cursor: pointer;
-			pointer-events: auto;
+		.welcome {
+			max-width: max(40vw, 500px);
+			z-index: 0;
+			pointer-events: all;
+			font-size: 0.875rem;
+			line-height: 1.25rem;
+			display: flex;
+			flex-direction: column;
+			// align-items: center;
+			background: var(--panel-bg);
+			border-radius: $borderRadius;
+			box-shadow: var(--shadow-md);
+			backdrop-filter: $frosty;
+			border-top-left-radius: 0;
+			font-size: 1.1rem;
+
+			.scroll-wrap {
+				padding: 0 0.5rem;
+				overflow-y: auto;
+			}
+			h2 {
+				margin: 0 0 0rem 0;
+				font-size: 1.2rem;
+			}
+			h3 {
+				font-size: 1.1rem;
+				margin: 0.5rem 0 0.5rem 0;
+				display: flex;
+				align-items: center;
+				button.decoration {
+					margin-right: 0.5rem;
+				}
+			}
+			ul {
+				padding-left: 1.25rem;
+				margin: 0;
+			}
+			button.decoration {
+				pointer-events: none;
+				margin: 0;
+				padding: 2px;
+				width: 2rem;
+				box-shadow: none;
+			}
+			button.collapse {
+				pointer-events: all;
+				height: 1.25rem;
+				width: 100%;
+				padding: 0;
+				border-top-left-radius: 0;
+				border-top-right-radius: 0;
+				margin-top: auto;
+				position: sticky;
+			}
+
+			flex: 1 1 auto;
+			max-height: calc(100vh - $headerHeight - 3 * $panelMargin);
+			height: calc(100vh - $headerHeight - 3 * $panelMargin);
+			transition: all $transition;
+			&.hidden {
+				overflow: hidden;
+				padding: 0;
+				// opacity: 0;
+				max-height: 0;
+			}
 		}
 	}
 
@@ -610,6 +855,7 @@ const selectedDayIdx = computed((): number | null => {
 		left: $panelMargin;
 		height: $eventPanelHeight;
 		bottom: calc(3 * $panelMargin + $smallTimePanelHeight + $eventPanelHeight);
+		z-index: 150;
 	}
 	#event-graphs {
 		position: absolute;
@@ -617,6 +863,7 @@ const selectedDayIdx = computed((): number | null => {
 		left: $panelMargin;
 		height: $eventPanelHeight;
 		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+		z-index: 150;
 		// display: flex;
 		// flex-direction: column;
 		// justify-content: flex-start;
@@ -625,49 +872,6 @@ const selectedDayIdx = computed((): number | null => {
 		// backdrop-filter: none;
 		// box-shadow: none;
 		// background: transparent;
-
-		.subpanel {
-			border-radius: $borderRadius;
-			backdrop-filter: $frosty;
-			box-shadow: var(--shadow-md);
-			background: var(--panel-bg);
-			flex: 1 1 50%;
-			width: 100%;
-
-			&.histo {
-				background: var(--panel-bg);
-				border-bottom-left-radius: 0;
-				border-bottom-right-radius: 0;
-				width: 90%;
-				box-shadow: var(--shadow-md);
-				transition: all $transition;
-				// transition: transform 3s;
-				&.hidden {
-					// transition: transform 3s;
-					opacity: 0;
-					transform: translateY(120%);
-					// transform: scaleY(0) translateY(100%);
-				}
-			}
-
-			:deep(svg.graph-container) {
-				border-top-left-radius: $borderRadius;
-				border-top-right-radius: $borderRadius;
-			}
-		}
-
-		.funnel {
-			flex: 0 0 2 * $panelMargin;
-			width: 100%;
-			pointer-events: none;
-			background: var(--panel-bg);
-			backdrop-filter: $frosty;
-			&.hidden {
-				opacity: 0;
-				transform: translateY(120%);
-				// transform: scaleY(0) translateY(100%);
-			}
-		}
 	}
 
 	#multi-button {
@@ -765,7 +969,7 @@ const selectedDayIdx = computed((): number | null => {
 	#event-info-panel {
 		height: $infoHeight !important;
 		width: $infoWidth !important;
-		z-index: 250;
+		z-index: 150;
 		transition: all $transition;
 		position: absolute;
 		top: calc($headerHeight + 2 * $panelMargin);
@@ -781,7 +985,7 @@ const selectedDayIdx = computed((): number | null => {
 		}
 	}
 	#selected-event-info-panel {
-		z-index: 250;
+		z-index: 150;
 		transition: all $transition;
 		position: absolute;
 		top: calc($headerHeight + 2 * $panelMargin);

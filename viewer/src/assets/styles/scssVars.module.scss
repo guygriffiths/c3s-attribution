@@ -17,6 +17,7 @@ $frosty: blur(8px);
 // /assets/styles/scssVars.scss
 
 $animTime: 0.35s;
+$animEase: ease;
 $settleTime: 0.25s;
 
 $gap: 0.5rem;
@@ -56,7 +57,7 @@ $borderRadius: 7px;
 	panelMargin: $panelMargin;
 }
 
-$transition: $animTime ease;
+$transition: $animTime $animEase;
 
 $shd-sm: calc(0.25 * $panelMargin);
 $shd-md: calc(0.5 * $panelMargin);
