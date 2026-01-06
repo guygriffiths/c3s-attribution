@@ -1,97 +1,187 @@
 #!/usr/bin/env python3
-import pandas as pd
-from matplotlib.patches import Polygon
-import numpy as np
-from sklearn.cluster import DBSCAN
-from scipy.spatial import cKDTree
-from scipy.sparse import coo_matrix
-import xarray as xr
-from collections import deque
-import xarray as xr
-import numpy as np
-from scipy.ndimage import label, binary_erosion
-from datetime import timedelta
-from shapely.geometry import MultiPoint
-from shapely.ops import unary_union
-import json
-import alphashape
-import pickle
-import math
 
+# Standard library imports
+import json
+import math
+import os
+import pickle
+from collections import deque
+from typing import List, Tuple, Union, Optional
+
+# Third-party imports
+import alphashape
+import numpy as np
+import pandas as pd
+import xarray as xr
+from scipy.sparse import coo_matrix
+from shapely.geometry import MultiPoint, MultiPolygon, Polygon
+from shapely.ops import unary_union
+from sklearn.cluster import DBSCAN
+
+# Local imports (if any)
+# from .module import something
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+# Mean Earth radius in kilometers
 R = 6371.0088
-def haversine_fast(ll1, ll2):
-    # Mean Earth radius in km
-    # Convert degrees → radians
+
+# ============================================================================
+# Distance and Geometry Calculations
+# ============================================================================
+
+def haversine_fast(ll1: Tuple[float, float], ll2: Tuple[float, float]) -> float:
+    """
+    Calculate the great-circle distance between two points on Earth.
+    
+    Uses the Haversine formula to compute distance in kilometers between
+    two lat/lon coordinate pairs.
+    
+    Args:
+        ll1: First point as (latitude, longitude) in degrees
+        ll2: Second point as (latitude, longitude) in degrees
+        
+    Returns:
+        Distance in kilometers
+        
+    Example:
+        >>> haversine_fast((51.5074, -0.1278), (48.8566, 2.3522))  # London to Paris
+        334.57...
+    """
+    # Convert degrees to radians
     lat1, lon1 = map(math.radians, ll1)
     lat2, lon2 = map(math.radians, ll2)
+    
+    # Differences
     dlat = lat2 - lat1
     dlon = lon2 - lon1
-    a = math.sin(dlat * 0.5)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon * 0.5)**2
+    
+    # Haversine formula
+    a = (math.sin(dlat * 0.5)**2 + 
+         math.cos(lat1) * math.cos(lat2) * math.sin(dlon * 0.5)**2)
+    
     return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
-def walk_scan(D_coo: coo_matrix, eps: float, min_samples: int = 1):
-    """
-    Sparse distance-matrix DBSCAN drop-in replacement.
-    Takes:
-        D_coo: sparse COO matrix of distances between valid pairs
-        eps: distance threshold
-        min_samples: minimum cluster size (remove smaller ones at end)
 
+def safe_alphashape(
+    points: np.ndarray,
+    alpha: float = 1.0,
+    max_attempts: int = 5,
+    growth: float = 2.0,
+    fallback_buffer: float = 0.125
+) -> Optional[Union[Polygon, MultiPolygon]]:
+    """
+    Compute an alpha shape (concave hull) with automatic fallbacks.
+    
+    Attempts to create an alpha shape with progressively looser alpha values
+    if initial attempts fail. Falls back to buffered geometries for degenerate
+    cases (single point, line, or when alpha shape consistently fails).
+    
+    Args:
+        points: Array of coordinates, shape (N, 2) with columns [lat, lon]
+        alpha: Initial alpha parameter (smaller = tighter fit)
+        max_attempts: Number of times to retry with increased alpha
+        growth: Factor to multiply alpha by on each retry
+        fallback_buffer: Buffer size in degrees for fallback geometries
+        
     Returns:
-        labels: np.ndarray of cluster labels (-1 for noise)
+        Shapely Polygon/MultiPolygon or None if input is empty
+        
+    Note:
+        Handles longitude wraparound by converting negative longitudes to 0-360
+        range when the span exceeds 180 degrees.
     """
-    D = D_coo.tocsr()
-    n_points = D.shape[0]
-    visited = np.zeros(n_points, dtype=bool)
-    labels = -np.ones(n_points, dtype=int)
-    cluster_id = 0
+    if points is None or len(points) == 0:
+        return None
+    
+    # Handle longitude wraparound for global datasets
+    longitude_span = points[:, 1].max() - points[:, 1].min()
+    if longitude_span > 180:
+        points = points.copy()
+        points[:, 1] = np.where(
+            points[:, 1] < 0, points[:, 1] + 360, points[:, 1]
+        )
 
-    for i in range(n_points):
-        if visited[i]:
-            continue
+    # Try progressively looser alpha values
+    for i in range(max_attempts):
+        try:
+            shape = alphashape.alphashape(points, alpha)
+            if shape and not shape.is_empty:
+                return shape
+        except Exception:
+            pass
+        alpha *= growth
 
-        # Find neighbours within eps
-        neighbours = D[i].indices[D[i].data <= eps]
+    # Fallback strategies for degenerate cases
+    n = len(points)
+    
+    if n == 1:
+        # Single point: create small square around it
+        x, y = points[0]
+        return Polygon([
+            (x - fallback_buffer, y - fallback_buffer),
+            (x + fallback_buffer, y - fallback_buffer),
+            (x + fallback_buffer, y + fallback_buffer),
+            (x - fallback_buffer, y + fallback_buffer),
+        ])
+    
+    elif n == 2:
+        # Two points: create buffered line
+        return MultiPoint(points).buffer(fallback_buffer)
+    
+    else:
+        # Multiple points: use buffered convex hull
+        mp = MultiPoint(points)
+        convex = mp.convex_hull
+        
+        if convex.is_empty:
+            return None
+        
+        # Scale buffer size to point spread
+        x_vals, y_vals = zip(*points)
+        spread = max(max(x_vals) - min(x_vals), max(y_vals) - min(y_vals))
+        buffer_size = min(fallback_buffer, spread * 0.05)
+        
+        return convex.buffer(buffer_size)
 
-        # Start new cluster
-        queue = deque([i])
-        queue.extend(neighbours)
-        cluster_members = set()
 
-        while queue:
-            point = queue.popleft()
-            if visited[point]:
-                continue
-            visited[point] = True
-            cluster_members.add(point)
-
-            # Expand neighbours
-            neighbours = D[point].indices[D[point].data <= eps]
-            if len(neighbours) >= min_samples:
-                queue.extend(neighbours)
-
-        # Drop small clusters
-        if len(cluster_members) >= min_samples:
-            for pt in cluster_members:
-                labels[pt] = cluster_id
-            cluster_id += 1
-
-    return labels
-
-
-def get_region(shape):
+def get_region(shape: Union[Polygon, MultiPolygon]) -> List[List[List[float]]]:
+    """
+    Extract coordinate lists from Shapely geometries for serialization.
+    
+    Converts Polygon or MultiPolygon geometries into nested coordinate lists
+    suitable for GeoJSON or other serialization formats. For non-polygon types,
+    creates a padded bounding box.
+    
+    Args:
+        shape: Shapely Polygon or MultiPolygon geometry
+        
+    Returns:
+        List of polygons, where each polygon is a list of [lon, lat] coordinate pairs
+        
+    Example:
+        For a simple polygon: [[[lon1, lat1], [lon2, lat2], ...]]
+        For a multipolygon: [[[lon1, lat1], ...], [[lon3, lat3], ...]]
+    """
     if shape.geom_type == "Polygon":
         return [[[x, y] for x, y in shape.exterior.coords]]
+    
     elif shape.geom_type == "MultiPolygon":
+        # Try to merge into single polygon
         merged = unary_union(shape)
         if merged.geom_type == "Polygon":
             return [[[x, y] for x, y in merged.exterior.coords]]
-        else:  # still MultiPolygon
+        else:
+            # Still multiple polygons after merge
             return [
                 [[x, y] for x, y in poly.exterior.coords]
                 for poly in merged.geoms
             ]
+    
     else:
+        # Fallback: create padded bounding box
         minx, miny, maxx, maxy = shape.bounds
         pad = 0.125
         square = [
@@ -103,76 +193,351 @@ def get_region(shape):
         ]
         return [square]
 
-import numpy as np
 
+# ============================================================================
+# Clustering
+# ============================================================================
 
-def safe_alphashape(
-    points, alpha=1.0, max_attempts=5, growth=2.0, fallback_buffer=0.125
-):
-    if points is None or len(points) == 0:
-        return []
+def walk_scan(
+    D_coo: coo_matrix,
+    eps: float,
+    min_samples: int = 1
+) -> np.ndarray:
+    """
+    Sparse distance-matrix DBSCAN implementation.
     
-    longitude_span = points[:, 1].max() - points[:, 1].min()
-    if longitude_span > 180:
-        # print("Handling longitude wrap for hull calculation",longitude_span)
-        points = points.copy()
-        points[:, 1] = np.where(
-            points[:, 1] < 0, points[:, 1] + 360, points[:, 1]
-        )
+    A memory-efficient clustering algorithm for sparse distance matrices.
+    Uses a breadth-first search approach to grow clusters from seed points,
+    requiring only the sparse distance matrix rather than full pairwise distances.
+    
+    Args:
+        D_coo: Sparse COO matrix of pairwise distances (only store distances < threshold)
+        eps: Maximum distance for two points to be considered neighbors
+        min_samples: Minimum cluster size; smaller clusters are marked as noise
+        
+    Returns:
+        Array of cluster labels (0, 1, 2, ...) with -1 for noise points
+        
+    Algorithm:
+        1. For each unvisited point, find neighbors within eps distance
+        2. If enough neighbors exist, start a new cluster and expand via BFS
+        3. Mark clusters smaller than min_samples as noise (-1)
+        
+    Note:
+        This is optimized for cases where most point pairs are too far apart
+        to be neighbors, making a sparse matrix representation efficient.
+    """
+    D = D_coo.tocsr()
+    n_points = D.shape[0]
+    
+    visited = np.zeros(n_points, dtype=bool)
+    labels = -np.ones(n_points, dtype=int)
+    cluster_id = 0
 
-    # Try alpha growth
-    for i in range(max_attempts):
-        try:
-            shape = alphashape.alphashape(points, alpha)
-            if shape and not shape.is_empty:
-                return shape
-        except Exception:
-            # print(f"Alphashape failed on attempt {i+1} with alpha={alpha}")
-            pass
-        alpha *= growth  # grow alpha each retry
+    for i in range(n_points):
+        if visited[i]:
+            continue
 
-    # Fallbacks as before...
-    n = len(points)
-    if n == 1:
-        x, y = points[0]
-        # print("Alphashape failed, falling back to buffered point")
-        return Polygon(
-            [
-                (x - fallback_buffer, y - fallback_buffer),
-                (x + fallback_buffer, y - fallback_buffer),
-                (x + fallback_buffer, y + fallback_buffer),
-                (x - fallback_buffer, y + fallback_buffer),
-            ]
-        )
-    elif n == 2:
-        # print("Alphashape failed, falling back to buffered line")
-        return MultiPoint(points).buffer(fallback_buffer)
+        # Find neighbors within eps distance
+        neighbours = D[i].indices[D[i].data <= eps]
+
+        # Initialize cluster expansion queue
+        queue = deque([i])
+        queue.extend(neighbours)
+        cluster_members = set()
+
+        # Breadth-first search to grow cluster
+        while queue:
+            point = queue.popleft()
+            if visited[point]:
+                continue
+            
+            visited[point] = True
+            cluster_members.add(point)
+
+            # Expand cluster if point has enough neighbors
+            neighbours = D[point].indices[D[point].data <= eps]
+            if len(neighbours) >= min_samples:
+                queue.extend(neighbours)
+
+        # Only keep clusters that meet minimum size requirement
+        if len(cluster_members) >= min_samples:
+            for pt in cluster_members:
+                labels[pt] = cluster_id
+            cluster_id += 1
+
+    return labels
+
+
+# ============================================================================
+# Serialization and Formatting
+# ============================================================================
+
+def format_time(t: Union[np.datetime64, pd.Timestamp, str]) -> str:
+    """
+    Format various time types to ISO 8601 string with 'Z' suffix.
+    
+    Args:
+        t: Time value (numpy datetime64, pandas Timestamp, or string)
+        
+    Returns:
+        ISO 8601 formatted string with 'Z' timezone indicator
+        
+    Raises:
+        ValueError: If time type is not supported
+    """
+    if isinstance(t, np.datetime64):
+        return np.datetime_as_string(t, unit="s") + "Z"
+    elif isinstance(t, pd.Timestamp):
+        return t.isoformat() + "Z"
+    elif isinstance(t, str):
+        return t + "Z"
     else:
-        # print("Alphashape failed, falling back to buffered convex hull")
-        mp = MultiPoint(points)
-        convex = mp.convex_hull
-        if convex.is_empty:
-            return None
-        x_vals, y_vals = zip(*points)
-        spread = max(max(x_vals) - min(x_vals), max(y_vals) - min(y_vals))
-        buffer_size = min(fallback_buffer, spread * 0.05)
-        return convex.buffer(buffer_size)
+        raise ValueError(f"Unsupported time type: {type(t)}")
 
+
+def to_serializable(obj):
+    """
+    Recursively convert NumPy types to Python native types for JSON serialization.
+    
+    Handles numpy arrays, scalars, and nested structures (lists, dicts, sets).
+    Essential for converting scientific computing types to JSON-safe format.
+    
+    Args:
+        obj: Object to convert (can be nested structure)
+        
+    Returns:
+        JSON-serializable equivalent of the input
+        
+    Example:
+        >>> to_serializable(np.array([1, 2, 3]))
+        [1, 2, 3]
+        >>> to_serializable({'data': np.float32(1.5)})
+        {'data': 1.5}
+    """
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.integer, np.int32, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, set):
+        return list(obj)
+    elif isinstance(obj, (list, tuple)):
+        return [to_serializable(i) for i in obj]
+    elif isinstance(obj, dict):
+        return {k: to_serializable(v) for k, v in obj.items()}
+    else:
+        return obj
+
+
+def round_floats(obj, decimals: int = 4):
+    """
+    Recursively round floating-point numbers in nested structures.
+    
+    Useful for reducing file sizes and improving readability of coordinate
+    data and other floating-point values in output files.
+    
+    Args:
+        obj: Object to process (can be nested dict/list structure)
+        decimals: Number of decimal places to round to (default: 4)
+        
+    Returns:
+        Structure with rounded floats
+    """
+    if isinstance(obj, float):
+        return round(obj, decimals)
+    elif isinstance(obj, dict):
+        return {k: round_floats(v, decimals) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [round_floats(x, decimals) for x in obj]
+    else:
+        return obj
+
+
+# ============================================================================
+# ID Generation
+# ============================================================================
+def get_id(
+    eventtype: str,
+    time: pd.Timestamp,
+    centroid: Tuple[float, float],
+    threshold: float,
+    radius: float
+) -> str:
+    """
+    Generate a unique, human-readable ID for an event.
+    
+    Creates a deterministic ID encoding the event's key properties:
+    event type, date, threshold, radius, and rounded centroid coordinates.
+    
+    Args:
+        eventtype: Event type prefix (e.g., "HEAT", "COLD")
+        time: Timestamp of the event
+        centroid: (latitude, longitude) in degrees
+        threshold: Temperature threshold in Kelvin
+        radius: Spatial radius in km
+        
+    Returns:
+        Formatted ID string with structure:
+        {type}{YYYYMMDD}{thresh:3d}{radius:5d}{lat:6d}{lon:6d}
+        
+    Example:
+        >>> get_id("HEAT", pd.Timestamp("2024-07-15"), (51.5, -0.1), 303.15, 250.0)
+        'HEAT20240715300250051500179900'
+        
+    Note:
+        - Coordinates are snapped to 0.001° precision
+        - Threshold converted to Celsius * 10 (e.g., 30.0°C -> 300)
+        - Negative thresholds encoded as 900 + abs(value)
+    """
+    # Snap centroid to nearest 0.001 degrees
+    lat = round(centroid[0], 3)
+    lon = round(centroid[1], 3)
+
+    # Shift coordinates to positive range
+    lat_code = int(round((lat + 90) * 1000))   # 0 to 180000 range
+    lon_code = int(round((lon + 180) * 1000))  # 0 to 360000 range
+
+    # Convert threshold from Kelvin to Celsius * 10
+    thresh = int(round((threshold - 273.15) * 10))
+    if thresh < 0:
+        thresh = 900 - thresh  # Encode negative temps above 900
+    
+    radius = int(round(radius))
+
+    return (f"{eventtype}{time.strftime('%Y%m%d')}"
+            f"{thresh:03d}{radius:05d}{lat_code:06d}{lon_code:06d}")
+
+
+# ============================================================================
+# Data Loading and Transformation
+# ============================================================================
+
+def load_data(
+    data_path: str,
+    ref_path: str,
+    land_sea_mask_path: Optional[str]
+) -> Tuple[xr.DataArray, xr.DataArray, Optional[xr.DataArray]]:
+    """
+    Load and preprocess NetCDF climate data files.
+    
+    Opens multiple data files (temperature, reference, land-sea mask) and
+    standardizes longitude coordinates to -180 to +180 range.
+    
+    Args:
+        data_path: Path or glob pattern for main temperature data (t2m)
+        ref_path: Path to reference/baseline temperature dataset
+        land_sea_mask_path: Path to land-sea mask file (optional)
+        
+    Returns:
+        Tuple of (temperature_data, reference_data, land_sea_mask)
+        where land_sea_mask is None if not provided
+        
+    Note:
+        Automatically shifts longitudes from 0-360 to -180-180 range
+        and sorts by longitude for consistent indexing.
+    """
+    # Open datasets
+    ds = xr.open_mfdataset(data_path)
+    ref = xr.open_dataset(ref_path)
+    
+    if land_sea_mask_path:
+        land_sea_mask = xr.open_dataset(land_sea_mask_path)
+    else:
+        land_sea_mask = None
+
+    def shift_longitudes(da: xr.DataArray) -> xr.DataArray:
+        """Shift longitude coords from [0, 360) to [-180, 180) and sort."""
+        da = da.assign_coords(longitude=(((da.longitude + 180) % 360) - 180))
+        return da.sortby("longitude")
+
+    # Apply longitude transformation to all datasets
+    t2m_data = shift_longitudes(ds["t2m"])
+    t2m_ref = shift_longitudes(ref["t2m"])
+    lsm_data = (shift_longitudes(land_sea_mask["lsm"]) 
+                if land_sea_mask is not None else None)
+    
+    return t2m_data, t2m_ref, lsm_data
+
+
+# ============================================================================
+# Multiprocessing Helpers
+# ============================================================================
+
+def downstream_worker(q, clusterer):
+    """
+    Worker function for multiprocessing event processing.
+    
+    Continuously processes eventlets from a queue until receiving a shutdown
+    signal (None). Used for parallel processing of detected events.
+    
+    Args:
+        q: Queue containing Eventlet objects to process
+        clusterer: EventletFactory or similar object with process_eventlet method
+        
+    Note:
+        Blocks waiting for queue items. Send None to signal shutdown.
+    """
+    while True:
+        ev = q.get()
+        if ev is None:
+            break  # Shutdown signal received
+        
+        clusterer.process_eventlet(ev)
+        q.task_done()
 
 class Eventlet:
+    """
+    Represents a spatiotemporal event tracked across multiple time slices.
+    
+    An Eventlet stores coordinate data (lat/lon pairs) and associated values
+    at different time points, allowing tracking of features like weather systems,
+    pollution plumes, or other geographic phenomena over time.
+    """
+    
     def __init__(self, time, coords, values):
+        """
+        Initialize an Eventlet with data from a single time point.
+        
+        Args:
+            time: Timestamp for this initial observation
+            coords: List of (lat, lon) tuples or NumPy array of shape (N, 2)
+            values: Array of values associated with each coordinate point
+        """
         self.times = [time]
         # Expecting coords as a list of (lat, lon) tuples or a NumPy array
         self.slices = [np.array(coords, dtype=np.float32)]  # list of (N, 2) arrays
         self.values = [values]
 
     def last_time(self):
+        """
+        Get the most recent timestamp in this eventlet.
+        
+        Returns:
+            The latest time point in the eventlet's history
+        """
         return self.times[-1]
 
     def earliest_time(self):
+        """
+        Get the earliest timestamp in this eventlet.
+        
+        Returns:
+            The first time point in the eventlet's history
+        """
         return self.times[0]
 
     def centroid(self, n):
+        """
+        Calculate the geographic centroid of the eventlet at a specific time slice.
+        
+        Args:
+            n: Index of the time slice (uses last slice if n >= len(slices))
+            
+        Returns:
+            Tuple of (lat_mean, lon_mean) or None if no data exists
+        """
         if not self.slices:
             return None
         target_slice = self.slices[n] if n < len(self.slices) else self.slices[-1]
@@ -183,6 +548,16 @@ class Eventlet:
         return (lat_mean, lon_mean)
 
     def hull(self, n, alpha=1.0):
+        """
+        Generate an alpha shape (concave hull) around the points at time slice n.
+        
+        Args:
+            n: Index of the time slice
+            alpha: Alpha parameter controlling hull tightness (default 1.0)
+            
+        Returns:
+            Alpha shape geometry or None if insufficient data
+        """
         if not self.slices:
             return None
         target_slice = self.slices[n] if n < len(self.slices) else self.slices[-1]
@@ -192,6 +567,19 @@ class Eventlet:
         return safe_alphashape(target_slice, alpha)
 
     def overlaps(self, coords, eps=1e-6):
+        """
+        Check if any of the provided coordinates overlap with the eventlet's current slice.
+        
+        Uses distance threshold (eps) to determine if points are close enough to be
+        considered overlapping.
+        
+        Args:
+            coords: Array of (lat, lon) coordinates to test, shape (N, 2)
+            eps: Distance threshold for considering points as overlapping (default 1e-6)
+            
+        Returns:
+            True if any points are within eps distance of current slice points
+        """
         test = np.array(coords, dtype=np.float32)  # shape (N, 2)
         current = self.slices[-1]  # shape (M, 2)
 
@@ -206,38 +594,58 @@ class Eventlet:
         return np.any(close_points)
 
     def extend(self, time, coords, values):
+        """
+        Add new coordinate data to the eventlet at a given time.
+        
+        If the time already exists, appends to that time slice. Otherwise creates
+        a new time slice. Maintains chronological ordering of all slices.
+        
+        Args:
+            time: Timestamp for the new data
+            coords: Coordinates to add, shape (N, 2)
+            values: Values associated with the coordinates
+        """
         coords_arr = np.array(coords, dtype=np.float32)
         values_arr = np.array(values, dtype=np.float32)
+        
         if time in self.times:
+            # Append to existing time slice
             idx = self.times.index(time)
             self.slices[idx] = np.vstack((self.slices[idx], coords_arr))
             self.values[idx] = np.concatenate((self.values[idx], values_arr))
         else:
-                self.times.append(time)
-                self.slices.append(coords_arr)
-                self.values.append(values_arr)
+            # Create new time slice
+            self.times.append(time)
+            self.slices.append(coords_arr)
+            self.values.append(values_arr)
 
-        # Keep times + slices sorted
+        # Keep times + slices sorted chronologically
         sorted_triplets = sorted(
             zip(self.times, self.slices, self.values), key=lambda x: x[0]
         )
         self.times, self.slices, self.values = map(list, zip(*sorted_triplets))
 
     def merge(self, other):
+        """
+        Merge another Eventlet into this one, combining all time slices.
+        
+        For overlapping time points, concatenates the coordinate arrays.
+        Maintains chronological ordering after merge.
+        
+        Args:
+            other: Another Eventlet instance to merge into this one
+        """
+        # Build lookup for existing times
         time_to_idx = {t: i for i, t in enumerate(self.times)}
 
         for t, other_slice, other_val in zip(other.times, other.slices, other.values):
             if t in time_to_idx:
+                # Merge into existing time slice
                 i = time_to_idx[t]
-                # print(f"Merging slice at {t} with existing slice {self.times[i]}")
-                # print(
-                #     f"Slice:\n{self.slices[i]}\nOther:\n{other_slice}\nValues:\n{self.values[i]}\nOther:\n{other_val}\n\n"
-                # )
                 self.slices[i] = np.vstack((self.slices[i], other_slice))
-                # print(f"Slice result:\n{self.slices[i]}\n")
                 self.values[i] = np.concatenate((self.values[i], other_val))
-                # print(f"Values result:\n{self.values[i]}\n")
             else:
+                # Add new time slice
                 self.times.append(t)
                 self.slices.append(other_slice.copy())
                 self.values.append(other_val.copy())
@@ -249,10 +657,35 @@ class Eventlet:
         self.times, self.slices, self.values = map(list, zip(*sorted_triplets))
 
     def is_expired(self, oldest_upstream_time, time_threshold):
+        """
+        Check if this eventlet has expired based on a time threshold.
+        
+        An eventlet is expired if its last observation plus the threshold
+        is earlier than the oldest upstream time being processed.
+        
+        Args:
+            oldest_upstream_time: The oldest time currently being processed
+            time_threshold: How long after last observation before expiry (e.g., "1H")
+            
+        Returns:
+            True if the eventlet has expired
+        """
         time_threshold = pd.Timedelta(time_threshold)  # ensures compatibility
         return (self.last_time() + time_threshold) < oldest_upstream_time
 
     def is_valid(self, min_length):
+        """
+        Check if the eventlet meets minimum validity requirements.
+        
+        An eventlet is valid if it has at least min_length time slices AND
+        the last slice contains at least min_length points.
+        
+        Args:
+            min_length: Minimum number of slices and points required
+            
+        Returns:
+            True if the eventlet meets validity criteria
+        """
         # Check if the eventlet has enough slices
         if len(self.slices) < min_length:
             return False
@@ -262,13 +695,27 @@ class Eventlet:
         return True
 
     def clear(self):
+        """
+        Remove all data from the eventlet, clearing times and slices.
+        """
         self.times.clear()
         self.slices.clear()
 
     def remove_ocean(self, land_sea_mask):
+        """
+        Filter out ocean points from all time slices, keeping only land points.
+        
+        Uses a land-sea mask dataset to identify which coordinates fall on land.
+        Removes any slices that become empty after filtering.
+        
+        Args:
+            land_sea_mask: xarray Dataset with latitude, longitude, and mask values
+                          (0 = ocean, non-zero = land)
+        """
         if land_sea_mask is None:
             return
 
+        # Check if latitude is in ascending order and prepare for searchsorted
         lat_asc = np.all(np.diff(land_sea_mask.latitude) > 0)
         lats = land_sea_mask.latitude.values
         if not lat_asc:
@@ -277,7 +724,8 @@ class Eventlet:
         for i in range(len(self.slices)):
             if self.hull(i) is not None:
                 coords = np.array(self.slices[i])
-                # Latitude indices
+                
+                # Find latitude indices using binary search
                 lat_indices = np.searchsorted(lats, coords[:, 0])
                 lat_indices = np.clip(
                     lat_indices, 0, land_sea_mask.latitude.size - 1
@@ -285,28 +733,40 @@ class Eventlet:
                 if not lat_asc:
                     lat_indices = land_sea_mask.latitude.size - 1 - lat_indices
 
-                # Longitude indices
+                # Find longitude indices using binary search
                 lon_indices = np.searchsorted(land_sea_mask.longitude, coords[:, 1])
                 lon_indices = np.clip(
                     lon_indices, 0, land_sea_mask.longitude.size - 1
                 )
 
+                # Look up mask values and keep only land points (non-zero)
                 mask_values = land_sea_mask.values[0, lat_indices, lon_indices]
                 land_points = mask_values != 0
 
                 self.slices[i] = coords[land_points]
                 self.values[i] = np.array(self.values[i])[land_points]
 
-        # Remove any empty slices
-        non_empty_indices = [i for i in range(len(self.slices)) if len(self.slices[i]) > 0]
-        self.times = [self.times[i] for i in non_empty_indices]
-        self.slices = [self.slices[i] for i in non_empty_indices]
-        self.values = [self.values[i] for i in non_empty_indices]
+        # Remove any empty slices that resulted from filtering
+        # non_empty_indices = [i for i in range(len(self.slices)) if len(self.slices[i]) > 0]
+        # self.times = [self.times[i] for i in non_empty_indices]
+        # self.slices = [self.slices[i] for i in non_empty_indices]
+        # self.values = [self.values[i] for i in non_empty_indices]
 
     def remove_land(self, land_sea_mask):
+        """
+        Filter out land points from all time slices, keeping only ocean points.
+        
+        Uses a land-sea mask dataset to identify which coordinates fall on ocean.
+        Removes any slices that become empty after filtering.
+        
+        Args:
+            land_sea_mask: xarray Dataset with latitude, longitude, and mask values
+                          (1 = land, non-1 = ocean)
+        """
         if land_sea_mask is None:
             return
 
+        # Check if latitude is in ascending order and prepare for searchsorted
         lat_asc = np.all(np.diff(land_sea_mask.latitude) > 0)
         lats = land_sea_mask.latitude.values
         if not lat_asc:
@@ -315,7 +775,8 @@ class Eventlet:
         for i in range(len(self.slices)):
             if self.hull(i) is not None:
                 coords = np.array(self.slices[i])
-                # Latitude indices
+                
+                # Find latitude indices using binary search
                 lat_indices = np.searchsorted(lats, coords[:, 0])
                 lat_indices = np.clip(
                     lat_indices, 0, land_sea_mask.latitude.size - 1
@@ -323,26 +784,71 @@ class Eventlet:
                 if not lat_asc:
                     lat_indices = land_sea_mask.latitude.size - 1 - lat_indices
 
-                # Longitude indices
+                # Find longitude indices using binary search
                 lon_indices = np.searchsorted(land_sea_mask.longitude, coords[:, 1])
                 lon_indices = np.clip(
                     lon_indices, 0, land_sea_mask.longitude.size - 1
                 )
 
+                # Look up mask values and keep only ocean points (non-1)
                 mask_values = land_sea_mask.values[0, lat_indices, lon_indices]
                 ocean_points = mask_values != 1
 
                 self.slices[i] = coords[ocean_points]
                 self.values[i] = np.array(self.values[i])[ocean_points]
 
-        # Remove any empty slices
+        # Remove any empty slices that resulted from filtering
         non_empty_indices = [i for i in range(len(self.slices)) if len(self.slices[i]) > 0]
         self.times = [self.times[i] for i in non_empty_indices]
         self.slices = [self.slices[i] for i in non_empty_indices]
         self.values = [self.values[i] for i in non_empty_indices]
 
+"""
+EventletFactory class for detecting and tracking spatiotemporal events in climate data.
+
+This class implements a sophisticated event detection and tracking system that:
+1. Identifies regions exceeding (or below) thresholds in gridded data
+2. Clusters nearby points using spatial distance metrics
+3. Tracks events across time slices
+4. Expires old events and finalizes completed ones
+5. Outputs detailed event metadata and geometries
+"""
 
 class EventletFactory:
+    """
+    Factory for detecting, tracking, and managing spatiotemporal events.
+    
+    The EventletFactory processes gridded climate/weather data time slice by time slice,
+    identifying regions that exceed thresholds, clustering nearby points, and tracking
+    how these clusters evolve over time. When events expire or the run completes,
+    it generates comprehensive metadata including geometries, statistics, and time series.
+    
+    Key responsibilities:
+    - Threshold detection with persistence filtering
+    - Spatial clustering of threshold-exceeding points
+    - Temporal tracking of clusters across time slices
+    - Event lifecycle management (creation, extension, expiration)
+    - Output generation in JSON format
+    
+    Attributes:
+        data: xarray DataArray with temperature/variable data
+        threshold: Numeric threshold value for event detection
+        over_threshold: If True, detect values > threshold; if False, detect values < threshold
+        ref_data: Reference/baseline data for anomaly detection
+        land_sea_mask: Optional mask to filter land/ocean points
+        expiry_days: Days without new data before an event expires
+        min_length: Minimum number of time slices for a valid event
+        min_samples: Minimum cluster size for DBSCAN
+        radius: Maximum distance (km) for points to be neighbors
+        active: List of currently active Eventlet objects
+        output_queue: Queue of finalized events ready for output
+        output_path: Directory path for output files
+        use_dbscan: If True, use sklearn DBSCAN; if False, use custom walk_scan
+        eventtype: Event type label (e.g., 'hot', 'cold', 'dry')
+        land_only: If True, only track events over land
+        ocean_only: If True, only track events over ocean
+    """
+    
     def __init__(
         self,
         data,
@@ -356,11 +862,32 @@ class EventletFactory:
         min_samples=1,
         output_path="/data/output-debug/events",
         use_dbscan=False,
-        last_slice=None,
+        last_slice_data=None,
         eventtype='hot',
         land_only=False,
         ocean_only=False,
     ):
+        """
+        Initialize the EventletFactory with data and configuration parameters.
+        
+        Args:
+            data: xarray DataArray with dimensions (time, latitude, longitude)
+            ref_data: Reference/baseline data with same dimensions as data
+            threshold: Threshold value for event detection (e.g., temperature in Kelvin)
+            over_threshold: If True, detect values > threshold; otherwise < threshold
+            land_sea_mask: Optional xarray DataArray with land-sea mask (1=land, 0=ocean)
+            expiry_days: Number of days without updates before event expires
+            min_length: Minimum time slices required for valid event
+            neighbor_radius: Maximum distance (km) for spatial clustering
+            min_samples: Minimum cluster size for DBSCAN/walk_scan
+            output_path: Directory path for output files
+            use_dbscan: If True, use sklearn DBSCAN instead of custom walk_scan
+            last_slice_data: Optional dict with previous run state for resumption
+            eventtype: Event type label for output (e.g., 'hot', 'cold')
+            land_only: If True, only track events over land (removes ocean points)
+            ocean_only: If True, only track events over ocean (removes land points)
+        """
+        # Store configuration
         self.data = data
         self.threshold = threshold
         self.over_threshold = over_threshold
@@ -369,49 +896,64 @@ class EventletFactory:
         self.expiry_days = expiry_days
         self.min_length = min_length
         self.min_samples = min_samples
-        self.active = []
-        self.output_queue = deque()
-        self.oldest_active_time = None
-        self.id = 0
         self.radius = neighbor_radius
         self.output_path = output_path
         self.use_dbscan = use_dbscan
         self.eventtype = eventtype
         self.land_only = land_only
         self.ocean_only = ocean_only
+        
+        # Initialize state
+        self.active = []  # Currently tracked events
+        self.output_queue = deque()  # Completed events awaiting retrieval
+        self.oldest_active_time = None
+        self.id = 0
+        self.skipToTime = None
 
-        # Store the full thresholded mask
+        # Create threshold mask: points exceeding threshold AND reference
         if self.over_threshold:
-            self.raw_mask = (
-                (data > self.threshold) & (data > ref_data)
-            )  # shape (T, Y, X), bool
+            self.raw_mask = (data > self.threshold) & (data > ref_data)
         else:
-            self.raw_mask = (
-                (data <= self.threshold) & (data <= ref_data)
-            )
-        # print(f"Raw mask shape: {self.raw_mask.shape}")
+            self.raw_mask = (data < self.threshold) & (data < ref_data)
 
+        # Filter for persistence: require 3 consecutive time steps
+        # This reduces false positives from transient spikes
         self.enduring_pixels = (
             self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
         )
-        self.raw_mask = self.raw_mask.values  # convert to NumPy array for speed
 
-        self.times = self.data.valid_time.values  # in __init__
+        # Convert to NumPy for performance
+        self.raw_mask = self.raw_mask.values
+        self.times = self.data.valid_time.values
 
-        self.skipToTime = None
-        # If we have a last_slice, load it
-        if last_slice:
-            print(f"Resuming from last slice at {last_slice['time']}")
-            self.skipToTime = last_slice['time']
-            self.active = last_slice.get("active_events", [])
+        # Resume from previous state if provided
+        if last_slice_data:
+            print(f"Resuming from last slice at {last_slice_data['time']}")
+            self.skipToTime = last_slice_data['time']
+            self.active = last_slice_data.get("active_events", [])
+            
             if self.active:
                 self.oldest_active_time = min(ev.earliest_time() for ev in self.active)
             else:
                 self.oldest_active_time = None
+            
             print(f"Resumed {len(self.active)} active events")
 
     def process_slice(self, time):
-        # print(f"Processing slice at {time}")
+        """
+        Process a single time slice: detect clusters, update active events, expire old ones.
+        
+        This is the main processing method called for each time step. It:
+        1. Identifies threshold-exceeding points with persistence
+        2. Clusters them spatially using distance-based clustering
+        3. Matches clusters to existing events or creates new events
+        4. Expires events that haven't been updated recently
+        5. Saves state for potential resumption
+        
+        Args:
+            time: Timestamp (numpy.datetime64 or pandas.Timestamp) to process
+        """
+        # Handle resumption: skip slices until we reach the resumption point
         if self.skipToTime:
             if time < self.skipToTime:
                 print(f"Skipping slice at {time}")
@@ -420,25 +962,27 @@ class EventletFactory:
                 print(f"Reached skip-to time at {time}, resuming processing")
                 self.skipToTime = None
 
-        data_slice = self.data.sel(
-            valid_time=time
-        ).load()  # Load the slice for the given time
+        # Load data for this time slice
+        data_slice = self.data.sel(valid_time=time).load()
         t = np.searchsorted(self.times, np.datetime64(time))
 
+        # Apply persistence filter to raw mask
         raw_mask_slice = self.raw_mask[t].copy()
         enduring_slice = np.where(self.enduring_pixels[t], raw_mask_slice, False)
 
-        hot_indices = np.argwhere(
-            enduring_slice
-        )  # shape (N, 2): rows are (i_lat, i_lon)
+        # Get indices of threshold-exceeding points
+        hot_indices = np.argwhere(enduring_slice)  # shape (N, 2): (i_lat, i_lon)
 
-        lat_vals = data_slice.latitude.values  # shape (Y,)
-        lon_vals = data_slice.longitude.values  # shape (X,)
+        # Extract coordinate arrays
+        lat_vals = data_slice.latitude.values
+        lon_vals = data_slice.longitude.values
 
+        # Compute sparse distance matrix for spatial clustering
         D, metadata = self.get_distance_matrix(
             hot_indices, lat_vals, lon_vals, radius_km=self.radius
         )
 
+        # Perform spatial clustering
         if not self.use_dbscan:
             labels = walk_scan(D, eps=self.radius, min_samples=self.min_samples)
         else:
@@ -449,19 +993,22 @@ class EventletFactory:
             )
             labels = db.fit_predict(D)
 
+        # Group points by cluster label
         blobs = []
         for label in set(labels):
+            if label == -1:  # Skip noise points
+                continue
             points = [m for i, m in enumerate(metadata) if labels[i] == label]
             blobs.append(points)
 
-        # Now we have full list of blobs in this time slice
-
         print(f"Found {len(blobs)} potential events in slice at {time}")
 
+        # Match blobs to existing active events
         used_blobs = set()
         for i, blob in enumerate(blobs):
             for ev in self.active:
                 if ev.overlaps(blob):
+                    # Extract values for these coordinates
                     values = [
                         data_slice.sel(latitude=lat, longitude=lon).values.item()
                         for lat, lon in blob
@@ -474,6 +1021,7 @@ class EventletFactory:
         for i, blob in enumerate(blobs):
             if i in used_blobs:
                 continue
+            
             values = [
                 data_slice.sel(latitude=lat, longitude=lon).values.item()
                 for lat, lon in blob
@@ -481,23 +1029,22 @@ class EventletFactory:
             new_ev = Eventlet(time, blob, values)
             self.active.append(new_ev)
 
-        # Expire any events that are too old
-        for ev in list(self.active):  # copy to avoid mutation during loop
+        # Expire old events
+        for ev in list(self.active):  # Copy list to avoid mutation issues
             if ev.is_expired(time, self.expiry_days):
                 if ev.is_valid(self.min_length):
-                    self._finalise_cluster(ev)
+                    self._finalize_cluster(ev)
                 self.active.remove(ev)
 
-        # Sort active events largest-first (for later matching)
+        # Sort active events by size (largest first) for better matching
         self.active.sort(key=lambda ev: len(ev.values[-1]), reverse=True)
 
-        # Update oldest time
+        # Update oldest active time
         self.oldest_active_time = min(
             (ev.earliest_time() for ev in self.active), default=None
         )
 
-        # Write out last_slice.json. This is used to resume processing from a point.
-        # Useful for interrupted runs and operation on rolling data.
+        # Save state for resumption
         last_slice = {
             "time": time,
             "active_events": self.active,
@@ -506,133 +1053,198 @@ class EventletFactory:
             pickle.dump(last_slice, f)
 
     def flush(self):
+        """
+        Finalize and queue all remaining active events.
+        
+        Called at the end of processing to ensure no events are lost.
+        Moves all active events to the output queue.
+        """
         for ev in self.active:
             self.output_queue.append(ev)
         self.active = []
 
     def yield_completed(self):
+        """
+        Generator yielding finalized events from the output queue.
+        
+        Yields:
+            Eventlet objects that have been finalized and are ready for output
+        """
         while self.output_queue:
             yield self.output_queue.popleft()
 
     def get_distance_matrix(self, coords, lat_arr, lon_arr, radius_km=500):
+        """
+        Compute sparse distance matrix for spatial clustering.
+        
+        Builds a sparse matrix containing only pairwise distances below radius_km.
+        Uses grid-based neighbor search for efficiency: only tests points within
+        a lat/lon bounding box, then computes exact Haversine distances.
+        
+        Args:
+            coords: Array of grid indices, shape (N, 2) with columns [i_lat, i_lon]
+            lat_arr: Latitude values for each grid row
+            lon_arr: Longitude values for each grid column
+            radius_km: Maximum distance threshold in kilometers
+            
+        Returns:
+            Tuple of (D, metadata) where:
+            - D: scipy COO sparse matrix of distances, shape (M, M)
+            - metadata: List of (lat, lon) tuples for each unique point
+            
+        Note:
+            Handles longitude wraparound correctly by using modulo arithmetic.
+        """
         lon_len = len(lon_arr)
 
+        # Build metadata: unique coordinate mappings
         metadata = []
         metadata_index = {}
 
         coord_set = set(map(tuple, coords))
 
         def get_uid(i_lat, i_lon):
+            """Generate unique ID for grid cell."""
             return i_lat * lon_len + i_lon
 
         def ensure_metadata(i_lat, i_lon):
+            """Add coordinate to metadata if not already present."""
             uid = get_uid(i_lat, i_lon)
             if uid not in metadata_index:
                 metadata_index[uid] = len(metadata)
                 metadata.append((float(lat_arr[i_lat]), float(lon_arr[i_lon])))
             return metadata_index[uid]
 
-        p1idx = []
-        p2idx = []
+        # Sparse matrix construction lists
+        p1idx = []  # Source point indices
+        p2idx = []  # Target point indices
+        dists = []  # Distances
 
-        # 0.25 degrees per index step
-        res = 0.25
-        radius_km_per_deg = 111  # approximate
+        # Compute search radius in grid cells
+        res = 0.25  # Grid resolution in degrees
+        radius_km_per_deg = 111  # Approximate km per degree
         radius_deg = radius_km / radius_km_per_deg
-        # x2 to ensure we test a bigger area than we want
-        delta_coord = 2 * int(np.ceil(radius_deg / res))
+        delta_coord = 2 * int(np.ceil(radius_deg / res))  # 2x for safety margin
         delta_list = np.arange(-delta_coord, delta_coord + 1, 1)
 
-        dists = []
+        # For each point, check neighbors within bounding box
         for i_lat, i_lon in coords:
             i_idx = ensure_metadata(i_lat, i_lon)
+            
             for dlat in delta_list:
                 for dlon in delta_list:
-                    if (dlat == 0 and dlon == 0):
-                        continue
+                    if dlat == 0 and dlon == 0:
+                        continue  # Skip self
+                    
                     j_lat = i_lat + dlat
-                    j_lon = (i_lon + dlon) % lon_len
+                    j_lon = (i_lon + dlon) % lon_len  # Handle longitude wraparound
 
+                    # Check if neighbor exists in our coordinate set
                     if (j_lat, j_lon) in coord_set:
+                        # Compute exact Haversine distance
                         d_km = haversine_fast(
                             (lat_arr[i_lat], lon_arr[i_lon]),
                             (lat_arr[j_lat], lon_arr[j_lon])
                         )
+                        
+                        # Only store if within radius
                         if d_km <= radius_km:
                             j_idx = ensure_metadata(j_lat, j_lon)
                             p1idx.append(i_idx)
                             p2idx.append(j_idx)
                             dists.append(d_km)
 
+        # Build symmetric sparse matrix
         D = coo_matrix((dists, (p1idx, p2idx)), shape=(len(metadata), len(metadata)))
-        D = D + D.T
+        D = D + D.T  # Make symmetric
+        
         return D, metadata
 
-    def _finalise_cluster(self, ev):
-        # print(f"Finalising cluster with {ev}\n")
-        all_times = sorted(ev.times)
-        centroids = []
-
-        all_coords = []
-
+    def _finalize_cluster(self, ev):
+        """
+        Finalize a completed event and write output files.
+        
+        Generates comprehensive metadata including:
+        - Temporal information (times, duration)
+        - Spatial information (geometries, centroids, bounding box)
+        - Statistical summaries (max/mean/min values)
+        - Per-pixel maximum values
+        - Land/ocean classification
+        
+        Writes two output files:
+        1. Catalogue entry (JSONL): Compact summary for quick searches
+        2. Full event file (JSON): Complete details including all time slices
+        
+        Args:
+            ev: Eventlet object to finalize
+        """
+        # Apply land/ocean filtering if requested
         if self.land_only:
             ev.remove_ocean(self.land_sea_mask)
             if not ev.is_valid(self.min_length):
-                print(f"Discarding event at {all_times[0]} for too small over land")
+                print(f"Discarding event at {ev.times[0]} for being too small over land")
                 return
         elif self.ocean_only:
             ev.remove_land(self.land_sea_mask)
-            if ev.is_valid(self.min_length):
+            if not ev.is_valid(self.min_length):
                 print(f"Discarding event at {all_times[0]} for being too small over ocean")
                 return
 
+        all_times = sorted(ev.times)
+        # Collect coordinates and compute centroids
+        all_coords = []
+        centroids = []
         for i, region in enumerate(ev.slices):
             latlons = [(float(lat), float(lon)) for lat, lon in region]
             all_coords.extend(latlons)
-
-            lats, lons = zip(*latlons)
             centroids.append(ev.centroid(i))
 
+        # Compute bounding box
         lats, lons = zip(*all_coords)
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
-        event_id = get_id(self.eventtype, all_times[0], centroids[0], self.threshold, self.radius)
-        max_values = to_serialisable(
-            [
-                np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
-                for i in range(len(ev.slices))
-            ]
+        # Generate stable event ID
+        event_id = get_id(
+            self.eventtype, all_times[0], centroids[0], self.threshold, self.radius
         )
-        max_value = to_serialisable(np.max(max_values)) if max_values else None
-        mean_values = to_serialisable(
-            [
-                np.mean(ev.values[i]) if len(ev.values[i]) > 0 else None
-                for i in range(len(ev.slices))
-            ]
-        )
-        mean_value = (
-            to_serialisable(np.mean(np.concatenate(ev.values))) if mean_values else None
-        )
-        min_values = to_serialisable(
-            [
-                np.min(ev.values[i]) if len(ev.values[i]) > 0 else None
-                for i in range(len(ev.slices))
-            ]
-        )
-        min_value = to_serialisable(np.min(min_values)) if min_values else None
 
+        # Compute statistics across time slices
+        max_values = to_serializable([
+            np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
+            for i in range(len(ev.slices))
+        ])
+        max_value = to_serializable(np.max(max_values)) if max_values else None
+        
+        mean_values = to_serializable([
+            np.mean(ev.values[i]) if len(ev.values[i]) > 0 else None
+            for i in range(len(ev.slices))
+        ])
+        mean_value = (
+            to_serializable(np.mean(np.concatenate(ev.values)))
+            if mean_values else None
+        )
+        
+        min_values = to_serializable([
+            np.min(ev.values[i]) if len(ev.values[i]) > 0 else None
+            for i in range(len(ev.slices))
+        ])
+        min_value = to_serializable(np.min(min_values)) if min_values else None
+
+        # Determine if event is ocean-only
         ocean_only = False
         if self.land_sea_mask is not None:
             all_ocean = True
             lat_asc = np.all(np.diff(self.land_sea_mask.latitude) > 0)
             lats = self.land_sea_mask.latitude.values
             if not lat_asc:
-                lats = lats[::-1]  # ascending for searchsorted
+                lats = lats[::-1]
 
+            # Check each time slice for land points
             for i in range(len(ev.slices)):
                 if ev.hull(i) is not None:
                     coords = np.array(ev.slices[i])
-                    # Latitude indices
+                    
+                    # Map coordinates to mask indices
                     lat_indices = np.searchsorted(lats, coords[:, 0])
                     lat_indices = np.clip(
                         lat_indices, 0, self.land_sea_mask.latitude.size - 1
@@ -640,7 +1252,6 @@ class EventletFactory:
                     if not lat_asc:
                         lat_indices = self.land_sea_mask.latitude.size - 1 - lat_indices
 
-                    # Longitude indices
                     lon_indices = np.searchsorted(
                         self.land_sea_mask.longitude, coords[:, 1]
                     )
@@ -648,59 +1259,61 @@ class EventletFactory:
                         lon_indices, 0, self.land_sea_mask.longitude.size - 1
                     )
 
+                    # Check mask values
                     mask_values = self.land_sea_mask.values[0, lat_indices, lon_indices]
                     if not np.all(mask_values == 0):
                         all_ocean = False
                         break
+            
             ocean_only = all_ocean
 
         if ocean_only:
             print(f"Event {event_id} is ocean-only, with centroid {centroids[0]}")
 
-        # ensure arrays are 1-D and aligned
-        all_coords = np.vstack([np.asarray(t_slice) for t_slice in ev.slices])  # (N, 2)
-        all_values = np.hstack([np.asarray(vals).ravel() for vals in ev.values])  # (N,)
+        # Compute per-pixel maximum values across all time slices
+        all_coords = np.vstack([np.asarray(t_slice) for t_slice in ev.slices])
+        all_values = np.hstack([np.asarray(vals).ravel() for vals in ev.values])
 
         if all_coords.shape[0] != all_values.shape[0]:
             raise ValueError(
-                f"mismatch: {all_coords.shape[0]} coords vs {all_values.shape[0]} values"
+                f"Coordinate/value mismatch: {all_coords.shape[0]} coords "
+                f"vs {all_values.shape[0]} values"
             )
 
-        # structured view & grouping
+        # Find unique coordinates and compute max value at each pixel
         coords_view = all_coords.view(
             [("", all_coords.dtype)] * all_coords.shape[1]
         ).ravel()
         unique_coords, inverse_idx = np.unique(coords_view, return_inverse=True)
 
-        # compute per-pixel max
         pixel_max_values = np.full(len(unique_coords), -np.inf, dtype=all_values.dtype)
-        # print(all_coords.shape, all_values.shape, inverse_idx.shape, pixel_max_values.shape)
         np.maximum.at(pixel_max_values, inverse_idx, all_values)
 
-        # Convert back to normal ndarray
+        # Convert back to normal array
         unique_coords = unique_coords.view(all_coords.dtype).reshape(
             -1, all_coords.shape[1]
         )
         pixel_set = unique_coords.tolist()
+
+        # Compute overall event geometry
         total_region_shape = safe_alphashape(unique_coords, alpha=1.0)
 
+        # Build full event dictionary
         full_event = {
             "id": event_id,
             "event_type": self.eventtype,
-            "times": [formatTime(t) for t in all_times],
+            "times": [format_time(t) for t in all_times],
             "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
             "total_region": get_region(total_region_shape),
-            "slices": to_serialisable(ev.slices),
-            "values": to_serialisable(ev.values),
-            "centroids": to_serialisable(centroids),
-            "bbox": to_serialisable(bbox),
+            "slices": to_serializable(ev.slices),
+            "values": to_serializable(ev.values),
+            "centroids": to_serializable(centroids),
+            "bbox": to_serializable(bbox),
             "total_area": total_region_shape.area if total_region_shape else 0,
-            "areas": to_serialisable(
-                [
-                    ev.hull(i).area if ev.hull(i) is not None else 0
-                    for i in range(len(ev.slices))
-                ]
-            ),
+            "areas": to_serializable([
+                ev.hull(i).area if ev.hull(i) is not None else 0
+                for i in range(len(ev.slices))
+            ]),
             "max_values": max_values,
             "max_value": max_value,
             "mean_values": mean_values,
@@ -710,18 +1323,29 @@ class EventletFactory:
             "ocean_only": ocean_only,
             "pixel_set": pixel_set,
             "pixel_count": len(pixel_set),
-            "pixel_max_values": to_serialisable(pixel_max_values),
+            "pixel_max_values": to_serializable(pixel_max_values),
         }
 
-        def packPixelToInt(lat: float, lon: float) -> int:
-            iLat = int(np.round(lat * 4))
+        def pack_pixel_to_int(lat: float, lon: float) -> int:
+            """
+            Pack lat/lon into 32-bit integer for compact storage.
+            
+            Encodes coordinates at 0.25 degree resolution:
+            - Latitude in upper 16 bits: [-90, 90] → [0, 720]
+            - Longitude in lower 16 bits: [-180, 180] → [0, 1440]
+            """
+            i_lat = int(np.round(lat * 4))
+            
+            # Normalize longitude to [-180, 180]
             while lon < -180:
                 lon += 360
             while lon > 180:
                 lon -= 360
-            iLon = int(np.round(lon * 4))
-            return (iLat << 16) | (iLon & 0xffff)
+            
+            i_lon = int(np.round(lon * 4))
+            return (i_lat << 16) | (i_lon & 0xFFFF)
 
+        # Build compact catalogue entry
         catalogue_event = {
             "id": full_event["id"],
             "event_type": self.eventtype,
@@ -734,138 +1358,36 @@ class EventletFactory:
             "min_value": full_event["min_value"],
             "total_area": full_event["total_area"],
             "ocean_only": ocean_only,
-            "pixel_set": [packPixelToInt(*coord) for coord in pixel_set],
+            "pixel_set": [pack_pixel_to_int(*coord) for coord in pixel_set],
         }
 
-        with open(f"{self.output_path}/events-{self.eventtype}-{all_times[0].strftime('%Y')}.jsonl", "a") as f:
+        # Write outputs
+        year = all_times[0].strftime('%Y')
+        catalogue_path = f"{self.output_path}/events-{self.eventtype}-{year}.jsonl"
+        event_path = f"{self.output_path}/events/event-{event_id}.json"
+
+        with open(catalogue_path, "a") as f:
             f.write(json.dumps(round_floats(catalogue_event)) + "\n")
-        with open(f"{self.output_path}/events/event-{event_id}.json", "w") as f:
+        
+        with open(event_path, "w") as f:
             f.write(json.dumps(round_floats(full_event)) + "\n")
 
-
-def formatTime(t):
-    if isinstance(t, np.datetime64):
-        return np.datetime_as_string(t, unit="s") + "Z"
-    elif isinstance(t, pd.Timestamp):
-        return t.isoformat() + "Z"
-    elif isinstance(t, str):
-        return t + "Z"
-    else:
-        raise ValueError(f"Unsupported time type: {type(t)}")
-
-
-import hashlib
-
-
-def to_serialisable(obj):
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, (np.integer, np.int32, np.int64)):
-        return int(obj)
-    elif isinstance(obj, (np.floating, np.float32, np.float64)):
-        return float(obj)
-    elif isinstance(obj, set):
-        return list(obj)
-    elif isinstance(obj, (list, tuple)):
-        return [to_serialisable(i) for i in obj]
-    elif isinstance(obj, dict):
-        return {k: to_serialisable(v) for k, v in obj.items()}
-    else:
-        return obj
-
-
-def round_floats(obj):
-    if isinstance(obj, float):
-        return round(obj, 4)
-    elif isinstance(obj, dict):
-        return {k: round_floats(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [round_floats(x) for x in obj]
-    else:
-        return obj
-
-
-def stable_cluster_hash(time, centroid):
-    """
-    Stable 32-bit integer hash based on time and centroid.
-    Safe for JavaScript and anything else that isnae mad.
-    """
-    s = f"{str(time)}_{centroid[0]:.6f}_{centroid[1]:.6f}"
-    hash_bytes = hashlib.sha256(s.encode("utf-8")).digest()
-    return int.from_bytes(hash_bytes[:4], byteorder="big")  # 32 bits
-
-
-def get_id(eventtype, time, centroid, threshold, radius):
-    """
-    Generate a stable ID for an event based on time and centroid.
-    This is a simple hash function that combines the time and centroid coordinates.
-    """
-    # snap to nearest 0.001°
-    lat = round(centroid[0], 3)
-    lon = round(centroid[1], 3)
-
-    # shift negatives to positives
-    lat_code = int(round((lat + 90) * 1000))  # 0 → 180000 range
-    lon_code = int(round((lon + 180) * 1000))  # 0 → 360000 range
-
-    thresh = int(round(threshold - 273.15)*10)
-    if thresh < 0:
-        thresh = 900-thresh
-    radius = int(round(radius))
-
-    return f"{eventtype}{time.strftime('%Y%m%d')}{thresh:03d}{radius:05d}{lat_code:06d}{lon_code:06d}"
-
-
-def downstream_worker(q, clusterer):
-    while True:
-        ev = q.get()
-        if ev is None:
-            break  # shutdown signal
-        clusterer.process_eventlet(ev)
-        q.task_done()
-
-
-def load_data(data_path, ref_path, land_sea_mask_path):
-    ds = xr.open_mfdataset(data_path)
-    ref = xr.open_dataset(ref_path)
-    if land_sea_mask_path:
-        land_sea_mask = xr.open_dataset(land_sea_mask_path)
-    else:
-        land_sea_mask = None
-
-    def shift_longitudes(da):
-        da = da.assign_coords(longitude=(((da.longitude + 180) % 360) - 180))
-        return da.sortby("longitude")
-
-    return (
-        shift_longitudes(ds["t2m"]),
-        shift_longitudes(ref["t2m"]),
-        shift_longitudes(land_sea_mask["lsm"]) if land_sea_mask is not None else None,
-    )
-
-
-import os
-
-
 def main():
-
-    # for dbscan in [False, True]:
-    #     for perc in [98, 99]:
     stat = "max"
     perc = "99.0"
     thresh = 28
     nr = 200
     heatwave = True
     
-    for ms in [30, 20, 10, 5]:
-        for nr in [160, 180, 200, 250]:
-            for dbscan in [False, True]:
+    for ms in [30]:
+        for nr in [200]:
+            for dbscan in [False]:
                 data_var, ref_data, land_sea_mask = load_data(
                     f"/data/{stat}/era5_daily_{stat}_temperature*2024.nc",
                     f"/data/climatology/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
                     f"/data/era5_land_sea_mask.nc",
                 )
-                time_dim = data_var["valid_time"]
+                time_dim = data_var["valid_time"][90:200]
                 out_path = f"/data/output-{'dbscan' if dbscan else 'walk'}-{ms}-{stat}-{perc}-{thresh}-nr{nr}-{heatwave and 'hw' or 'cw'}"
                 os.makedirs(out_path, exist_ok=True)
                 os.makedirs(f"{out_path}/events", exist_ok=True)
@@ -885,7 +1407,7 @@ def main():
                     min_samples=ms,
                     output_path=out_path,
                     use_dbscan=False,
-                    last_slice=last_slice,
+                    last_slice_data=last_slice,
                     eventtype='hot' if heatwave else 'cold',
                     land_only=land_sea_mask is not None,
                 )
