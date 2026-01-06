@@ -27,38 +27,41 @@ for stat in ["min", "max", "mean"]:
     # missing years
     missing_years = sorted(expected_years - existing_years)
     for year in missing_years:
-        print(f"Downloading {year}...")
-        dataset = "derived-era5-single-levels-daily-statistics"
-        request = {
-            "product_type": "reanalysis",
-            "variable": [
-                "2m_temperature"
-            ],
-            "year": f"{year}",
-            "month": [
-                "01", "02", "03",
-                "04", "05", "06",
-                "07", "08", "09",
-                "10", "11", "12"
-            ],
-            "day": [
-                "01", "02", "03",
-                "04", "05", "06",
-                "07", "08", "09",
-                "10", "11", "12",
-                "13", "14", "15",
-                "16", "17", "18",
-                "19", "20", "21",
-                "22", "23", "24",
-                "25", "26", "27",
-                "28", "29", "30",
-                "31"
-            ],
-            "daily_statistic": f"daily_{stat}",
-            "time_zone": "utc+00:00",
-            "frequency": "1_hourly"
-        }
-        target = f"/data/{stat}/era5_daily_{stat}_temperature_{year}.nc"
-        c.retrieve(
-            dataset, request, target
-        )
+        print(f"Downloading {year}: {stat}...")
+        try:
+            dataset = "derived-era5-single-levels-daily-statistics"
+            request = {
+                "product_type": "reanalysis",
+                "variable": [
+                    "2m_temperature"
+                ],
+                "year": f"{year}",
+                "month": [
+                    "01", "02", "03",
+                    "04", "05", "06",
+                    "07", "08", "09",
+                    "10", "11", "12"
+                ],
+                "day": [
+                    "01", "02", "03",
+                    "04", "05", "06",
+                    "07", "08", "09",
+                    "10", "11", "12",
+                    "13", "14", "15",
+                    "16", "17", "18",
+                    "19", "20", "21",
+                    "22", "23", "24",
+                    "25", "26", "27",
+                    "28", "29", "30",
+                    "31"
+                ],
+                "daily_statistic": f"daily_{stat}",
+                "time_zone": "utc+00:00",
+                "frequency": "1_hourly"
+            }
+            target = f"/data/{stat}/era5_daily_{stat}_temperature_{year}.nc"
+            c.retrieve(
+                dataset, request, target
+            )
+        except:
+            print(f"Trouble downloading {year}: {stat}")
