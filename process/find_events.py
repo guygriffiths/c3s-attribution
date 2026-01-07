@@ -566,7 +566,7 @@ class Eventlet:
 
         return safe_alphashape(target_slice, alpha)
 
-    def overlaps(self, coords, eps=1e-6):
+    def overlaps(self, coords, time, eps=1e-6):
         """
         Check if any of the provided coordinates overlap with the eventlet's current slice.
         
@@ -581,7 +581,8 @@ class Eventlet:
             True if any points are within eps distance of current slice points
         """
         test = np.array(coords, dtype=np.float32)  # shape (N, 2)
-        current = self.slices[-1]  # shape (M, 2)
+        idx = (self.times.index(time) - 1) if (time in self.times) and (self.times.index(time) > 0) else -1
+        current = self.slices[idx]  # shape (M, 2)
 
         # Compute pairwise absolute differences for lat and lon
         # Broadcast shapes: (N,1,2) and (1,M,2) -> (N,M,2)
@@ -1007,7 +1008,7 @@ class EventletFactory:
         used_blobs = set()
         for i, blob in enumerate(blobs):
             for ev in self.active:
-                if ev.overlaps(blob):
+                if ev.overlaps(blob, time):
                     # Extract values for these coordinates
                     values = [
                         data_slice.sel(latitude=lat, longitude=lon).values.item()
@@ -1294,6 +1295,19 @@ class EventletFactory:
             -1, all_coords.shape[1]
         )
         pixel_set = unique_coords.tolist()
+        # Loop over unique coords to calculate total area, weighted by cosine of latitude
+        def calculate_area(pixel_set):
+            total_area = 0.0
+            for lat, lon in pixel_set:
+                # Approximate area of 0.25 x 0.25 degree grid cell at given latitude
+                lat_rad = np.radians(lat)
+                cell_area = (
+                    (111.32 * 0.25) * (111.32 * 0.25 * np.cos(lat_rad))
+                )  # in km^2
+                total_area += cell_area
+            return total_area
+        total_area = calculate_area(pixel_set)
+        areas = [calculate_area(slice.tolist()) for slice in ev.slices]
 
         # Compute overall event geometry
         total_region_shape = safe_alphashape(unique_coords, alpha=1.0)
@@ -1309,11 +1323,8 @@ class EventletFactory:
             "values": to_serializable(ev.values),
             "centroids": to_serializable(centroids),
             "bbox": to_serializable(bbox),
-            "total_area": total_region_shape.area if total_region_shape else 0,
-            "areas": to_serializable([
-                ev.hull(i).area if ev.hull(i) is not None else 0
-                for i in range(len(ev.slices))
-            ]),
+            "total_area": total_area,
+            "areas": to_serializable(areas),
             "max_values": max_values,
             "max_value": max_value,
             "mean_values": mean_values,
