@@ -90,9 +90,8 @@ const downloadEvent = () => {
 			v-tooltip="
 				props.selectedEvent.event_type === 'hot'
 					? $l.maxTemp
-					: props.selectedEvent.event_type === 'cold'
-						? $l.minTemp
-						: $l.meanTemp
+					:  $l.minTemp
+						
 			"
 		>
 			<IconTemperaturePlus

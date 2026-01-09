@@ -37,6 +37,11 @@ interface State {
 	mainHelpOpen: boolean // Whether the main help dialog is open
 
 	focusVariable: Variable
+	sortDesc: boolean
+
+	axisMode: 'full' | 'most' | 'event'
+
+	aboutSectionOpen: string | null
 }
 
 export const WMS_ROOT = 'http://localhost:8080/ncWMS2/wms'
@@ -81,10 +86,15 @@ export const useStore = defineStore('main', {
 
 			hamburgerMenuOpen: false,
 
-			focusVariable: 'size',
+			focusVariable: 'duration',
+			sortDesc: true,
 
 			mainHelpOpen: false,
-		}
+
+			axisMode: 'full',
+
+			aboutSectionOpen: null
+	 	}
 	},
 	getters: {
 		exploreGlobal: (state) => {

@@ -37,12 +37,11 @@ const dateNumber = computed(() => {
 		? props.timeStore.selectedTime.getUTCDate()
 		: null
 })
-const sortDesc = ref(true)
 const toggleAscDesc = () => {
-	sortDesc.value = !sortDesc.value
+	props.mainStore.sortDesc = !props.mainStore.sortDesc
 }
 const sortFunc = computed(() => {
-	if (sortDesc.value) {
+	if (props.mainStore.sortDesc) {
 		if (props.mainStore.focusVariable === 'duration') {
 			return (a: ExtremeEvent, b: ExtremeEvent) =>
 				props.eventStore.durationForEvent(b) -
@@ -143,9 +142,9 @@ const sortFunc = computed(() => {
 			<button
 				@click="toggleAscDesc"
 				class="cycle-sort-button glassy"
-				v-tooltip="sortDesc ? $l.sortAscending : $l.sortDescending"
+				v-tooltip="props.mainStore.sortDesc ? $l.sortAscending : $l.sortDescending"
 			>
-				<IconSortDescendingSmallBig v-if="sortDesc" aria-hidden="true" />
+				<IconSortDescendingSmallBig v-if="props.mainStore.sortDesc" aria-hidden="true" />
 				<IconSortAscendingSmallBig v-else aria-hidden="true" />
 			</button>
 		</div>
@@ -159,6 +158,7 @@ const sortFunc = computed(() => {
 				/>
 			</div>
 		</div>
+		<slot />
 	</div>
 </template>
 

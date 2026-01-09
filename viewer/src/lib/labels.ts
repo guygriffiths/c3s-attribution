@@ -2,18 +2,20 @@ import { TimeLocaleDefinition } from 'd3'
 import { App, computed, ComputedRef, inject, InjectionKey } from 'vue'
 
 const langNames: Record<Language, string> = {
-	en: 'English'
+	en: 'English',
 }
 
 const labelsEn = {
 	title: 'C3S Extreme Events Viewer',
 	events: 'Events',
-	duration: 'Duration',
+	help: 'Help',
+	aboutInfo: 'About this tool',
+	duration: 'Duration (days)',
 	time: 'Date',
 	from: 'From',
 	to: 'To',
-	size: 'Area',
-	intensity: 'Temperature',
+	size: 'Area (km²)',
+	intensity: 'Temperature (°C)',
 	download: 'Download',
 	showTimePanel: 'Show time panel',
 	hideTimePanel: 'Hide time panel',
@@ -41,8 +43,8 @@ const labelsEn = {
 	resetZoom: 'Reset zoom',
 	hamburger: 'Filters and settings',
 	exploreGlobal: 'Explore global events',
-	selectByPoint: 'Select events at a point',
-	selectByRegion: 'Select events in a region',
+	selectByPoint: 'Explore events at a point',
+	selectByRegion: 'Explore events in a region',
 	selectTimeMachineMode: 'Time Machine - explore events over time',
 	selectHeatmapMode: 'Overview - explore events by location',
 	lessThan: 'less than or equal to',
@@ -53,9 +55,9 @@ const labelsEn = {
 	sizeNumberOfSquareKilometers: 'Enter size in km² for filter',
 	intensityCycle: 'Cycle temperature intensity mode (min/mean/max temperature)',
 	intensityNumberOfDegrees: 'Enter temperature in °C for filter',
-	selectAllTemperatureEvents: 'Select all extreme temperature events',
-	selectHeatwaveEvents: 'Select extreme heat events',
-	selectColdwaveEvents: 'Select extreme cold events',
+	selectAllTemperatureEvents: 'Explore all extreme temperature events',
+	selectHeatwaveEvents: 'Explore extreme heat events',
+	selectColdwaveEvents: 'Explore extreme cold events',
 	heatwaveEvents: 'extreme heat events',
 	coldwaveEvents: 'extreme cold events',
 	allTemperatureEvents: 'extreme temperature events',
@@ -80,14 +82,13 @@ const labelsEn = {
 	hideEventBars: 'Hide individual events',
 	downloadEventData: 'Download event data as JSON',
 	minTemp: 'Minimum Temperature',
-	meanTemp: 'Mean Temperature',
 	maxTemp: 'Maximum Temperature',
 	minTempDaily: 'Daily Minimum Temperature (°C)',
 	meanTempDaily: 'Daily Mean Temperature (°C)',
 	maxTempDaily: 'Daily Maximum Temperature (°C)',
 	temperature: 'Temperature (°C)',
 	pixelCount: 'Number of grid cells',
-	pixelDistDaily: 'Daily pixel temperature distribution',
+	pixelDistDaily: 'Daily grid cell temperature distribution',
 	durationHisto: 'Event distribution by duration',
 	intensityHisto: 'Event distribution by temperature',
 	sizeHisto: 'Event distribution by area',
@@ -104,7 +105,7 @@ const labelsEn = {
 	nEvents: 'Number of Events',
 	loading: 'Loading data...',
 	noEvents: 'No events found for the selected filters and time range.',
-	help: 'Show welcome information',
+	welcome: 'Show welcome information',
 	months: {
 		jan: 'Jan',
 		feb: 'Feb',
@@ -187,7 +188,7 @@ const LabelsKey: InjectionKey<ComputedRef<Labels>> = Symbol('labels')
 function useLabels() {
 	return inject(
 		LabelsKey,
-		computed(() => labels.en)
+		computed(() => labels.en),
 	)
 }
 
@@ -195,9 +196,8 @@ function createI18n(langFunc: () => Language) {
 	return (app: App) =>
 		app.provide(
 			LabelsKey,
-			computed(() => labels[langFunc()])
+			computed(() => labels[langFunc()]),
 		)
 }
 
 export { createI18n, labels, langNames, locales, useLabels }
-

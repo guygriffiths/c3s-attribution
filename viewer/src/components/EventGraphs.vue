@@ -5,7 +5,7 @@ import * as d3 from 'd3'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useTimeStore } from '@/store/timeStore'
-import { IconDimensions, IconTemperature } from '@tabler/icons-vue'
+import { IconDimensions, IconTemperatureMinus, IconTemperaturePlus } from '@tabler/icons-vue'
 import { niceNumber } from '@/lib/utils'
 import { dateStr } from '@/lib/time-utils'
 import { useLabels } from '@/lib/labels'
@@ -121,11 +121,16 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 					{{ niceNumber(intensityScale.domain()[0]) }}
 				</div>
 				<span class="unit-icon"
-					><IconTemperature class="icon" :class="{ [eventType]: true }" />{{
+					>
+					<IconTemperaturePlus v-if="selectedEvent?.event_type === 'hot'" class="icon" :class="{ [eventType]: true }" />
+					<IconTemperatureMinus v-else class="icon" :class="{ [eventType]: true }" />
+					
+					{{
 						selectedEvent?.event_type === 'hot'
 							? eventStore.heatIntensityUnits
 							: eventStore.coldIntensityUnits
-					}}</span
+					}}
+					</span
 				>
 				<div class="label mono">
 					{{ niceNumber(intensityScale.domain()[1]) }}
@@ -242,6 +247,7 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 				</g>
 			</svg>
 		</div>
+		<slot></slot>
 	</div>
 </template>
 

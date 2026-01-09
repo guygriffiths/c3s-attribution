@@ -159,9 +159,9 @@ fetchAndIndexWorker.onmessage = (
 		nextTick(async () => {
 			await new Promise((resolve) => requestAnimationFrame(resolve))
 			await new Promise((resolve) => requestAnimationFrame(resolve))
-			if(year === latestYear) {
-				mainStore.mainHelpOpen = true
-			}
+			// if(year === latestYear) {
+			// 	mainStore.mainHelpOpen = true
+			// }
 			mainStore.setLoadingDone()
 		})
 	}

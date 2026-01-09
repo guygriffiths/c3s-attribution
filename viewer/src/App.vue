@@ -7,6 +7,7 @@ import AppFooter from '@/components/common/Footer.vue'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
+import HelpOverlay from './components/util/HelpOverlay.vue'
 
 const l = useLabels()
 const store = useStore()
@@ -36,14 +37,70 @@ onMounted(() => {
 		:progress="50"
 		:show-progress="false"
 	></loading>
+	<HelpOverlay />
 	<!-- <AppHeader id="header" /> -->
 	<router-view id="main"></router-view>
 	<!-- <AppFooter id="footer" /> -->
+	<svg width="0" height="0">
+		<defs>
+			<filter id="shepherd-blur">
+				<feGaussianBlur in="SourceGraphic" stdDeviation="8" />
+			</filter>
+		</defs>
+	</svg>
 </template>
 
 <style lang="scss">
 @forward '@/assets/styles/main.scss';
 @use '@/assets/styles/scssVars.module.scss' as *;
+
+.shepherd-element {
+	margin: -12px !important;
+	background: var(--panel-bg) !important;
+}
+
+.shepherd-content {
+	background: var(--panel-bg) !important;
+
+	.shepherd-header {
+		background-color: rgba(0, 0, 0, 0.1) !important;
+		display: flex !important;
+		align-items: center !important;
+
+
+		button.shepherd-cancel-icon {
+			padding: 0 !important;
+			margin: 0 !important;
+			width: 2rem !important;
+			height: 2rem !important;
+			display: flex !important;
+			align-items: center !important;
+			justify-content: center !important;
+			line-height: 1 !important;
+			color: var(--text-on-primary) !important;
+
+			@extend .glassy;
+			@extend .color;
+
+			box-shadow: none !important;
+		}
+
+		/* Target the span with the X */
+		button.shepherd-cancel-icon span {
+			display: flex !important;
+			align-items: center !important;
+			justify-content: center !important;
+			line-height: 1 !important;
+			font-size: 1.5rem !important;
+			margin: 0 !important;
+			padding: 0 !important;
+		}
+	}
+
+	.shepherd-text {
+		background: var(--panel-bg) !important;
+	}
+}
 
 #loading-overlay {
 	position: fixed;

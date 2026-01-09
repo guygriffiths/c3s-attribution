@@ -1016,7 +1016,7 @@ const dateTranslate = computed(() => {
 			{{ dayStr(selectedDay, selectedYear, isOverview) }}
 		</div>
 		<div
-			class="controls"
+			class="controls event-graphs-help"
 			:class="{
 				hidden: isOverview,
 				zoom: isZoom,
@@ -1324,7 +1324,7 @@ const dateTranslate = computed(() => {
 												(b) => b.eventId === props.selectedEvent?.id,
 											),
 										)"
-										class="event-bar selected"
+										class="event-bar selected event-graphs-help"
 										:data-id="`${box.startX}-${box.endX}`"
 										:class="{
 											[box.type]: true,
@@ -1433,6 +1433,7 @@ const dateTranslate = computed(() => {
 				:style="`height: ${bottomRowHeight};`"
 			></div>
 		</div>
+		<slot></slot>
 	</div>
 </template>
 

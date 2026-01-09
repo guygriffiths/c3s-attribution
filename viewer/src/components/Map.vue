@@ -480,10 +480,11 @@ const addEventPanes = () => {
 				})
 			}
 			ctx.closePath()
-			const alpha = Math.min(
-				0.25,
-				Math.max(0.1, 1000 / regionFilteredEvents.length),
-			)
+			const alpha = 0.1
+			// Math.min(
+			// 	0.25,
+			// 	Math.max(0.0, 250 / globalHeatmapEvents.value.length),
+			// )
 			ctx.fillStyle = (
 				event.event_type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
 			)

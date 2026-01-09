@@ -99,11 +99,6 @@ P1
 Done:
 * All the stuff you can see.
 
-To come:
-* Time range selection for heatmap view
-* Greater interactivity with analytics charts (zoom/pan, etc, select-similar events)
-* Logos
-
 P2
 --
 * Dual filters (e.g. 4 < duration < 10)
@@ -115,9 +110,10 @@ P2
 * User-uploadable regions
 * Save user settings in local storage, including custom regions.
 * Settle on the most useful definitions
+* Greater interactivity with analytics charts (zoom/pan, etc, select-similar events)
 * Attribution!!!
 * Smart similar-event selection on scatters
-
+* Filter max pixels out of region filters
 
 Less crowded graphs
 Add lots of text/explanation.
@@ -126,5 +122,12 @@ Add lots of text/explanation.
 Mark's feedback
 * Needs documentation, beginner's guide
 * Add features list of what it can do (to become achievements)
+* Loading spinner properly
+* Year on the event date
+* Expand button on the multi-graph for full-screen
 
+Missing close button
+Show all by default
+Draggable filter box
 
+WHO BROKE THE BACKGROUND MAPS?!?!

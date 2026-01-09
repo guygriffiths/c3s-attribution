@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { IconCalendarTime, IconEyePin } from '@tabler/icons-vue'
+import { IconCalendarTime, IconEyeClosed, IconEyePin } from '@tabler/icons-vue'
 import { useLabels } from '@/lib/labels'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 const $l = useLabels()
 
@@ -12,7 +12,11 @@ const timeMachineIcon = ref<SVGElement | null>(null)
 onMounted(() => {
 	const pupilElement = eyecon.value?.querySelector('path:first-child')
 	pupilElement?.setAttribute('transition', `transform 0.5s ease;`)
-	// const handsElement = timeMachineIcon.value?.querySelector('path:last-child')
+	const handsElement = timeMachineIcon.value?.querySelector('path:last-child')
+
+	handsElement?.setAttribute('transition', `transform 0.5s ease;`)
+	handsElement?.setAttribute('transform', `rotate(-5)`)
+	let degCounter = 0
 	window.addEventListener('mousemove', (e: MouseEvent) => {
 		if (pupilElement) {
 			if (mode.value === 'heatmap') {
@@ -34,10 +38,41 @@ onMounted(() => {
 				// handsElement?.setAttribute('transform', `rotate(0)`)
 			} else if (mode.value === 'timemachine') {
 				pupilElement.setAttribute('transform', `translate(0, 0)`)
+				if (handsElement) {
+					degCounter = (degCounter + 0.1) % 360
+					handsElement.setAttribute(
+						'transform',
+						`translate(18 18) rotate(${degCounter}) translate(-18 -18)`,
+					)
+				}
 			}
 		}
 	})
 })
+
+const awake = ref(true)
+window.addEventListener('focus', () => (awake.value = true))
+window.addEventListener('mouseover', () => (awake.value = true))
+window.addEventListener('blur', () => (awake.value = false))
+
+const blink = () => {
+	awake.value = false
+	setTimeout(() => {
+		awake.value = true
+	}, 100)
+}
+
+// When run, this will blink the eye every 2 to 5 minutes
+function scheduleBlink() {
+  const delay = (2 + Math.random() * 3) * 60 * 1000;
+  setTimeout(() => {
+    blink();
+    scheduleBlink();
+  }, delay);
+}
+
+// Start the loop
+scheduleBlink();
 </script>
 
 <template>
@@ -72,6 +107,15 @@ onMounted(() => {
 				:class="{ active: mode === 'heatmap' }"
 				size="32"
 				aria-hidden="true"
+				v-if="awake"
+			/>
+			<IconEyeClosed
+				ref="eyecon"
+				class="icon heatmap-icon eye"
+				:class="{ active: mode === 'heatmap' }"
+				size="32"
+				aria-hidden="true"
+				v-else
 			/>
 			<!-- <div class="overview-icon">
 				<IconEye

@@ -29,6 +29,7 @@ import {
 	IconLayersIntersect,
 	IconEye,
 	IconEyePin,
+	IconInfoOctagon,
 } from '@tabler/icons-vue'
 import EventDayPanel from './EventDayPanel.vue'
 import {
@@ -43,6 +44,8 @@ import {
 	setEventTypeFilter,
 	setTimeRangeFilter,
 } from '@/lib/eventsDB'
+import HelpButton from './util/HelpButton.vue'
+import { helpMe } from '@/lib/help'
 
 const $l = useLabels()
 const store = useStore()
@@ -77,7 +80,7 @@ watch(
 
 // Summary events. These are filtered spatially, manually, and temporally (either at a day - timemchine, or over a range - heatmap)
 const summaryEvents = ref([] as ExtremeEvent[])
-onTimeFilterChanged(() => {
+const updateSummaryEvents = () => {
 	if (store.viewMode === 'timemachine') {
 		summaryEvents.value = getCurrentEvents(timeStore.selectedTime, true)
 	} else {
@@ -92,7 +95,10 @@ onTimeFilterChanged(() => {
 			}
 		}
 	}
-})
+}
+onTimeFilterChanged(updateSummaryEvents)
+onSpatialFilterChanged(updateSummaryEvents)
+
 watch(
 	() => [store.viewMode, timeStore.selectedTime],
 	() => {
@@ -213,9 +219,10 @@ const selectedDayIdx = computed((): number | null => {
 					</span>
 					Explorer
 					<button
+						v-if="!store.isFocused"
 						class="expand glassy color"
-						@click="store.mainHelpOpen = !store.mainHelpOpen"
-						v-tooltip="$l.help"
+						@click="store.mainHelpOpen = true"
+						v-tooltip="$l.welcome"
 						:class="{ disabled: store.mainHelpOpen }"
 					>
 						<IconInfoSquareRounded size="20" aria-hidden="true" />
@@ -223,6 +230,14 @@ const selectedDayIdx = computed((): number | null => {
 				</h1>
 			</div>
 			<div class="welcome" :class="{ hidden: !store.mainHelpOpen }">
+				<button
+					class="expand glassy color close"
+					@click="store.mainHelpOpen = false"
+					v-tooltip="$l.close"
+					:class="{ disabled: !store.mainHelpOpen }"
+				>
+					<IconX aria-hidden="true" />
+				</button>
 				<div class="scroll-wrap">
 					<p>
 						Welcome to the C3S Extreme Event Explorer! Explore extreme
@@ -236,9 +251,9 @@ const selectedDayIdx = computed((): number | null => {
 						overview of the main features is provided below.
 					</p>
 					<h3>
-						<button class="glassy color decoration">
+						<span class="button glassy color decoration">
 							<IconCalendarTime size="24" aria-hidden="true" />
-						</button>
+						</span>
 						Time Machine - Navigate through time effortlessly and explore
 						individual events in detail
 					</h3>
@@ -252,7 +267,7 @@ const selectedDayIdx = computed((): number | null => {
 									Click and drag the reel to scrub through the selected year
 								</li>
 								<li>
-									Use the navigation buttons to step through time, or animate
+									Use the navigation spans to step through time, or animate
 									the passing of time
 								</li>
 								<li>
@@ -280,9 +295,9 @@ const selectedDayIdx = computed((): number | null => {
 						</li>
 					</ul>
 					<h3>
-						<button class="glassy color decoration">
+						<span class="button glassy color decoration">
 							<IconEyePin size="24" aria-hidden="true" />
-						</button>
+						</span>
 						Overview - Visualise thousands of historical events simultaneously
 					</h3>
 					<ul>
@@ -375,7 +390,7 @@ const selectedDayIdx = computed((): number | null => {
 		<div
 			id="hamburger-menu"
 			class="panel top"
-			:class="{ active: store.hamburgerMenuOpen }"
+			:class="{ active: store.hamburgerMenuOpen && !store.isFocused }"
 			:inert="!store.hamburgerMenuOpen ? 'true' : undefined"
 		>
 			<EventTypeToggle
@@ -383,12 +398,14 @@ const selectedDayIdx = computed((): number | null => {
 				@update:model-value="eventStore.setEventTypeMode"
 			/>
 			<FilterPanel v-model="eventStore.filters" />
-			<!-- <h1>Filters</h1>
-			<h1>Animation speed</h1> -->
+			<button class="about-button glassy color" @click="helpMe($event, 'aboutInfo')" v-tooltip="$l.aboutInfo">
+				<IconInfoOctagon size="24" aria-hidden="true" />{{ $l.aboutInfo }}
+			</button>
+			<HelpButton help="hamburgerMenu" />
 		</div>
 
 		<!-- Event Panel -->
-		<!-- This is the panel on the left with graphs for an individual event -->
+		<!-- This is the panel on the left with graphs for the selected event -->
 		<EventDayPanel
 			id="event-day-panel"
 			:selected-event="eventStore.selectedEvent"
@@ -402,12 +419,14 @@ const selectedDayIdx = computed((): number | null => {
 					? 'true'
 					: undefined
 			"
-		/>
+		>
+			<HelpButton help="eventDayPanel" />
+		</EventDayPanel>
 		<EventGraphs
 			id="event-graphs"
 			:selected-event="eventStore.selectedEvent"
 			:event-store="eventStore"
-			class="panel left chart"
+			class="panel left chart event-graphs-help"
 			:class="{
 				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
 			}"
@@ -421,7 +440,7 @@ const selectedDayIdx = computed((): number | null => {
 					timeStore.selectedTime = new Date(date)
 				}
 			"
-		/>
+		><HelpButton help="eventGraphs" /></EventGraphs>
 
 		<!-- Multi-Event Panel -->
 		<!-- This is the panel on the right with rankings and histograms -->
@@ -471,10 +490,6 @@ const selectedDayIdx = computed((): number | null => {
 			><button
 				id="multimax-button"
 				class="glassy color"
-				:class="{
-					hidden: store.viewMode !== 'heatmap',
-					close: store.showMultiPanel,
-				}"
 				:inert="store.viewMode !== 'heatmap' ? 'true' : undefined"
 				@click="store.maximizeMultiPanel = !store.maximizeMultiPanel"
 				v-tooltip="
@@ -496,6 +511,7 @@ const selectedDayIdx = computed((): number | null => {
 					v-else
 				/>
 			</button>
+			<HelpButton help="multiEventPanel" />
 		</MultiEventSmartPanel>
 
 		<!-- Event Info Panel -->
@@ -550,6 +566,7 @@ const selectedDayIdx = computed((): number | null => {
 					: undefined
 			"
 		>
+			<HelpButton help="eventInfo" />
 		</EventInfoPanel>
 		<SelectedEventInfoPanel
 			id="selected-event-info-panel"
@@ -566,7 +583,9 @@ const selectedDayIdx = computed((): number | null => {
 					? 'true'
 					: undefined
 			"
-		/>
+		>
+			<HelpButton help="selectedEventInfo" />
+		</SelectedEventInfoPanel>
 
 		<!-- Time Panel -->
 		<div
@@ -599,7 +618,8 @@ const selectedDayIdx = computed((): number | null => {
 				@playing="timeStore.isPlaying = true"
 				@paused="timeStore.isPlaying = false"
 				@hover="eventStore.setHoveringEvent"
-			></TimeReel>
+			>
+			</TimeReel>
 			<button
 				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
 				class="panel-expand glassy color"
@@ -611,7 +631,7 @@ const selectedDayIdx = computed((): number | null => {
 					size="20"
 					aria-hidden="true"
 				/>
-				<IconX v-else size="16" aria-hidden="true" />
+				<IconX v-else aria-hidden="true" />
 			</button>
 			<button
 				v-if="
@@ -628,6 +648,7 @@ const selectedDayIdx = computed((): number | null => {
 			>
 				<IconChartBar class="bar-icon" aria-hidden="true" />
 			</button>
+			<HelpButton help="timeReel" />
 		</div>
 
 		<!-- Event Window -->
@@ -698,6 +719,16 @@ const selectedDayIdx = computed((): number | null => {
 				pointer-events: none;
 			}
 
+			&.close {
+				bottom: unset;
+				top: 0;
+				transform: translate(0, 0);
+				border-radius: $borderRadius;
+				border-top-left-radius: 0;
+				border-bottom-right-radius: 0;
+				box-shadow: none;
+			}
+
 			svg {
 				margin: 0;
 			}
@@ -764,7 +795,7 @@ const selectedDayIdx = computed((): number | null => {
 				margin: 0.5rem 0 0.5rem 0;
 				display: flex;
 				align-items: center;
-				button.decoration {
+				.button.decoration {
 					margin-right: 0.5rem;
 				}
 			}
@@ -772,13 +803,7 @@ const selectedDayIdx = computed((): number | null => {
 				padding-left: 1.25rem;
 				margin: 0;
 			}
-			button.decoration {
-				pointer-events: none;
-				margin: 0;
-				padding: 2px;
-				width: 2rem;
-				box-shadow: none;
-			}
+			
 			button.collapse {
 				pointer-events: all;
 				height: 1.25rem;
@@ -842,6 +867,13 @@ const selectedDayIdx = computed((): number | null => {
 		flex-direction: column;
 		gap: $panelMargin;
 		z-index: 350;
+
+		.about-button {
+			margin-top: auto;
+			display: flex;
+			align-items: center !important;
+			gap: 0.5rem;
+		}
 	}
 
 	$eventGap: calc(
@@ -945,7 +977,9 @@ const selectedDayIdx = computed((): number | null => {
 
 		&.maximize {
 			width: calc(100% - 2 * $panelMargin);
-			height: calc(100vh - 3 * $panelMargin - #{$smallTimePanelHeight} - 3rem);
+			height: calc(
+				100vh - 4 * $panelMargin - #{$smallTimePanelHeight} - $headerHeight
+			);
 			right: $panelMargin;
 			bottom: calc(2 * $panelMargin + #{$smallTimePanelHeight});
 		}
@@ -1018,30 +1052,9 @@ const selectedDayIdx = computed((): number | null => {
 		background: transparent;
 		backdrop-filter: none;
 
-		.bar-icon {
-			// Manually tweak this icon so that it looks like an event bars icon with the bars offset
-			// rather than the normal bar chart icon
-			transform: rotate(-90deg);
-
-			path:first-child {
-				transform: scaleY(1.5);
-				transform-box: fill-box; /* or view-box */
-				transform-origin: center;
-				vector-effect: non-scaling-stroke;
-			}
-			path:nth-child(3) {
-				transform: scaleY(1) translateY(-3px);
-				transform-box: fill-box; /* or view-box */
-				transform-origin: center;
-				vector-effect: non-scaling-stroke;
-			}
-			path:last-child {
-				display: none;
-			}
-		}
-
 		&.expanded {
 			height: calc(100% - 2 * $panelMargin);
+			z-index: 350;
 		}
 
 		&.event {
@@ -1118,17 +1131,6 @@ const selectedDayIdx = computed((): number | null => {
 		}
 	}
 
-	#multi-button.close,
-	#hamburger-button.close,
-	#info-button.close {
-		border-radius: $borderRadius;
-		border-top-left-radius: 0;
-		border-bottom-right-radius: 0;
-		width: 1.5rem;
-		height: 1.5rem;
-		padding: 0rem;
-		box-shadow: none;
-	}
 	#event-window {
 		position: absolute;
 		top: $panelMargin;
@@ -1152,6 +1154,22 @@ const selectedDayIdx = computed((): number | null => {
 			&.eventPanelOn {
 				width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
 			}
+		}
+	}
+
+	.panel {
+		.help-button {
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity $animTime $animEase;
+		}
+	}
+
+	.panel:hover,
+	.panel:focus {
+		.help-button {
+			opacity: 1;
+			pointer-events: all;
 		}
 	}
 }

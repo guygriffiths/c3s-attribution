@@ -63,10 +63,10 @@ const minVar = (focus: string, axisMode: string) => {
 				: eventStore.intensityRange[0]
 }
 const xmin = computed(() => {
-	return minVar(store.focusVariable, axisMode.value)
+	return minVar(store.focusVariable, store.axisMode)
 })
 const ymin = computed(() => {
-	return minVar(scatterY.value, axisMode.value)
+	return minVar(scatterY.value, store.axisMode)
 })
 const maxVar = (focus: string, axisMode: string) => {
 	return focus === 'duration'
@@ -100,10 +100,10 @@ const maxVar = (focus: string, axisMode: string) => {
 							)
 }
 const xmax = computed(() => {
-	return maxVar(store.focusVariable, axisMode.value)
+	return maxVar(store.focusVariable, store.axisMode)
 })
 const ymax = computed(() => {
-	return maxVar(scatterY.value, axisMode.value)
+	return maxVar(scatterY.value, store.axisMode)
 })
 
 const valueForEvent = computed(() => {
@@ -205,7 +205,7 @@ const bins = computed(() => {
 		xmin.value,
 		xmax.value,
 		10,
-		axisMode.value !== 'full',
+		store.axisMode !== 'full',
 	)
 })
 const maxCount = computed(() => {
@@ -219,10 +219,6 @@ watch(
 		}
 	},
 )
-const axisMode = ref<'full' | 'most' | 'event'>('most')
-const setAxisMode = (mode: 'full' | 'most' | 'event') => {
-	axisMode.value = mode
-}
 
 const xscaleFactor = computed(() => {
 	// TODO Would be better using 90th%ile or similar
@@ -275,7 +271,7 @@ const getXYScatterTitle = computed(() => {
 						:units="'days'"
 						:highlight-value="valueForEvent"
 						:types="types"
-						:has-tail="axisMode !== 'full'"
+						:has-tail="store.axisMode !== 'full'"
 						:title="
 							store.focusVariable === 'duration'
 								? $l.durationHisto
@@ -467,25 +463,25 @@ const getXYScatterTitle = computed(() => {
 		<div class="chart-control">
 			<button
 				class="glassy"
-				:class="{ selected: axisMode === 'most' }"
-				@click="setAxisMode('most')"
+				:class="{ selected: store.axisMode === 'most' }"
+				@click="store.axisMode = 'most'"
 				v-tooltip="$l.focusOnMostEvents"
 			>
 				<IconZoomScan aria-hidden="true" />
 			</button>
 			<button
 				class="glassy"
-				:class="{ selected: axisMode === 'full' }"
-				@click="setAxisMode('full')"
+				:class="{ selected: store.axisMode === 'full' }"
+				@click="store.axisMode = 'full'"
 				v-tooltip="$l.focusOnAllEvents"
 			>
 				<IconArrowsDiagonal aria-hidden="true" />
 			</button>
 			<button
 				class="glassy"
-				:class="{ selected: axisMode === 'event' }"
+				:class="{ selected: store.axisMode === 'event' }"
 				:disabled="!selectedX"
-				@click="setAxisMode('event')"
+				@click="store.axisMode = 'event'"
 				v-tooltip="$l.focusOnSelectedEvent"
 			>
 				<IconViewfinder aria-hidden="true" />

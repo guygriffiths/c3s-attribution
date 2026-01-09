@@ -194,12 +194,20 @@ const size = computed(() => {
 						<div class="label mono">
 							{{ niceNumber(xmin) }}
 						</div>
-						<span class="unit-icon" v-tooltip="$l.temperature"
-							><IconTemperature
+						<span class="unit-icon" v-tooltip="$l.temperature">
+							<IconTemperaturePlus
 								class="icon"
-								:class="{ [eventType]: true }"
 								aria-hidden="true"
-						/></span>
+								:class="{ [eventType]: true }"
+								v-if="eventType === 'hot'"
+							/>
+							<IconTemperatureMinus
+								class="icon"
+								aria-hidden="true"
+								:class="{ [eventType]: true }"
+								v-else
+							/>
+						</span>
 						<div class="label mono">
 							{{ niceNumber(xmax) }}
 						</div>
@@ -273,6 +281,7 @@ const size = computed(() => {
 				</div>
 			</div>
 		</div>
+		<slot></slot>
 	</div>
 </template>
 
