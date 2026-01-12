@@ -47,7 +47,7 @@ watch(
 		const targetEls: NodeListOf<HTMLElement> | null = help.target
 			? document.querySelectorAll(help.target)
 			: null
-			console.log('help targetEls', targetEls)
+			// console.log('help targetEls', targetEls)
 		if (!targetEls || targetEls.length === 0) {
 			// console.warn(`No target element found for selector: ${help.target}`)
 			// return

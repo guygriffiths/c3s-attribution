@@ -67,17 +67,31 @@ $themes: (
 		// Panel backgrounds (warm)
 		// panel-bg: rgba(250, 248, 246, 0.8),
 		panel-bg: linear-gradient(
-			123deg,
-			hsla(151, 35%, 96%, 0.88) 0%,
-			hsla(181, 35%, 96%, 0.88) 25%,
-			hsla(211, 35%, 96%, 0.88) 50%,
-			hsla(241, 35%, 96%, 0.88) 75%,
-			hsla(271, 35%, 96%, 0.88) 100%
-		),
-		panel-solid: hsla(211, 29%, 97%, 1.0),
+				123deg,
+				hsla(151, 35%, 96%, 0.88) 0%,
+				hsla(181, 35%, 96%, 0.88) 25%,
+				hsla(211, 35%, 96%, 0.88) 50%,
+				hsla(241, 35%, 96%, 0.88) 75%,
+				hsla(271, 35%, 96%, 0.88) 100%
+			),
+		panel-solid: hsla(211, 29%, 97%, 1),
 		panel-bg-alt: rgba(220, 218, 216, 0.8),
-		panel-bg-dark: rgba(192, 189, 187, 0.8),
-		panel-bg-night: rgba(43, 42, 42, 0.8),
+		panel-bg-dark: linear-gradient(
+				123deg,
+				hsla(151, 4%, 74%, 0.88) 0%,
+				hsla(181, 4%, 74%, 0.88) 25%,
+				hsla(211, 4%, 74%, 0.88) 50%,
+				hsla(241, 4%, 74%, 0.88) 75%,
+				hsla(271, 4%, 74%, 0.88) 100%
+			),
+		panel-bg-night: linear-gradient(
+				123deg,
+				hsla(151, 1%, 17%, 0.25) 0%,
+				hsla(181, 1%, 17%, 0.25) 25%,
+				hsla(211, 1%, 17%, 0.25) 50%,
+				hsla(241, 1%, 17%, 0.25) 75%,
+				hsla(271, 1%, 17%, 0.25) 100%
+			),
 		panel-surface: rgb(254, 254, 252),
 		panel-hint: hsla(341, 50%, 95%, 0.35),
 		panel-hint2: hsla(211, 20%, 80%, 0.2),
@@ -130,13 +144,13 @@ $themes: (
 	cold: (
 		// Panel backgrounds (cool)
 		panel-bg: linear-gradient(
-			123deg,
-			hsla(305, 35%, 96%, 0.85) 0%,
-			hsla(335, 35%, 96%, 0.85) 25%,
-			hsla(5, 35%, 96%, 0.85) 50%,
-			hsla(35, 35%, 96%, 0.85) 75%,
-			hsla(65, 35%, 96%, 0.85) 100%
-		),
+				123deg,
+				hsla(305, 35%, 96%, 0.85) 0%,
+				hsla(335, 35%, 96%, 0.85) 25%,
+				hsla(5, 35%, 96%, 0.85) 50%,
+				hsla(35, 35%, 96%, 0.85) 75%,
+				hsla(65, 35%, 96%, 0.85) 100%
+			),
 		panel-solid: rgba(248, 249, 250, 0.9),
 		panel-bg-alt: rgba(218, 219, 220, 0.8),
 		panel-bg-dark: rgba(189, 191, 193, 0.8),
@@ -189,13 +203,13 @@ $themes: (
 	hotcold: (
 		// Panel backgrounds (neutral - averaged warm/cool)
 		panel-bg: linear-gradient(
-			123deg,
-			hsla(340, 35%, 96%, 0.85) 0%,
-			hsla(70, 35%, 96%, 0.85) 25%,
-			hsla(100, 35%, 96%, 0.85) 50%,
-			hsla(130, 35%, 96%, 0.85) 75%,
-			hsla(160, 35%, 96%, 0.85) 100%
-		),
+				123deg,
+				hsla(340, 35%, 96%, 0.85) 0%,
+				hsla(70, 35%, 96%, 0.85) 25%,
+				hsla(100, 35%, 96%, 0.85) 50%,
+				hsla(130, 35%, 96%, 0.85) 75%,
+				hsla(160, 35%, 96%, 0.85) 100%
+			),
 		panel-solid: rgba(249, 248, 248, 0.9),
 		panel-bg-alt: rgba(219, 218, 218, 0.8),
 		panel-surface: rgb(253, 254, 253),

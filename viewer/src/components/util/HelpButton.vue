@@ -9,13 +9,12 @@ defineProps<{
     help: keyof typeof helpText
 }>()
 
-const toggleHelp = (e: MouseEvent, id: keyof typeof helpText) => {
-    console.log('Toggling help for', id);
+const toggleHelp = (id: keyof typeof helpText) => {
     if(activeHelp.value !== null) {
         // Close if already open
         closeHelp() 
     } else {
-        helpMe(e, id)
+        helpMe(id)
     }
 }
 </script>
@@ -23,7 +22,7 @@ const toggleHelp = (e: MouseEvent, id: keyof typeof helpText) => {
 <template>
     <button
         class="help-button glassy color"
-        @click="(e) => toggleHelp(e, help)"
+        @click="() => toggleHelp(help)"
         v-tooltip="$l.help"
     >
         <IconHelp aria-hidden="true"/>

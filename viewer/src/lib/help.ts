@@ -85,9 +85,7 @@ export const helpText = {
 
 // Active help state
 export const activeHelp = shallowRef<HelpTextEntry | null>(null)
-export const helpMe = (event: MouseEvent, id: keyof typeof helpText) => {
-	console.log('Help me called for id:', id)
-	event.stopPropagation()
+export const helpMe = (id: keyof typeof helpText) => {
 	const helpTextEntry = helpText[id]
 	if (!helpTextEntry) {
 		console.warn(`No help text found for id: ${id}`)

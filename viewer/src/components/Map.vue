@@ -832,6 +832,7 @@ const resetZoom = () => {
 			gap: 0.5rem;
 			z-index: 100;
 			pointer-events: all;
+
 		}
 
 		.zoom-button {
@@ -850,7 +851,7 @@ const resetZoom = () => {
 			height: 2.5rem;
 			padding: 0.5rem;
 			z-index: 300;
-			box-shadow: var(--shadow-sm), var(--shadow-md);
+			box-shadow: var(--shadow-md);
 
 			&.hidden {
 				transform: translateX(150%);

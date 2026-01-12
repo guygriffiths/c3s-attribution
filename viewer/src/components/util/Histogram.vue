@@ -14,11 +14,7 @@ import * as d3 from 'd3'
 import { colorMixer } from '@/lib/utils'
 import { getBins } from '@/lib/histo-utils'
 import scssVars from '@/assets/styles/scssVars.module.scss'
-import {
-	IconDimensions,
-	IconStopwatch,
-	IconTemperature,
-} from '@tabler/icons-vue'
+import { niceNumber } from '@/lib/utils'
 
 type Props = {
 	data: number[]
@@ -203,7 +199,7 @@ const bars = computed(() => {
 
 const tooltipForBin = (b: any) => {
 	return {
-		content: `Range: ${b.endless ? '>' : '['}${b.bin0.toFixed(2)} ${b.endless ? '' : ', ' + b.bin1.toFixed(2) + ')'}<br />Count: ${b.count}<br />Percentage: ${b.pct.toFixed(2)}%`,
+		content: `Range: ${b.endless ? '>' : '['}${niceNumber(b.bin0)} ${b.endless ? '' : ', ' + niceNumber(b.bin1) + ')'}<br />Count: ${b.count}<br />Percentage: ${niceNumber(b.pct)}%`,
 		html: true,
 	}
 }

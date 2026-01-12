@@ -8,6 +8,7 @@ import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import HelpOverlay from './components/util/HelpOverlay.vue'
+import { helpMe } from './lib/help'
 
 const l = useLabels()
 const store = useStore()
@@ -27,6 +28,8 @@ onMounted(() => {
 			document.body.classList.remove('disable-transitions')
 		}, 200) // tweak delay as needed
 	})
+
+	helpMe('aboutInfo')
 })
 </script>
 

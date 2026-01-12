@@ -13,6 +13,7 @@ import {
 	IconTemperatureMinus,
 	IconTemperaturePlus,
 } from '@tabler/icons-vue'
+import { niceNumber } from '@/lib/utils'
 
 const props = defineProps<{
 	selectedEvent: ExtremeEvent | ExtremeEventFull
@@ -81,8 +82,8 @@ const downloadEvent = () => {
 			<IconDimensions class="icon" aria-hidden="true" />
 			<!-- <span class="label">{{ $l.size }}:</span> -->
 			<span class="value mono"
-				>{{ eventStore.sizeForEvent(props.selectedEvent).toFixed(2)
-				}}{{ eventStore.sizeUnits }}</span
+				>{{ niceNumber(eventStore.sizeForEvent(props.selectedEvent))
+				}} {{ eventStore.sizeUnits }}</span
 			>
 		</div>
 		<div
@@ -107,8 +108,8 @@ const downloadEvent = () => {
 			<IconTemperature class="icon" v-else aria-hidden="true" />
 			<!-- <span class="label">{{ $l.intensity }}:</span> -->
 			<span class="value mono"
-				>{{ eventStore.intensityForEvent(props.selectedEvent).toFixed(2)
-				}}{{ eventStore.intensityUnits }}</span
+				>{{ niceNumber(eventStore.intensityForEvent(props.selectedEvent))
+				}} {{ eventStore.intensityUnits }}</span
 			>
 		</div>
 

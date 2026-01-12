@@ -1,4 +1,5 @@
 import * as d3 from 'd3'
+import { addDays } from 'date-fns'
 import { getEventBoxes } from '../time-utils'
 
 export { }
@@ -31,6 +32,7 @@ self.onmessage = async (
 	}
 
 	const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
+	// console.log('totalDays:', totalDays, start, end)
 	const cwCounts = new Array(totalDays).fill(0)
 	const hwCounts = new Array(totalDays).fill(0)
 	let hotEventsActive = false
@@ -48,6 +50,12 @@ self.onmessage = async (
 			}
 		})
 	})
+
+	for(let i = 0; i < hwCounts.length; i++) {
+		if(isNaN(hwCounts[i])) {
+			console.warn('NaN in hwCounts at index', i, hwCounts[i], addDays(new Date(start), i))
+		}
+	}
 
 	const newDs = getAreaString(
 		hwCounts,
@@ -97,6 +105,8 @@ const getAreaString = (
 						y1: d,
 					}))
 
+	
+	// console.log('WTF data:', data.map(d => d.y0).concat(data.map(d => d.y1)), Math.max(...data.map((d) => d.y0).concat(data.map((d) => d.y1))))
 	const yScale = d3
 		.scaleLinear()
 		.domain([
@@ -132,6 +142,10 @@ const getAreaString = (
 		ret[year] =
 			areaStr(data.slice(startIdx, endIdx)) + ` M0,${-2} l0,0 M0,${2} l0,0` ||
 			''
+		// if(ret[year].indexOf('NaN') !== -1) {
+		// 	console.warn('NaN in area string for year', year)
+		// 	console.log('data slice:', data.slice(startIdx, endIdx), yScale.domain(), Math.max(...data.map((d) => d.y0)))
+		// }
 	}
 	// console.timeEnd('getAreaString')
 	return ret

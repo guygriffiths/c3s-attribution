@@ -4,6 +4,7 @@ import { useStore as useEventStore } from '@/store/eventStore'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import * as d3 from 'd3'
 import { useLabels } from '@/lib/labels'
+import { niceNumber } from '@/lib/utils'
 
 const $l = useLabels()
 
@@ -142,7 +143,7 @@ const selectedIndex = computed(() => {
 					@mouseover="setHover(i - 1)"
 					@mouseleave="setHover(-1)"
 					v-tooltip="{
-						content: `${$l.duration}: ${eventStore.durationForEvent(rankedEvents[i - 1])} ${eventStore.durationUnits}<br />${$l.size}: ${eventStore.sizeForEvent(rankedEvents[i - 1]).toFixed(2)} ${eventStore.sizeUnits}<br />${$l.intensity}: ${eventStore.intensityForEvent(rankedEvents[i - 1]).toFixed(2)} ${eventStore.intensityUnits}`,
+						content: `${$l.duration}: ${eventStore.durationForEvent(rankedEvents[i - 1])} ${eventStore.durationUnits}<br />${$l.size}: ${niceNumber(eventStore.sizeForEvent(rankedEvents[i - 1]))} ${eventStore.sizeUnits}<br />${$l.intensity}: ${niceNumber(eventStore.intensityForEvent(rankedEvents[i - 1]))} ${eventStore.intensityUnits}`,
 						html: true,
 					}"
 				>
@@ -179,7 +180,7 @@ const selectedIndex = computed(() => {
 					@mouseleave="eventStore.setHoveringEvent(null)"
 					v-tooltip="{
 						content: eventStore.selectedEvent
-							? `${$l.duration}: ${eventStore.durationForEvent(eventStore.selectedEvent)} ${eventStore.durationUnits}<br />${$l.size}: ${eventStore.sizeForEvent(eventStore.selectedEvent).toFixed(2)} ${eventStore.sizeUnits}<br />${$l.intensity}: ${eventStore.intensityForEvent(eventStore.selectedEvent).toFixed(2)} ${eventStore.intensityUnits}`
+							? `${$l.duration}: ${eventStore.durationForEvent(eventStore.selectedEvent)} ${eventStore.durationUnits}<br />${$l.size}: ${niceNumber(eventStore.sizeForEvent(eventStore.selectedEvent))} ${eventStore.sizeUnits}<br />${$l.intensity}: ${niceNumber(eventStore.intensityForEvent(eventStore.selectedEvent))} ${eventStore.intensityUnits}`
 							: '',
 						html: true,
 					}"

@@ -218,7 +218,7 @@ const selectedDayIdx = computed((): number | null => {
 						}}
 					</span>
 					Explorer
-					<button
+					<!-- <button
 						v-if="!store.isFocused"
 						class="expand glassy color"
 						@click="store.mainHelpOpen = true"
@@ -226,10 +226,10 @@ const selectedDayIdx = computed((): number | null => {
 						:class="{ disabled: store.mainHelpOpen }"
 					>
 						<IconInfoSquareRounded size="20" aria-hidden="true" />
-					</button>
+					</button> -->
 				</h1>
 			</div>
-			<div class="welcome" :class="{ hidden: !store.mainHelpOpen }">
+			<!-- <div class="welcome" :class="{ hidden: !store.mainHelpOpen }">
 				<button
 					class="expand glassy color close"
 					@click="store.mainHelpOpen = false"
@@ -362,7 +362,7 @@ const selectedDayIdx = computed((): number | null => {
 				>
 					<IconChevronCompactUp size="24" aria-hidden="true" />
 				</button>
-			</div>
+			</div> -->
 		</div>
 
 		<ModeToggle
@@ -398,7 +398,11 @@ const selectedDayIdx = computed((): number | null => {
 				@update:model-value="eventStore.setEventTypeMode"
 			/>
 			<FilterPanel v-model="eventStore.filters" />
-			<button class="about-button glassy color" @click="helpMe($event, 'aboutInfo')" v-tooltip="$l.aboutInfo">
+			<button
+				class="about-button glassy color"
+				@click="helpMe('aboutInfo')"
+				v-tooltip="$l.aboutInfo"
+			>
 				<IconInfoOctagon size="24" aria-hidden="true" />{{ $l.aboutInfo }}
 			</button>
 			<HelpButton help="hamburgerMenu" />
@@ -440,7 +444,8 @@ const selectedDayIdx = computed((): number | null => {
 					timeStore.selectedTime = new Date(date)
 				}
 			"
-		><HelpButton help="eventGraphs" /></EventGraphs>
+			><HelpButton help="eventGraphs"
+		/></EventGraphs>
 
 		<!-- Multi-Event Panel -->
 		<!-- This is the panel on the right with rankings and histograms -->
@@ -650,6 +655,49 @@ const selectedDayIdx = computed((): number | null => {
 			</button>
 			<HelpButton help="timeReel" />
 		</div>
+		<div class="logos">
+			<a href="https://www.copernicus.eu/en" target="_blank" rel="noopener">
+				<span class="sr-only">Copernicus European Union Programme</span>
+				<img
+					src="@/assets/img/eu-negative-logo.webp"
+					alt="European Union Logo"
+					class="logo"
+					aria-hidden="true"
+				/>
+			</a>
+			<a href="https://www.copernicus.eu/en" target="_blank" rel="noopener">
+				<span class="sr-only">Copernicus European Union Programme</span>
+				<img
+					src="@/assets/img/copernicus-negative-logo.webp"
+					alt="Copernicus Programme Logo"
+					class="logo"
+					aria-hidden="true"
+				/>
+			</a>
+			<a href="https://climate.copernicus.eu/" target="_blank" rel="noopener">
+				<span class="sr-only"
+					>Copernicus Climate Change Service (C3S) - European Climate
+					Observations, Modelling and Services</span
+				>
+				<img
+					src="@/assets/img/c3s-negative-logo.webp"
+					alt="Copernicus Climate Change Service Logo"
+					class="logo"
+					aria-hidden="true"
+				/>
+			</a>
+			<a href="https://www.ecmwf.int/" target="_blank" rel="noopener">
+				<span class="sr-only"
+					>European Centre for Medium-Range Weather Forecasts (ECMWF)</span
+				>
+				<img
+					src="@/assets/img/ecmwf-negative-logo.png"
+					alt="ECMWF Logo"
+					class="logo"
+					aria-hidden="true"
+				/>
+			</a>
+		</div>
 
 		<!-- Event Window -->
 		<!-- This is the invisible div that defines where the map should zoom to -->
@@ -677,10 +725,33 @@ const selectedDayIdx = computed((): number | null => {
 	max-height: 100vh;
 	position: relative;
 
+	.logos {
+		position: absolute;
+		bottom: 0;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 325;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--panel-bg-night);
+		backdrop-filter: $frosty;
+		padding: 0.25rem 0.5rem;
+		border-radius: $borderRadius;
+		border-bottom-right-radius: 0;
+		border-bottom-left-radius: 0;
+		box-shadow: var(--shadow-md);
+		gap: 1rem;
+		.logo {
+			height: 2rem;
+			width: auto;
+		}
+	}
+
 	#focus-frame {
 		overflow: hidden;
 		transition: all $transition;
-		z-index: 200;
+		z-index: 500;
 		position: absolute;
 	}
 
@@ -803,7 +874,7 @@ const selectedDayIdx = computed((): number | null => {
 				padding-left: 1.25rem;
 				margin: 0;
 			}
-			
+
 			button.collapse {
 				pointer-events: all;
 				height: 1.25rem;
@@ -1056,8 +1127,9 @@ const selectedDayIdx = computed((): number | null => {
 			height: calc(100% - 2 * $panelMargin);
 			z-index: 350;
 		}
-
+		
 		&.event {
+			z-index: 350;
 			height: $smallTimePanelHeight;
 			border-top: none;
 			border-top-right-radius: 0;

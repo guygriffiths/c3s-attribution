@@ -6,7 +6,6 @@ import { useStore } from '@/store/store'
 import FloatingVue from 'floating-vue'
 import 'floating-vue/dist/style.css'
 import { createPinia } from 'pinia'
-import 'shepherd.js/dist/css/shepherd.css'
 import { createApp } from 'vue'
 
 const app = createApp(App)

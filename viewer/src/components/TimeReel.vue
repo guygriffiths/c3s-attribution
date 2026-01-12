@@ -1532,9 +1532,9 @@ const dateTranslate = computed(() => {
 		}
 
 		&.timeline {
-			top: calc(100% - 1.75rem);
-			left: 50%;
-			transform: translate(-50%, 0%);
+			// top: calc(100% - 1.75rem);
+			// left: 50%;
+			// transform: translate(-50%, 0%);
 		}
 
 		&.hidden {
@@ -1986,11 +1986,6 @@ const dateTranslate = computed(() => {
 			}
 		}
 
-		.event-blur {
-			pointer-events: none;
-			backdrop-filter: $frosty;
-		}
-
 		.day-box {
 			stroke-width: 2;
 			opacity: 1;
@@ -2011,6 +2006,10 @@ const dateTranslate = computed(() => {
 		.daily-event-fx-leave-to {
 			opacity: 0;
 		}
+	}
+
+	.eventzoom rect.event-bar {
+		cursor: default;
 	}
 }
 </style>

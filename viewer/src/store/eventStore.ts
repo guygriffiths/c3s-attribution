@@ -3,7 +3,7 @@ import {
 	fetchAndIndexEvents,
 	getParameterFilteredEvents,
 	onParameterFilterChanged,
-	setParameterFilters
+	setParameterFilters,
 } from '@/lib/eventsDB'
 import {
 	DATA_ROOT,
@@ -225,7 +225,7 @@ export const useStore = defineStore('events', {
 		},
 		sizeForEvent: (state: State) => {
 			return (event: ExtremeEvent | ExtremeEventFull | null) =>
-				event?.total_area || 0
+				(event?.total_area || 0)
 		},
 		intensityForEvent: (state: State) => {
 			return (event: ExtremeEvent | ExtremeEventFull | null) => {
@@ -291,12 +291,12 @@ export const useStore = defineStore('events', {
 			}
 			await mainStore.setLoading('Selecting event...')
 			// if (this.selectedEvent?.id === id) {
-				if (this.selectedEventId === event.id) {
-					// this.selectedEvent = null
-					// this.selectedEventId = null
-					mainStore.setLoadingDone()
-					return
-				} else {
+			if (this.selectedEventId === event.id) {
+				// this.selectedEvent = null
+				// this.selectedEventId = null
+				mainStore.setLoadingDone()
+				return
+			} else {
 				mainStore.setEventLoading()
 				this.selectedEventId = event.id
 				this.selectedEvent = event as ExtremeEventFull
@@ -373,7 +373,7 @@ export const useStore = defineStore('events', {
 			// Hard-code start date, get end date from current year.
 			const timeStore = useTimeStore()
 			const from = 1979
-			const to = 2024 //new Date().getFullYear()
+			const to = 2025
 			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
 			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
 			timeStore.startTimeFilter = new Date(

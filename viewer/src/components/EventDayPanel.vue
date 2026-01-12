@@ -221,7 +221,7 @@ const size = computed(() => {
 						><IconGridDots aria-hidden="true"
 					/></span>
 					<div class="label mono">
-						{{ maxcount }}
+						{{ niceNumber(maxcount) }}
 					</div>
 				</div>
 			</div>
