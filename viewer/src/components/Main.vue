@@ -39,6 +39,7 @@ import {
 	getSpatiallyFilteredEvents,
 	getTimeFilteredEvents,
 	onParameterFilterChanged,
+	onSpaceTimeFilterChanged,
 	onSpatialFilterChanged,
 	onTimeFilterChanged,
 	setEventTypeFilter,
@@ -96,8 +97,7 @@ const updateSummaryEvents = () => {
 		}
 	}
 }
-onTimeFilterChanged(updateSummaryEvents)
-onSpatialFilterChanged(updateSummaryEvents)
+onSpaceTimeFilterChanged(updateSummaryEvents)
 
 watch(
 	() => [store.viewMode, timeStore.selectedTime],

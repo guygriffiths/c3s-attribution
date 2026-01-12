@@ -22,7 +22,7 @@ export const useStore = defineStore('time', {
 	state: (): TimeState => {
 		return {
 			// The currently selected time
-			selectedTime: new Date(Date.UTC(2025, 4, 8, 0, 0, 0)),
+			selectedTime: new Date(Date.UTC(2025, 6, 23, 0, 0, 0)),
 
 			// Range for the whole thing
 			startTime: new Date(1979, 0, 1),
