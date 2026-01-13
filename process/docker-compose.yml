@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  download:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.python
+    env_file:
+      - ../docker/.env
+    volumes:
+      - ./:/app:ro  # Mount process scripts into container
+      - /mnt/private/shared/era5-t2m:/data:rw
+      - ~/.cdsapirc:/root/.cdsapirc:ro
+    working_dir: /app
+    command: python3 download_era5.py
+    
+  percentiles:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.python
+    env_file:
+      - ../docker/.env
+    volumes:
+      - ./:/app:ro
+      - /mnt/private/shared/era5-t2m:/data:rw
+    working_dir: /app
+    command: python3 make_percentiles.py
+    depends_on:
+      download:
+        condition: service_completed_successfully
+        
+  detect-events:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.python
+    env_file:
+      - ../docker/.env
+    volumes:
+      - ./:/app:ro
+      - /mnt/private/shared/era5-t2m:/input:ro
+      - /data/data:/output:rw
+    working_dir: /app
+    environment:
+      - EVENT_INPUT_DIR=/input
+      - EVENT_OUTPUT_DIR=/output
+    command: python3 find_events.py
+    depends_on:
+      percentiles:
+        condition: service_completed_successfully

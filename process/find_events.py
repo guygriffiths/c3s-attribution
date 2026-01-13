@@ -4,6 +4,7 @@
 import json
 import math
 import os
+import logging
 import pickle
 from collections import deque, namedtuple
 from typing import List, Tuple, Union, Optional
@@ -869,7 +870,7 @@ class EventletFactory:
         min_samples=1,
         output_path="/data/output-debug/events",
         use_dbscan=False,
-        last_slice_data=None,
+        last_slice_name=None,
         eventtype='hot',
         land_only=False,
         ocean_only=False,
@@ -889,7 +890,7 @@ class EventletFactory:
             min_samples: Minimum cluster size for DBSCAN/walk_scan
             output_path: Directory path for output files
             use_dbscan: If True, use sklearn DBSCAN instead of custom walk_scan
-            last_slice_data: Optional dict with previous run state for resumption
+            last_slice_name: Optional filename with previous run state for resumption
             eventtype: Event type label for output (e.g., 'hot', 'cold')
             land_only: If True, only track events over land (removes ocean points)
             ocean_only: If True, only track events over ocean (removes land points)
@@ -934,17 +935,22 @@ class EventletFactory:
         self.times = self.data.valid_time.values
 
         # Resume from previous state if provided
-        if last_slice_data:
-            print(f"Resuming from last slice at {last_slice_data['time']}")
-            self.skipToTime = last_slice_data['time']
-            self.active = last_slice_data.get("active_events", [])
-            
-            if self.active:
-                self.oldest_active_time = min(ev.earliest_time() for ev in self.active)
-            else:
-                self.oldest_active_time = None
-            
-            print(f"Resumed {len(self.active)} active events")
+        if last_slice_name:
+            if os.path.exists(last_slice_name):
+                with open(last_slice_name, "rb") as f:
+                    last_slice_data = pickle.load(f)
+
+                    print(f"Resuming from last slice at {last_slice_data['time']}")
+                    self.skipToTime = last_slice_data['time']
+                    self.active = last_slice_data.get("active_events", [])
+                    
+                    if self.active:
+                        self.oldest_active_time = min(ev.earliest_time() for ev in self.active)
+                    else:
+                        self.oldest_active_time = None
+                    
+                    print(f"Resumed {len(self.active)} active events")
+        self.last_slice_name = last_slice_name
 
     def process_slice(self, time):
         """
@@ -1053,13 +1059,14 @@ class EventletFactory:
             (ev.earliest_time() for ev in self.active), default=None
         )
 
-        # Save state for resumption
-        last_slice = {
-            "time": time,
-            "active_events": self.active,
-        }
-        with open(f"{self.output_path}/last_slice.pkl", "wb") as f:
-            pickle.dump(last_slice, f)
+        if self.last_slice_name is not None:
+            # Save state for resumption
+            last_slice = {
+                "time": time,
+                "active_events": self.active,
+            }
+            with open(self.last_slice_name, "wb") as f:
+                pickle.dump(last_slice, f)
 
     def flush(self):
         """
@@ -1393,50 +1400,188 @@ class EventletFactory:
         with open(event_path, "w") as f:
             f.write(json.dumps(round_floats(full_event)) + "\n")
 
-def main():
-    ParamSet = namedtuple("ParamSet", ["stat", "perc", "thresh", "nr", "ms", "dbscan", "heatwave"])
-    params = [
-        ParamSet("min", "1.0", 28, 250, 30, False, False),
-        ParamSet("min", "1.0", 28, 250, 30, True, False),        
+
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+# Parameter set definition
+ParamSet = namedtuple(
+    "ParamSet",
+    ["stat", "perc", "thresh", "nr", "ms", "dbscan", "heatwave"]
+)
+
+
+def get_default_params() -> List[ParamSet]:
+    """
+    Get default parameter sets for event detection.
+    
+    Returns:
+        List of ParamSet tuples defining detection parameters
+        
+    Parameter descriptions:
+        stat: Temperature statistic ('min' or 'max')
+        perc: Climatological percentile threshold (e.g., '99.0')
+        thresh: Absolute temperature threshold in Celsius (0 for cold, 28 for heat)
+        nr: Neighbor radius in km for spatial clustering (default: 250)
+        ms: Minimum samples for DBSCAN cluster size (default: 30)
+        dbscan: Use sklearn DBSCAN if True, custom walk_scan if False
+        heatwave: Detect heatwaves if True, cold snaps if False
+    """
+    return [
+        ParamSet(
+            stat="min",
+            perc="1.0",
+            thresh=0,
+            nr=250,
+            ms=30,
+            dbscan=False,
+            heatwave=False  # Cold snaps
+        ),
+        ParamSet(
+            stat="max",
+            perc="99.0",
+            thresh=28,
+            nr=250,
+            ms=30,
+            dbscan=False,
+            heatwave=True  # Heatwaves
+        ),
     ]
 
-    for p in params:
+
+def process_parameter_set(
+    param: ParamSet,
+    input_dir: str = "/input",
+    output_dir: str = "/output"
+) -> bool:
+    """
+    Process a single parameter set to detect events.
+    
+    Args:
+        param: ParamSet tuple defining detection parameters
+        input_dir: Directory containing ERA5 input data
+        output_dir: Directory for output event files
+        
+    Returns:
+        True if processing succeeded, False otherwise
+    """
+    event_type = 'hot' if param.heatwave else 'cold'
+    logger.info(f"Processing {event_type} events with parameters: {param}")
+    
+    try:
+        # Load input data
+        logger.info("Loading data...")
         data_var, ref_data, land_sea_mask = load_data(
-            f"/data/{p.stat}/era5_daily_{p.stat}_temperature*.nc",
-            f"/data/climatology/era5_daily_{p.stat}_temperature_{p.perc}pc_1991-2020.nc",
-            f"/data/era5_land_sea_mask.nc",
+            f"{input_dir}/{param.stat}/era5_daily_{param.stat}_temperature*.nc",
+            f"{input_dir}/climatology/era5_daily_{param.stat}_temperature_{param.perc}pc_1991-2020.nc",
+            f"{input_dir}/era5_land_sea_mask.nc",
         )
-        time_dim = data_var["valid_time"]
-        out_path = f"/data/output-{'dbscan' if p.dbscan else 'walk'}-{p.ms}-{p.stat}-{p.perc}-{p.thresh}-nr{p.nr}-{p.heatwave and 'hw' or 'cw'}"
+        
+        # Generate parameter string for filenames
+        param_str = (
+            f"{param.stat}-{param.perc}-{param.thresh}-"
+            f"nr{param.nr}-ms{param.ms}-"
+            f"{'dbscan' if param.dbscan else 'walk'}-"
+            f"{'hw' if param.heatwave else 'cw'}"
+        )
+        
+        # Set up output directories
+        out_path = output_dir
         os.makedirs(out_path, exist_ok=True)
         os.makedirs(f"{out_path}/events", exist_ok=True)
-
-        last_slice = None
-        if os.path.exists(f"{out_path}/last_slice.pkl"):
-            with open(f"{out_path}/last_slice.pkl", "rb") as f:
-                last_slice = pickle.load(f)
-
+        
+        # Initialize event factory
+        logger.info("Initializing EventletFactory...")
         factory = EventletFactory(
             data_var,
             ref_data=ref_data,
-            threshold=273.15 + p.thresh,
-            over_threshold=p.heatwave,
+            threshold=273.15 + param.thresh,  # Convert Celsius to Kelvin
+            over_threshold=param.heatwave,
             land_sea_mask=land_sea_mask,
-            neighbor_radius=p.nr,
-            min_samples=p.ms,
+            neighbor_radius=param.nr,
+            min_samples=param.ms,
             output_path=out_path,
-            use_dbscan=p.dbscan,
-            last_slice_data=last_slice,
-            eventtype='hot' if p.heatwave else 'cold',
+            use_dbscan=param.dbscan,
+            last_slice_name=f"{out_path}/last_slice-{param_str}.pkl",
+            eventtype=event_type,
             land_only=land_sea_mask is not None,
         )
-
-        for i in range(time_dim.size):
+        
+        # Process each time slice
+        time_dim = data_var["valid_time"]
+        total_slices = time_dim.size
+        
+        for i in range(total_slices):
             time_val = pd.to_datetime(time_dim[i].values)
+            
             factory.process_slice(time_val)
-
+        
+        # Finalize remaining events
+        logger.info("Flushing remaining events...")
         factory.flush()
+        
+        logger.info(f"Successfully completed {event_type} event detection")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to process {event_type} events: {e}", exc_info=True)
+        return False
+
+
+def main():
+    """
+    Main entry point for event detection pipeline.
+    
+    Processes all configured parameter sets sequentially. Environment
+    variables can override default paths:
+        EVENT_INPUT_DIR: Input data directory (default: /input)
+        EVENT_OUTPUT_DIR: Output directory (default: /output)
+    """
+    logger.info("=" * 60)
+    logger.info("ERA5 Extreme Event Detection Pipeline")
+    logger.info("=" * 60)
+    
+    # Get paths from environment or use defaults
+    input_dir = os.environ.get("EVENT_INPUT_DIR", "/input")
+    output_dir = os.environ.get("EVENT_OUTPUT_DIR", "/output")
+    
+    logger.info(f"Input directory: {input_dir}")
+    logger.info(f"Output directory: {output_dir}")
+    
+    # Get parameter sets
+    params = get_default_params()
+    logger.info(f"Processing {len(params)} parameter set(s)")
+    
+    # Process each parameter set
+    results = {}
+    for param in params:
+        event_type = 'hot' if param.heatwave else 'cold'
+        success = process_parameter_set(param, input_dir, output_dir)
+        results[event_type] = success
+    
+    # Summary
+    logger.info("\n" + "=" * 60)
+    logger.info("Processing Summary")
+    logger.info("=" * 60)
+    
+    for event_type, success in results.items():
+        status = "✓ SUCCESS" if success else "✗ FAILED"
+        logger.info(f"{event_type.capitalize()} events: {status}")
+    
+    # Exit with appropriate code
+    if all(results.values()):
+        logger.info("All parameter sets completed successfully!")
+        return 0
+    else:
+        logger.error("Some parameter sets failed")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())
