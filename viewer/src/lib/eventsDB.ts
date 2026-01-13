@@ -369,7 +369,6 @@ const buildSpatialFilterResults = (): ExtremeEvent[] => {
 	_spatiallyFilteredEventIds = new Set(
 		_spatiallyFilteredEvents.map((e) => e.id),
 	)
-	console.log('Built spatially filtered events, count:', _spatiallyFilteredEvents.length)
 
 	// Notify listeners
 	spatialFilterChangedTriggers.forEach((cb) => cb())
@@ -412,7 +411,6 @@ const buildSpaceTimeFilterResults = (): ExtremeEvent[] => {
 	_spaceTimeFilteredEvents = _spatiallyFilteredEvents.filter((e) =>
 		_timeFilteredEventIds.has(e.id),
 	)
-	console.log('Built space-time filtered events, count:', _spaceTimeFilteredEvents.length)
 	// Notify listeners
 	spaceTimeFilterChangedTriggers.forEach((cb) => cb())
 	return _spaceTimeFilteredEvents
