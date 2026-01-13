@@ -5,7 +5,7 @@ import json
 import math
 import os
 import pickle
-from collections import deque
+from collections import deque, namedtuple
 from typing import List, Tuple, Union, Optional
 
 # Third-party imports
@@ -165,6 +165,9 @@ def get_region(shape: Union[Polygon, MultiPolygon]) -> List[List[List[float]]]:
         For a simple polygon: [[[lon1, lat1], [lon2, lat2], ...]]
         For a multipolygon: [[[lon1, lat1], ...], [[lon3, lat3], ...]]
     """
+    if shape is None:
+        return []
+
     if shape.geom_type == "Polygon":
         return [[[x, y] for x, y in shape.exterior.coords]]
     
@@ -674,7 +677,7 @@ class Eventlet:
         time_threshold = pd.Timedelta(time_threshold)  # ensures compatibility
         return (self.last_time() + time_threshold) < oldest_upstream_time
 
-    def is_valid(self, min_length):
+    def is_valid(self, min_time_steps, min_mean_pixels):
         """
         Check if the eventlet meets minimum validity requirements.
         
@@ -688,10 +691,13 @@ class Eventlet:
             True if the eventlet meets validity criteria
         """
         # Check if the eventlet has enough slices
-        if len(self.slices) < min_length:
+        if len(self.slices) < min_time_steps:
             return False
         # Check if the last slice has enough points
-        if len(self.slices[-1]) < min_length:
+        total_pixels = 0
+        for sl in self.slices:
+            total_pixels += len(sl)
+        if total_pixels / len(self.slices) < min_mean_pixels:
             return False
         return True
 
@@ -986,13 +992,15 @@ class EventletFactory:
         # Perform spatial clustering
         if not self.use_dbscan:
             labels = walk_scan(D, eps=self.radius, min_samples=self.min_samples)
-        else:
+        elif D.getnnz() > 0:
             db = DBSCAN(
                 eps=self.radius,
                 min_samples=self.min_samples,
                 metric="precomputed",
             )
             labels = db.fit_predict(D)
+        else:
+            labels = []
 
         # Group points by cluster label
         blobs = []
@@ -1033,7 +1041,7 @@ class EventletFactory:
         # Expire old events
         for ev in list(self.active):  # Copy list to avoid mutation issues
             if ev.is_expired(time, self.expiry_days):
-                if ev.is_valid(self.min_length):
+                if ev.is_valid(self.min_length, self.min_samples):
                     self._finalize_cluster(ev)
                 self.active.remove(ev)
 
@@ -1182,12 +1190,12 @@ class EventletFactory:
         # Apply land/ocean filtering if requested
         if self.land_only:
             ev.remove_ocean(self.land_sea_mask)
-            if not ev.is_valid(self.min_length):
+            if not ev.is_valid(self.min_length, self.min_samples):
                 print(f"Discarding event at {ev.times[0]} for being too small over land")
                 return
         elif self.ocean_only:
             ev.remove_land(self.land_sea_mask)
-            if not ev.is_valid(self.min_length):
+            if not ev.is_valid(self.min_length, self.min_samples):
                 print(f"Discarding event at {all_times[0]} for being too small over ocean")
                 return
 
@@ -1205,31 +1213,33 @@ class EventletFactory:
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
         # Generate stable event ID
+        valid_centroids = np.array([c for c in centroids if c is not None])
+        mean_centroid = np.mean(valid_centroids, axis=0)
         event_id = get_id(
-            self.eventtype, all_times[0], centroids[0], self.threshold, self.radius
+            self.eventtype, all_times[0], mean_centroid, self.threshold, self.radius
         )
 
         # Compute statistics across time slices
         max_values = to_serializable([
-            np.max(ev.values[i]) if len(ev.values[i]) > 0 else None
+            np.nanmax(ev.values[i]) if len(ev.values[i]) > 0 else np.nan
             for i in range(len(ev.slices))
         ])
-        max_value = to_serializable(np.max(max_values)) if max_values else None
+        max_value = to_serializable(np.nanmax(max_values)) if max_values else np.nan
         
         mean_values = to_serializable([
-            np.mean(ev.values[i]) if len(ev.values[i]) > 0 else None
+            np.nanmean(ev.values[i]) if len(ev.values[i]) > 0 else np.nan
             for i in range(len(ev.slices))
         ])
         mean_value = (
             to_serializable(np.mean(np.concatenate(ev.values)))
-            if mean_values else None
+            if mean_values else np.nan
         )
         
         min_values = to_serializable([
-            np.min(ev.values[i]) if len(ev.values[i]) > 0 else None
+            np.nanmin(ev.values[i]) if len(ev.values[i]) > 0 else np.nan
             for i in range(len(ev.slices))
         ])
-        min_value = to_serializable(np.min(min_values)) if min_values else None
+        min_value = to_serializable(np.nanmin(min_values)) if min_values else np.nan
 
         # Determine if event is ocean-only
         ocean_only = False
@@ -1384,50 +1394,48 @@ class EventletFactory:
             f.write(json.dumps(round_floats(full_event)) + "\n")
 
 def main():
-    stat = "max"
-    perc = "99.0"
-    thresh = 28
-    nr = 200
-    heatwave = True
-    
-    for ms in [30]:
-        for nr in [200]:
-            for dbscan in [False]:
-                data_var, ref_data, land_sea_mask = load_data(
-                    f"/data/{stat}/era5_daily_{stat}_temperature*2024.nc",
-                    f"/data/climatology/era5_daily_{stat}_temperature_{perc}pc_1991-2020.nc",
-                    f"/data/era5_land_sea_mask.nc",
-                )
-                time_dim = data_var["valid_time"][90:200]
-                out_path = f"/data/output-{'dbscan' if dbscan else 'walk'}-{ms}-{stat}-{perc}-{thresh}-nr{nr}-{heatwave and 'hw' or 'cw'}"
-                os.makedirs(out_path, exist_ok=True)
-                os.makedirs(f"{out_path}/events", exist_ok=True)
+    ParamSet = namedtuple("ParamSet", ["stat", "perc", "thresh", "nr", "ms", "dbscan", "heatwave"])
+    params = [
+        ParamSet("min", "1.0", 28, 250, 30, False, False),
+        ParamSet("min", "1.0", 28, 250, 30, True, False),        
+    ]
 
-                last_slice = None
-                if os.path.exists(f"{out_path}/last_slice.pkl"):
-                    with open(f"{out_path}/last_slice.pkl", "rb") as f:
-                        last_slice = pickle.load(f)
+    for p in params:
+        data_var, ref_data, land_sea_mask = load_data(
+            f"/data/{p.stat}/era5_daily_{p.stat}_temperature*.nc",
+            f"/data/climatology/era5_daily_{p.stat}_temperature_{p.perc}pc_1991-2020.nc",
+            f"/data/era5_land_sea_mask.nc",
+        )
+        time_dim = data_var["valid_time"]
+        out_path = f"/data/output-{'dbscan' if p.dbscan else 'walk'}-{p.ms}-{p.stat}-{p.perc}-{p.thresh}-nr{p.nr}-{p.heatwave and 'hw' or 'cw'}"
+        os.makedirs(out_path, exist_ok=True)
+        os.makedirs(f"{out_path}/events", exist_ok=True)
 
-                factory = EventletFactory(
-                    data_var,
-                    ref_data=ref_data,
-                    threshold=273.15 + thresh,
-                    over_threshold=heatwave,
-                    land_sea_mask=land_sea_mask,
-                    neighbor_radius=nr,
-                    min_samples=ms,
-                    output_path=out_path,
-                    use_dbscan=False,
-                    last_slice_data=last_slice,
-                    eventtype='hot' if heatwave else 'cold',
-                    land_only=land_sea_mask is not None,
-                )
+        last_slice = None
+        if os.path.exists(f"{out_path}/last_slice.pkl"):
+            with open(f"{out_path}/last_slice.pkl", "rb") as f:
+                last_slice = pickle.load(f)
 
-                for i in range(time_dim.size):
-                    time_val = pd.to_datetime(time_dim[i].values)
-                    factory.process_slice(time_val)
+        factory = EventletFactory(
+            data_var,
+            ref_data=ref_data,
+            threshold=273.15 + p.thresh,
+            over_threshold=p.heatwave,
+            land_sea_mask=land_sea_mask,
+            neighbor_radius=p.nr,
+            min_samples=p.ms,
+            output_path=out_path,
+            use_dbscan=p.dbscan,
+            last_slice_data=last_slice,
+            eventtype='hot' if p.heatwave else 'cold',
+            land_only=land_sea_mask is not None,
+        )
 
-                factory.flush()
+        for i in range(time_dim.size):
+            time_val = pd.to_datetime(time_dim[i].values)
+            factory.process_slice(time_val)
+
+        factory.flush()
 
 
 if __name__ == "__main__":
