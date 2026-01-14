@@ -410,7 +410,9 @@ def get_id(
     
     radius = int(round(radius))
 
-    return (f"{eventtype}{time.strftime('%Y%m%d')}"
+    time_str = time.strftime('%Y%m%d')
+
+    return (f"{eventtype}{time_str}"
             f"{thresh:03d}{radius:05d}{lat_code:06d}{lon_code:06d}")
 
 
@@ -954,7 +956,7 @@ class EventletFactory:
         self._t_index = 0  # Index of the next time slice to process
         if self.skipToTime:
             while (self._t_index < len(self.times) and 
-                   self.times[self._t_index] < np.datetime64(self.skipToTime)):
+                   self.times[self._t_index] <= np.datetime64(self.skipToTime)):
                 self._t_index += 1
         
     def has_more(self):
@@ -1205,7 +1207,7 @@ class EventletFactory:
                 logger.info(f"Discarding event at {all_times[0]} for being too small over ocean")
                 return
 
-        all_times = sorted(ev.times)
+        all_times = sorted([pd.Timestamp(t) for t in ev.times])
         logger.info(f"Finalising extreme event from {all_times[0]} to {all_times[-1]}")
         # Collect coordinates and compute centroids
         all_coords = []
