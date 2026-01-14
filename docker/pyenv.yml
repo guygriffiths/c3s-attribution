@@ -18,6 +18,7 @@ dependencies:
   - beautifulsoup4
   - scikit-learn
   - alphashape
+  - cdsapi
   - pip
   - pip:
       - hdbscan

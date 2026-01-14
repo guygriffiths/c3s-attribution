@@ -16,7 +16,7 @@ Usage:
     download_year(2024, 'max', output_dir='/custom/path')
 """
 
-import logging
+import logging, sys
 from pathlib import Path
 from datetime import datetime
 from typing import List, Set, Optional
@@ -25,11 +25,17 @@ import cdsapi
 
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Only add handler if we don't have one already
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'
+    ))
+    logger.addHandler(handler)
 
 # Constants
 TEMP_DATASET = "derived-era5-single-levels-daily-statistics"

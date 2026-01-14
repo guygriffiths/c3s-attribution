@@ -17,13 +17,16 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Copy env and create the env
-COPY pyenv.yml .
+COPY docker/pyenv.yml .
 ENV MAMBA_DOCKERFILE_ACTIVATE=1
 RUN micromamba create -n c3s-pyenv --file pyenv.yml -y -c conda-forge
 
 # Ensure micromamba auto-activates the env on shell startup
 SHELL ["/bin/bash", "-c"]
 RUN echo "micromamba activate c3s-pyenv" >> ~/.bashrc
+
+# Set the entrypoint to always use micromamba
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
 
 # Default to bash shell in the env
 CMD ["/bin/bash"]

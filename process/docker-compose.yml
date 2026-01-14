@@ -1,7 +1,10 @@
-version: '3.8'
-
 services:
   download:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     build:
       context: ..
       dockerfile: docker/Dockerfile.python
@@ -9,10 +12,11 @@ services:
       - ../docker/.env
     volumes:
       - ./:/app:ro  # Mount process scripts into container
-      - /mnt/private/shared/era5-t2m:/data:rw
-      - ~/.cdsapirc:/root/.cdsapirc:ro
-    working_dir: /app
-    command: python3 download_era5.py
+    #  - /mnt/private/shared/era5-t2m:/data:rw
+      - /mnt/d/c3s-data/:/data:rw
+      - /home/guy/.cdsapirc:/root/.cdsapirc:ro
+    command: ["/bin/bash", "-c", "micromamba run -n c3s-pyenv python3 download_era5.py"]
+    #command: ["/bin/bash", "-c", "ls -la /root/"]
     
   percentiles:
     build:
@@ -22,9 +26,10 @@ services:
       - ../docker/.env
     volumes:
       - ./:/app:ro
-      - /mnt/private/shared/era5-t2m:/data:rw
+    #  - /mnt/private/shared/era5-t2m:/data:rw
+      - /mnt/d/c3s-data/:/data:rw      
     working_dir: /app
-    command: python3 make_percentiles.py
+    command: ["/bin/bash", "-c", "micromamba run -n c3s-pyenv python3 make_percentiles.py"]
     depends_on:
       download:
         condition: service_completed_successfully
@@ -37,13 +42,16 @@ services:
       - ../docker/.env
     volumes:
       - ./:/app:ro
-      - /mnt/private/shared/era5-t2m:/input:ro
-      - /data/data:/output:rw
+      # - /mnt/private/shared/era5-t2m:/input:ro
+      - /mnt/d/c3s-data:/input:ro
+      # - /data/data:/output:rw
+      - /mnt/d/c3s-data/output:/output:rw
     working_dir: /app
     environment:
       - EVENT_INPUT_DIR=/input
       - EVENT_OUTPUT_DIR=/output
-    command: python3 find_events.py
+    command: ["/bin/bash", "-c", "micromamba run -n c3s-pyenv python3 find_events.py"]
+   
     depends_on:
       percentiles:
         condition: service_completed_successfully

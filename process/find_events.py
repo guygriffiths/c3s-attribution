@@ -4,7 +4,7 @@
 import json
 import math
 import os
-import logging
+import logging, sys
 import pickle
 from collections import deque, namedtuple
 from typing import List, Tuple, Union, Optional
@@ -931,7 +931,7 @@ class EventletFactory:
         )
 
         # Convert to NumPy for performance
-        self.raw_mask = self.raw_mask.values
+        #self.raw_mask = self.raw_mask.values
         self.times = self.data.valid_time.values
 
         # Resume from previous state if provided
@@ -940,7 +940,7 @@ class EventletFactory:
                 with open(last_slice_name, "rb") as f:
                     last_slice_data = pickle.load(f)
 
-                    print(f"Resuming from last slice at {last_slice_data['time']}")
+                    logger.info(f"Resuming from last slice at {last_slice_data['time']}")
                     self.skipToTime = last_slice_data['time']
                     self.active = last_slice_data.get("active_events", [])
                     
@@ -949,7 +949,7 @@ class EventletFactory:
                     else:
                         self.oldest_active_time = None
                     
-                    print(f"Resumed {len(self.active)} active events")
+                    logger.info(f"Resumed {len(self.active)} active events")
         self.last_slice_name = last_slice_name
 
     def process_slice(self, time):
@@ -969,18 +969,20 @@ class EventletFactory:
         # Handle resumption: skip slices until we reach the resumption point
         if self.skipToTime:
             if time < self.skipToTime:
-                print(f"Skipping slice at {time}")
+                logger.info(f"Skipping slice at {time}")
                 return
             else:
-                print(f"Reached skip-to time at {time}, resuming processing")
+                logger.info(f"Reached skip-to time at {time}, resuming processing")
                 self.skipToTime = None
+        
+        logger.info(f"Processing slice at {time}")
 
         # Load data for this time slice
         data_slice = self.data.sel(valid_time=time).load()
         t = np.searchsorted(self.times, np.datetime64(time))
 
         # Apply persistence filter to raw mask
-        raw_mask_slice = self.raw_mask[t].copy()
+        raw_mask_slice = self.raw_mask.isel(valid_time=t).values
         enduring_slice = np.where(self.enduring_pixels[t], raw_mask_slice, False)
 
         # Get indices of threshold-exceeding points
@@ -1015,8 +1017,6 @@ class EventletFactory:
                 continue
             points = [m for i, m in enumerate(metadata) if labels[i] == label]
             blobs.append(points)
-
-        print(f"Found {len(blobs)} potential events in slice at {time}")
 
         # Match blobs to existing active events
         used_blobs = set()
@@ -1198,15 +1198,16 @@ class EventletFactory:
         if self.land_only:
             ev.remove_ocean(self.land_sea_mask)
             if not ev.is_valid(self.min_length, self.min_samples):
-                print(f"Discarding event at {ev.times[0]} for being too small over land")
+                logger.info(f"Discarding event at {ev.times[0]} for being too small over land")
                 return
         elif self.ocean_only:
             ev.remove_land(self.land_sea_mask)
             if not ev.is_valid(self.min_length, self.min_samples):
-                print(f"Discarding event at {all_times[0]} for being too small over ocean")
+                logger.info(f"Discarding event at {all_times[0]} for being too small over ocean")
                 return
 
         all_times = sorted(ev.times)
+        logger.info(f"Finalising extreme event from {all_times[0]} to {all_times[-1]}")
         # Collect coordinates and compute centroids
         all_coords = []
         centroids = []
@@ -1286,7 +1287,7 @@ class EventletFactory:
             ocean_only = all_ocean
 
         if ocean_only:
-            print(f"Event {event_id} is ocean-only, with centroid {centroids[0]}")
+            logger.info(f"Event {event_id} is ocean-only, with centroid {centroids[0]}")
 
         # Compute per-pixel maximum values across all time slices
         all_coords = np.vstack([np.asarray(t_slice) for t_slice in ev.slices])
@@ -1403,12 +1404,17 @@ class EventletFactory:
 
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
+# Only add handler if we don't have one already
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'
+    ))
+    logger.addHandler(handler)
 
 # Parameter set definition
 ParamSet = namedtuple(
@@ -1512,13 +1518,16 @@ def process_parameter_set(
             eventtype=event_type,
             land_only=land_sea_mask is not None,
         )
+        logger.info("EventFactory created, ready to process")
         
         # Process each time slice
         time_dim = data_var["valid_time"]
         total_slices = time_dim.size
+        logger.info(f"Got {total_slices} time values to process")
         
         for i in range(total_slices):
             time_val = pd.to_datetime(time_dim[i].values)
+            logger.info(f"Processing {time_val}")
             
             factory.process_slice(time_val)
         
