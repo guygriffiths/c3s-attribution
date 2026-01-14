@@ -270,10 +270,16 @@ def download_all_latest(
         base_dir.mkdir(parents=True, exist_ok=True)
         
         missing_years = get_missing_years(base_dir, stat)
-        
-        if not missing_years:
-            logger.info(f"{stat}: No missing years, all up to date!")
-            continue
+        current_year = datetime.now().year
+
+        if datetime.now().month == 1 and current_year - 1 not in missing_years:
+            # If it's January, we may not have full data for the previous year
+            missing_years.append(current_year - 1)
+            missing_years = sorted(missing_years)
+        if current_year not in missing_years:
+            # Ensure we always check the current year in case of partial data
+            missing_years.append(current_year)
+            missing_years = sorted(missing_years)
         
         logger.info(f"{stat}: Downloading {len(missing_years)} missing years")
         
