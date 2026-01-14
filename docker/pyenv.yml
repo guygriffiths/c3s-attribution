@@ -1,7 +1,6 @@
 name: c3s-pyenv
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - python
   - xarray
