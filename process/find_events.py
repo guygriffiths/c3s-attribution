@@ -951,8 +951,16 @@ class EventletFactory:
                     
                     logger.info(f"Resumed {len(self.active)} active events")
         self.last_slice_name = last_slice_name
+        self._t_index = 0  # Index of the next time slice to process
+        if self.skipToTime:
+            while (self._t_index < len(self.times) and 
+                   self.times[self._t_index] < np.datetime64(self.skipToTime)):
+                self._t_index += 1
+        
+    def has_more(self):
+        return self._t_index < len(self.times)
 
-    def process_slice(self, time):
+    def process_next_slice(self):
         """
         Process a single time slice: detect clusters, update active events, expire old ones.
         
@@ -962,20 +970,10 @@ class EventletFactory:
         3. Matches clusters to existing events or creates new events
         4. Expires events that haven't been updated recently
         5. Saves state for potential resumption
-        
-        Args:
-            time: Timestamp (numpy.datetime64 or pandas.Timestamp) to process
         """
         # Handle resumption: skip slices until we reach the resumption point
-        if self.skipToTime:
-            if time < self.skipToTime:
-                logger.info(f"Skipping slice at {time}")
-                return
-            else:
-                logger.info(f"Reached skip-to time at {time}, resuming processing")
-                self.skipToTime = None
-        
-        logger.info(f"Processing slice at {time}")
+        time = self.times[self._t_index]
+        self._t_index += 1
 
         # Load data for this time slice
         data_slice = self.data.sel(valid_time=time).load()
@@ -1518,22 +1516,14 @@ def process_parameter_set(
             eventtype=event_type,
             land_only=land_sea_mask is not None,
         )
-        logger.info("EventFactory created, ready to process")
-        
-        # Process each time slice
-        time_dim = data_var["valid_time"]
-        total_slices = time_dim.size
-        logger.info(f"Got {total_slices} time values to process")
-        
-        for i in range(total_slices):
-            time_val = pd.to_datetime(time_dim[i].values)
-            logger.info(f"Processing {time_val}")
-            
-            factory.process_slice(time_val)
-        
-        # Finalize remaining events
-        logger.info("Flushing remaining events...")
-        factory.flush()
+
+        # Process all time slices
+        logger.info("Processing time slices...")
+        while factory.has_more():
+            factory.process_next_slice()
+
+        # Now the factory is up-to-date. There are still events in the pipeline, but
+        # these have been persisted to disk for resumption later.
         
         logger.info(f"Successfully completed {event_type} event detection")
         return True

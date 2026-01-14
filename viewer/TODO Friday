@@ -105,15 +105,14 @@ P2
 * Precipitation (drought/wet to mirror heat/cold duality)
 * Data 1940-1979
 * Achievements system
-* Contextual help
+* Better contextual help
 * Chart and chart data download
 * User-uploadable regions
 * Save user settings in local storage, including custom regions.
-* Settle on the most useful definitions
 * Greater interactivity with analytics charts (zoom/pan, etc, select-similar events)
-* Attribution!!!
-* Smart similar-event selection on scatters
-* Filter max pixels out of region filters
+* Attribution
+* Similar-event selection on scatters
+* Filter max pixels out of region filters?
 
 Less crowded graphs
 Add lots of text/explanation.
