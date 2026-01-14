@@ -1,5 +1,5 @@
 services:
-  download:
+  pipeline:
     network_mode: "host"
     logging:
       driver: "json-file"
@@ -16,6 +16,19 @@ services:
       - ./:/app:ro  # Mount process scripts into container
       - /mnt/private/shared/era5-t2m:/data:rw
       - /homes/web/.cdsapirc:/root/.cdsapirc:ro
+      - /mnt/private/shared/era5-t2m:/input:ro
+      - /mnt/private/wp1/test-output:/output:rw
+    working_dir: /app
+    environment:
+      - EVENT_INPUT_DIR=/input
+    command: ["/bin/bash", "-c", "\
+        micromamba run -n c3s-pyenv python3 download_era5.py && \
+        micromamba run -n c3s-pyenv python3 make_percentiles.py && \
+        micromamba run -n c3s-pyenv python3 detect_events.py \
+    "]
+
+  download:
+
     command: ["/bin/bash", "-c", "micromamba run -n c3s-pyenv python3 download_era5.py"]
     
   percentiles:
