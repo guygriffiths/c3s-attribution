@@ -974,6 +974,7 @@ class EventletFactory:
         # Handle resumption: skip slices until we reach the resumption point
         time = self.times[self._t_index]
         self._t_index += 1
+        logger.info(f"Processing slice at {time}")
 
         # Load data for this time slice
         data_slice = self.data.sel(valid_time=time).load()
