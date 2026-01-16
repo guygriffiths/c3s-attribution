@@ -362,60 +362,127 @@ def round_floats(obj, decimals: int = 4):
 # ============================================================================
 # ID Generation
 # ============================================================================
-def get_id(
-    eventtype: str,
-    time: pd.Timestamp,
-    centroid: Tuple[float, float],
-    threshold: float,
-    radius: float
-) -> str:
+def get_id(eventtype: str, event: 'Eventlet') -> str:
     """
-    Generate a unique, human-readable ID for an event.
+    Generate a unique, human-readable ID for an event based on its peak pixel.
     
-    Creates a deterministic ID encoding the event's key properties:
-    event type, date, threshold, radius, and rounded centroid coordinates.
+    The ID encodes the peak pixel's properties: event type, date, location, and value.
+    The peak pixel is defined differently based on event type:
+    - For "hot" events: pixel with MAXIMUM temperature value
+    - For "cold" or "drought" events: pixel with MINIMUM value
+    
+    Ties are broken by: (1) earliest time, (2) lowest latitude, (3) lowest longitude.
+    
+    This approach ensures:
+    - Same event in different datasets (e.g., different processing parameters) gets same ID
+    - Enables matching equivalent events across attribution studies
+    - Human-readable and sortable by date
     
     Args:
-        eventtype: Event type prefix (e.g., "HEAT", "COLD")
-        time: Timestamp of the event
-        centroid: (latitude, longitude) in degrees
-        threshold: Temperature threshold in Kelvin
-        radius: Spatial radius in km
+        eventtype: Event type ("hot", "cold", "drought", etc.)
+        event: Eventlet object containing time slices, coordinates, and values
         
     Returns:
         Formatted ID string with structure:
-        {type}{YYYYMMDD}{thresh:3d}{radius:5d}{lat:6d}{lon:6d}
+        {type}{YYYYMMDD}{value_code:04d}{lat:06d}{lon:06d}
         
     Example:
-        >>> get_id("HEAT", pd.Timestamp("2024-07-15"), (51.5, -0.1), 303.15, 250.0)
-        'HEAT20240715300250051500179900'
+        >>> event = Eventlet(...)  # Hot event
+        >>> get_id("hot", event)
+        'hot20240715400051505359875'
         
-    Note:
-        - Coordinates are snapped to 0.001° precision
-        - Threshold converted to Celsius * 10 (e.g., 30.0°C -> 300)
-        - Negative thresholds encoded as 900 + abs(value)
+    Notes:
+        - Coordinates are snapped to 0.001° precision (grid resolution)
+        - Temperature is converted to Celsius × 10 (e.g., 40.0°C → 400)
+        - Negative temperatures encoded as (1000 + abs(temp)) (e.g., -10°C → 1100)
+        - Location coordinates shifted to positive range for consistent formatting
+        
+    Peak pixel selection:
+        1. Find pixel with extreme value (max for hot, min for cold/drought)
+        2. If tied, use earliest occurrence (first time slice)
+        3. If still tied, use lowest latitude
+        4. If still tied, use lowest longitude
     """
-    # Snap centroid to nearest 0.001 degrees
-    lat = round(centroid[0], 3)
-    lon = round(centroid[1], 3)
-
-    # Shift coordinates to positive range
-    lat_code = int(round((lat + 90) * 1000))   # 0 to 180000 range
-    lon_code = int(round((lon + 180) * 1000))  # 0 to 360000 range
-
-    # Convert threshold from Kelvin to Celsius * 10
-    thresh = int(round((threshold - 273.15) * 10))
-    if thresh < 0:
-        thresh = 900 - thresh  # Encode negative temps above 900
+    # Collect all coordinates and values across all time slices
+    all_coords = []
+    all_values = []
+    all_times = []
     
-    radius = int(round(radius))
-
-    time_str = time.strftime('%Y%m%d')
-
-    return (f"{eventtype}{time_str}"
-            f"{thresh:03d}{radius:05d}{lat_code:06d}{lon_code:06d}")
-
-
+    for i, (time_slice, coords_slice, values_slice) in enumerate(
+        zip(event.times, event.slices, event.values)
+    ):
+        for coord, value in zip(coords_slice, values_slice):
+            all_coords.append(coord)
+            all_values.append(value)
+            all_times.append(time_slice)
+    
+    # Convert to numpy arrays for easier manipulation
+    all_coords = np.array(all_coords)  # Shape: (N, 2) - [lat, lon]
+    all_values = np.array(all_values)  # Shape: (N,)
+    all_times = np.array(all_times)    # Shape: (N,)
+    
+    # Determine whether to find max or min based on event type
+    if eventtype.lower() in ['cold', 'drought']:
+        # For cold/drought events, find minimum value
+        extreme_value = np.min(all_values)
+        extreme_indices = np.where(all_values == extreme_value)[0]
+    else:
+        # For hot events (and default), find maximum value
+        extreme_value = np.max(all_values)
+        extreme_indices = np.where(all_values == extreme_value)[0]
+    
+    # Apply tie-breaking rules
+    if len(extreme_indices) == 1:
+        peak_idx = extreme_indices[0]
+    else:
+        # Tie-breaking: earliest time, then lowest lat, then lowest lon
+        candidates = extreme_indices
+        
+        # 2. Among tied values, find earliest time
+        min_time = np.min(all_times[candidates])
+        candidates = candidates[all_times[candidates] == min_time]
+        
+        if len(candidates) == 1:
+            peak_idx = candidates[0]
+        else:
+            # 3. Among tied times, find lowest latitude
+            min_lat = np.min(all_coords[candidates, 0])
+            candidates = candidates[all_coords[candidates, 0] == min_lat]
+            
+            if len(candidates) == 1:
+                peak_idx = candidates[0]
+            else:
+                # 4. Among tied latitudes, find lowest longitude
+                min_lon = np.min(all_coords[candidates, 1])
+                peak_idx = candidates[all_coords[candidates, 1] == min_lon][0]
+    
+    # Extract peak pixel properties
+    peak_time = all_times[peak_idx]
+    peak_lat, peak_lon = all_coords[peak_idx]
+    peak_value = all_values[peak_idx]
+    
+    # Snap location to 0.001° precision
+    lat = round(float(peak_lat), 3)
+    lon = round(float(peak_lon), 3)
+    
+    # Shift coordinates to positive range for fixed-width encoding
+    lat_code = int(round((lat + 90) * 1000))   # Range: 0 to 180000
+    lon_code = int(round((lon + 180) * 1000))  # Range: 0 to 360000
+    
+    # Convert temperature from Kelvin to Celsius × 10
+    temp_celsius = peak_value - 273.15
+    temp_code = int(round(temp_celsius * 10))
+    
+    # Handle negative temperatures (encode above 1000)
+    if temp_code < 0:
+        temp_code = 1000 + abs(temp_code)
+    
+    # Format: TYPE + DATE(8) + TEMP(4) + LAT(6) + LON(6)
+    # Total: variable prefix + 24 fixed digits
+    return (
+        f"{eventtype}{pd.Timestamp(peak_time).strftime('%Y%m%d')}"
+        f"{temp_code:04d}{lat_code:06d}{lon_code:06d}"
+    )
 # ============================================================================
 # Data Loading and Transformation
 # ============================================================================
