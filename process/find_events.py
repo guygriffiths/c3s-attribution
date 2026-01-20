@@ -1289,11 +1289,7 @@ class EventletFactory:
         bbox = [float(min(lats)), float(min(lons)), float(max(lats)), float(max(lons))]
 
         # Generate stable event ID
-        valid_centroids = np.array([c for c in centroids if c is not None])
-        mean_centroid = np.mean(valid_centroids, axis=0)
-        event_id = get_id(
-            self.eventtype, all_times[0], mean_centroid, self.threshold, self.radius
-        )
+        event_id = get_id(self.eventtype, ev)
 
         # Compute statistics across time slices
         max_values = to_serializable([
