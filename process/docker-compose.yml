@@ -14,52 +14,13 @@ services:
       - ../docker/.env
     volumes:
       - ./:/app:ro  # Mount process scripts into container
-      - /mnt/private/shared/era5-t2m:/data:rw
+      - /private/shared/era5-t2m:/data:rw
       - /homes/web/.cdsapirc:/root/.cdsapirc:ro
-      - /mnt/private/shared/era5-t2m:/input:ro
-      - /mnt/private/wp1/test-output:/output:rw
+      - /private/wp1/test-output:/output:rw
     working_dir: /app
     environment:
-      - EVENT_INPUT_DIR=/input
+      - EVENT_INPUT_DIR=/data
     command: ["/bin/bash", "-c", "\
-        micromamba run -n c3s-pyenv python3 download_era5.py && \
         micromamba run -n c3s-pyenv python3 make_percentiles.py && \
-        micromamba run -n c3s-pyenv python3 detect_events.py \
+        micromamba run -n c3s-pyenv python3 find_events.py \
     "]
-
-  download:
-
-    command: ["/bin/bash", "-c", "micromamba run -n c3s-pyenv python3 download_era5.py"]
-    
-  percentiles:
-    network_mode: "host"
-    image: c3s-pyenv:latest
-    env_file:
-      - ../docker/.env
-    volumes:
-      - ./:/app:ro
-      - /mnt/private/shared/era5-t2m:/data:rw
-    working_dir: /app
-    command: ["/bin/bash", "-c", "micromamba run -n c3s-pyenv python3 make_percentiles.py"]
-    depends_on:
-      download:
-        condition: service_completed_successfully
-        
-  detect-events:
-    network_mode: "host"
-    image: c3s-pyenv:latest
-    env_file:
-      - ../docker/.env
-    volumes:
-      - ./:/app:ro
-      - /mnt/private/shared/era5-t2m:/input:ro
-      - /mnt/private/wp1/test-output:/output:rw
-    working_dir: /app
-    environment:
-      - EVENT_INPUT_DIR=/input
-      - EVENT_OUTPUT_DIR=/output
-    command: ["/bin/bash", "-c", "micromamba run -n c3s-pyenv python3 find_events.py"]
-   
-    depends_on:
-      percentiles:
-        condition: service_completed_successfully

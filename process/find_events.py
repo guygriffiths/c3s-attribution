@@ -1531,7 +1531,7 @@ def get_default_params() -> List[ParamSet]:
 
 def process_parameter_set(
     param: ParamSet,
-    input_dir: str = "/input",
+    input_dir: str = "/data",
     output_dir: str = "/output"
 ) -> bool:
     """
@@ -1609,7 +1609,7 @@ def main():
     
     Processes all configured parameter sets sequentially. Environment
     variables can override default paths:
-        EVENT_INPUT_DIR: Input data directory (default: /input)
+        EVENT_INPUT_DIR: Input data directory (default: /data)
         EVENT_OUTPUT_DIR: Output directory (default: /output)
     """
     logger.info("=" * 60)
@@ -1617,7 +1617,7 @@ def main():
     logger.info("=" * 60)
     
     # Get paths from environment or use defaults
-    input_dir = os.environ.get("EVENT_INPUT_DIR", "/input")
+    input_dir = os.environ.get("EVENT_INPUT_DIR", "/data")
     output_dir = os.environ.get("EVENT_OUTPUT_DIR", "/output")
     
     logger.info(f"Input directory: {input_dir}")
