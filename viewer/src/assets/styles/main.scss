@@ -119,6 +119,8 @@ button {
 		// Frosted panel styling
 		background: var(--panel-bg);
 		color: var(--primary-unselected);
+		backdrop-filter: $frosty;
+		box-shadow: var(--shadow-md);
 
 		&.color {
 			background: var(--primary-glass);
@@ -135,10 +137,7 @@ button {
 			}
 		}
 
-		// background: var(--primary-glass);
-		backdrop-filter: $frosty;
 
-		box-shadow: var(--shadow-md);
 		&:hover {
 			box-shadow: var(--shadow-md), var(--shadow-lg);
 			background: var(--primary-glass-shine);

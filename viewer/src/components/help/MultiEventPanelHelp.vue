@@ -2,17 +2,15 @@
 import {
 	IconStopwatch,
 	IconDimensions,
-	IconReport,
 	IconTemperaturePlus,
 	IconTemperatureMinus,
-	IconDownload,
 	IconChartBar,
-	IconSortAscendingSmallBig,
+	IconChartScatter,
+	IconTimeline,
 } from '@tabler/icons-vue'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 
-const store = useStore()
 const eventStore = useEventStore()
 </script>
 
@@ -45,11 +43,12 @@ const eventStore = useEventStore()
 			distribution of plotted event values. 
 		</p>
 		<p>
-			<span class="button glassy color decoration">
-				<IconDownload aria-hidden="true" />
-			</span>
-			Download the raw event data as a JSON file for further analysis.
+			<IconChartScatter class="icon" aria-hidden="true" /> The second chart shows two parameters of the events plotted against each other. The X and Y axes can be changed by clicking on the axis labels.
 		</p>
+		<p>
+			<IconTimeline class="icon" aria-hidden="true" /> The third chart shows how the selected variable changes over time for all events. The X axis is always time, and the range shown corresponds to the time range selected in the time selector.
+		</p>
+
 	</div>
 </template>
 
@@ -60,7 +59,7 @@ const eventStore = useEventStore()
 }
 
 .icon-ul {
-	diisplay: flex;
+	display: flex;
 	flex-direction: column;
 	padding-left: 1.5rem;
 

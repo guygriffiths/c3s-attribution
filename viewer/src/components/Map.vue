@@ -363,7 +363,9 @@ const cScale = computed(() => {
 	)
 	const minIntensity = Math.min(minValIntensity, maxValIntensity)
 	const maxIntensity = Math.max(minValIntensity, maxValIntensity)
-	return d3.scaleLinear().domain([minIntensity, maxIntensity]).range([0, 1])
+	return eventStore.selectedEvent?.event_type === 'hot'
+		? d3.scaleLinear().domain([minIntensity, maxIntensity]).range([0, 1])
+		: d3.scaleLinear().domain([minIntensity, maxIntensity]).range([1, 0])
 })
 
 const renderTile = (props: any) => {
@@ -832,7 +834,6 @@ const resetZoom = () => {
 			gap: 0.5rem;
 			z-index: 100;
 			pointer-events: all;
-
 		}
 
 		.zoom-button {

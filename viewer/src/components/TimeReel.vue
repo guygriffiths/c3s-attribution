@@ -8,7 +8,6 @@ import {
 	monthsForYear,
 	TOTAL_DAYS,
 	intervalToMs,
-	dateStr,
 } from '@/lib/time-utils'
 import * as d3 from 'd3'
 import {
@@ -21,7 +20,6 @@ import {
 } from 'date-fns'
 import {
 	computed,
-	defineModel,
 	nextTick,
 	onBeforeUnmount,
 	onMounted,

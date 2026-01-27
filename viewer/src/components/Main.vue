@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, watch } from 'vue'
+import { computed } from 'vue'
+import { differenceInDays } from 'date-fns'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { useStore as useEventStore } from '@/store/eventStore'
+import { helpMe } from '@/lib/help'
 import MapComponent from './Map.vue'
+import AppLogo from './AppLogo.vue'
+import FooterLogos from './FooterLogos.vue'
 import EventTypeToggle from './util/EventTypeToggle.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
@@ -13,46 +17,29 @@ import SelectedEventInfoPanel from './SelectedEventInfoPanel.vue'
 import FilterPanel from './FilterPanel.vue'
 import FocusFrame from './util/FocusFrame.vue'
 import ModeToggle from './util/ModeToggle.vue'
-import { differenceInDays } from 'date-fns'
 import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
+import EventDayPanel from './EventDayPanel.vue'
+import HelpButton from './util/HelpButton.vue'
 import {
 	IconCalendarWeek,
-	IconCalendarTime,
 	IconChartBar,
 	IconChartHistogram,
-	IconChevronCompactUp,
 	IconInfoSquareRounded,
 	IconMenu2,
 	IconWindowMaximize,
 	IconWindowMinimize,
 	IconX,
-	IconLayersIntersect,
-	IconEye,
-	IconEyePin,
 	IconInfoOctagon,
 } from '@tabler/icons-vue'
-import EventDayPanel from './EventDayPanel.vue'
-import {
-	getCurrentEvents,
-	getParameterFilteredEvents,
-	getSpaceTimeFilteredEvents,
-	getSpatiallyFilteredEvents,
-	getTimeFilteredEvents,
-	onParameterFilterChanged,
-	onSpaceTimeFilterChanged,
-	onSpatialFilterChanged,
-	onTimeFilterChanged,
-	setEventTypeFilter,
-	setTimeRangeFilter,
-} from '@/lib/eventsDB'
-import HelpButton from './util/HelpButton.vue'
-import { helpMe } from '@/lib/help'
+import { useEventFilters } from '@/lib/eventFilters'
 
+// Stores
 const $l = useLabels()
 const store = useStore()
 const timeStore = useTimeStore()
 const eventStore = useEventStore()
 
+// UI state handlers
 const toggleTimePanelExpanded = () => {
 	timeStore.timePanelExpanded = !timeStore.timePanelExpanded
 }
@@ -62,99 +49,10 @@ const exitFocus = () => {
 	store.draggingFilter = false
 }
 
-// Time reel events. These are filtered spatially and manually, but not temporally
-const timeReelEvents = ref([] as ExtremeEvent[])
-onSpatialFilterChanged(() => {
-	timeReelEvents.value = getSpatiallyFilteredEvents()
-})
-watch(
-	() => [store.exploreGlobal],
-	() => {
-		if (store.exploreGlobal) {
-			timeReelEvents.value = getParameterFilteredEvents()
-		} else {
-			timeReelEvents.value = getSpatiallyFilteredEvents()
-		}
-	},
-	{ immediate: true },
-)
+const { timeReelEvents, summaryEvents, globalFilteredEvents } =
+	useEventFilters()
 
-// Summary events. These are filtered spatially, manually, and temporally (either at a day - timemchine, or over a range - heatmap)
-const summaryEvents = ref([] as ExtremeEvent[])
-const updateSummaryEvents = () => {
-	if (store.viewMode === 'timemachine') {
-		summaryEvents.value = getCurrentEvents(timeStore.selectedTime, true)
-	} else {
-		summaryEvents.value = getSpaceTimeFilteredEvents()
-		if (eventStore.selectedEvent) {
-			// Ensure selected event is included
-			if (
-				!summaryEvents.value.find((e) => e.id === eventStore.selectedEvent?.id)
-			) {
-				// @ts-ignore
-				summaryEvents.value.push(eventStore.selectedEvent)
-			}
-		}
-	}
-}
-onSpaceTimeFilterChanged(updateSummaryEvents)
-
-watch(
-	() => [store.viewMode, timeStore.selectedTime],
-	() => {
-		if (store.viewMode === 'timemachine') {
-			summaryEvents.value = getCurrentEvents(timeStore.selectedTime, true)
-		} else {
-			summaryEvents.value = getSpaceTimeFilteredEvents()
-			if (eventStore.selectedEvent) {
-				// Ensure selected event is included
-				if (
-					!summaryEvents.value.find(
-						(e) => e.id === eventStore.selectedEvent?.id,
-					)
-				) {
-					// @ts-ignore
-					summaryEvents.value.push(eventStore.selectedEvent)
-				}
-			}
-		}
-	},
-	{ immediate: true },
-)
-// Used as background events in MultiEventSmartPanel when filtering spatially
-const globalFilteredEvents = ref([] as ExtremeEvent[])
-
-onParameterFilterChanged(() => {
-	globalFilteredEvents.value = getParameterFilteredEvents()
-	if (store.exploreGlobal) {
-		// console.log('Main.vue: setting eventsOfInterest to globalFilteredEvents')
-		timeReelEvents.value = globalFilteredEvents.value
-	}
-})
-
-let pending = false
-watch(
-	() => [timeStore.startTimeFilter, timeStore.endTimeFilter],
-	() => {
-		setTimeRangeFilter(timeStore.startTimeFilter, timeStore.endTimeFilter)
-	},
-	{ immediate: true },
-)
-
-watch(
-	() => [eventStore.eventTypeMode],
-	() => {
-		if (eventStore.eventTypeMode === 'cold') {
-			setEventTypeFilter(false, true)
-		} else if (eventStore.eventTypeMode === 'hot') {
-			setEventTypeFilter(true, false)
-		} else {
-			setEventTypeFilter(true, true)
-		}
-	},
-	{ immediate: true },
-)
-
+// Time reel mode computation
 const mode = computed((): TimeReelMode => {
 	if (store.viewMode === 'heatmap') return 'timeline'
 	if (eventStore.eventSelected) return 'eventzoom'
@@ -162,17 +60,21 @@ const mode = computed((): TimeReelMode => {
 	return 'default'
 })
 
+// Selected day index for event day panel
 const selectedDayIdx = computed((): number | null => {
 	if (
 		!eventStore.selectedEvent ||
 		!eventStore.selectedEvent.hasOwnProperty('pixel_max_values')
-	)
+	) {
 		return null
+	}
+
 	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent)
 	const selectedDay = differenceInDays(
 		timeStore.selectedTime,
 		new Date(eventStore.selectedEvent?.times[0] || 0),
 	)
+
 	if (selectedDay < 0 || selectedDay >= totalDays) return null
 	return selectedDay
 })
@@ -180,197 +82,23 @@ const selectedDayIdx = computed((): number | null => {
 
 <template>
 	<div class="main">
+		<!-- Focus overlay frame -->
 		<FocusFrame id="focus-frame" :active="store.isFocused" @close="exitFocus" />
 
-		<MapComponent id="map"></MapComponent>
+		<!-- Main map component -->
+		<MapComponent id="map" />
 
-		<div
-			id="logo"
-			:class="{ 'disable-pointer-events': store.isFocused }"
-			:aria-label="
-				eventStore.eventTypeMode === 'hot'
-					? $l.hotTitle
-					: eventStore.eventTypeMode === 'cold'
-						? $l.coldTitle
-						: $l.hotcoldTitle
-			"
-		>
-			<div class="title-wrapper" :class="{ square: store.mainHelpOpen }">
-				<img
-					src="@/assets/img/c3s-logo.png"
-					alt="C3S Logo"
-					aria-hidden="true"
-				/>
-				<h1 aria-hidden="true">
-					Extreme
-					<span
-						class="eventtype"
-						@click="eventStore.cycleEventType()"
-						role="button"
-						tabindex="-1"
-					>
-						{{
-							eventStore.eventTypeMode === 'hot'
-								? 'Heat Event'
-								: eventStore.eventTypeMode === 'cold'
-									? 'Cold Event'
-									: 'Event'
-						}}
-					</span>
-					Explorer
-					<!-- <button
-						v-if="!store.isFocused"
-						class="expand glassy color"
-						@click="store.mainHelpOpen = true"
-						v-tooltip="$l.welcome"
-						:class="{ disabled: store.mainHelpOpen }"
-					>
-						<IconInfoSquareRounded size="20" aria-hidden="true" />
-					</button> -->
-				</h1>
-			</div>
-			<!-- <div class="welcome" :class="{ hidden: !store.mainHelpOpen }">
-				<button
-					class="expand glassy color close"
-					@click="store.mainHelpOpen = false"
-					v-tooltip="$l.close"
-					:class="{ disabled: !store.mainHelpOpen }"
-				>
-					<IconX aria-hidden="true" />
-				</button>
-				<div class="scroll-wrap">
-					<p>
-						Welcome to the C3S Extreme Event Explorer! Explore extreme
-						temperature events from {{ new Date().getFullYear() }} all the way
-						back to 1979.
-					</p>
-					<p>
-						This is a prototype tool developed as part of the Copernicus Climate
-						Change Service (C3S). When the final version is released in Spring
-						2026, it will feature fuller interactive help. For now, a brief
-						overview of the main features is provided below.
-					</p>
-					<h3>
-						<span class="button glassy color decoration">
-							<IconCalendarTime size="24" aria-hidden="true" />
-						</span>
-						Time Machine - Navigate through time effortlessly and explore
-						individual events in detail
-					</h3>
-					<ul>
-						<li>
-							Use the time reel to intuitively and quickly navigate through
-							time.
-							<ul>
-								<li>Scroll through years with your mouse or trackpad</li>
-								<li>
-									Click and drag the reel to scrub through the selected year
-								</li>
-								<li>
-									Use the navigation spans to step through time, or animate
-									the passing of time
-								</li>
-								<li>
-									Explore the full timeline and use the scrubber to quickly
-									explore and jump to specific dates
-								</li>
-								<li>
-									Select events directly from the time reel to jump to the start
-									of that event and see it in more detail
-								</li>
-							</ul>
-						</li>
-						<li>
-							See a daily summary of events, ranked by either size, temperature,
-							or duration
-						</li>
-						<li>
-							Select an event from the daily ranking, the map, or the time reel
-							to see detailed graphs and information, and to download the raw
-							event data
-						</li>
-						<li>
-							Filter events or explore extreme cold events using the hamburger
-							menu
-						</li>
-					</ul>
-					<h3>
-						<span class="button glassy color decoration">
-							<IconEyePin size="24" aria-hidden="true" />
-						</span>
-						Overview - Visualise thousands of historical events simultaneously
-					</h3>
-					<ul>
-						<li>
-							Select a time range to view the footprints of thousands of events
-							at once
-							<ul>
-								<li>
-									The time reel has now transformed into a single timeline of
-									events
-								</li>
-								<li>
-									By default the last 20 years are selected, but the sliding
-									window can be moved and resized
-								</li>
-								<li>
-									The map and graphs will update in real-time as you adjust the
-									time range
-								</li>
-								<li>
-									Trends over time can easily be visualised by using the
-									animation controls
-								</li>
-							</ul>
-						</li>
-						<li>
-							Select a particular geographical region to focus on
-							<ul>
-								<li>
-									Draw a region on the map to filter events whose pixels lie
-									within it
-								</li>
-								<li>
-									Use the point selector to focus on events at a specific
-									location
-								</li>
-								<li style="font-style: italic; opacity: 0.8">
-									Coming spring 2026: Upload GeoJSON regions for accurate custom
-									filtering
-								</li>
-							</ul>
-						</li>
-						<li>
-							The summary will now show not just a selected daily ranking, but a
-							ranking of all events in the selected time range
-						</li>
-						<li>
-							View histograms and plots of event characteristics over the
-							selected time range
-						</li>
-						<li>
-							Select an event from the ranking table, or from Time Machine mode,
-							to see its entire footprint of extreme temperatures, and to see it
-							put into context on the graphs and ranking table.
-						</li>
-					</ul>
-				</div>
-				<button
-					class="glassy collapse"
-					@click="store.mainHelpOpen = false"
-					v-tooltip="$l.close"
-				>
-					<IconChevronCompactUp size="24" aria-hidden="true" />
-				</button>
-			</div> -->
-		</div>
+		<!-- Logo and title section -->
+		<AppLogo id="logo" />
 
+		<!-- Mode toggle (time machine / overview) -->
 		<ModeToggle
 			v-model="store.viewMode"
 			id="mode-toggle"
 			:class="{ hidden: timeStore.timePanelExpanded }"
 		/>
 
+		<!-- Hamburger menu button -->
 		<button
 			id="hamburger-button"
 			class="glassy color"
@@ -387,6 +115,8 @@ const selectedDayIdx = computed((): number | null => {
 			<IconMenu2 size="24" aria-hidden="true" v-if="!store.hamburgerMenuOpen" />
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
+
+		<!-- Hamburger menu panel -->
 		<div
 			id="hamburger-menu"
 			class="panel top"
@@ -408,8 +138,7 @@ const selectedDayIdx = computed((): number | null => {
 			<HelpButton help="hamburgerMenu" />
 		</div>
 
-		<!-- Event Panel -->
-		<!-- This is the panel on the left with graphs for the selected event -->
+		<!-- Event day panel (time machine mode, left side) -->
 		<EventDayPanel
 			id="event-day-panel"
 			:selected-event="eventStore.selectedEvent"
@@ -426,6 +155,8 @@ const selectedDayIdx = computed((): number | null => {
 		>
 			<HelpButton help="eventDayPanel" />
 		</EventDayPanel>
+
+		<!-- Event graphs panel (time machine mode, left side) -->
 		<EventGraphs
 			id="event-graphs"
 			:selected-event="eventStore.selectedEvent"
@@ -444,11 +175,11 @@ const selectedDayIdx = computed((): number | null => {
 					timeStore.selectedTime = new Date(date)
 				}
 			"
-			><HelpButton help="eventGraphs"
-		/></EventGraphs>
+		>
+			<HelpButton help="eventGraphs" />
+		</EventGraphs>
 
-		<!-- Multi-Event Panel -->
-		<!-- This is the panel on the right with rankings and histograms -->
+		<!-- Multi-event panel toggle button -->
 		<button
 			id="multi-button"
 			class="glassy color"
@@ -472,6 +203,7 @@ const selectedDayIdx = computed((): number | null => {
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
 
+		<!-- Multi-event panel (overview mode, right side) -->
 		<MultiEventSmartPanel
 			id="multi-event-panel"
 			:events-of-interest="summaryEvents"
@@ -492,7 +224,8 @@ const selectedDayIdx = computed((): number | null => {
 					? 'true'
 					: undefined
 			"
-			><button
+		>
+			<button
 				id="multimax-button"
 				class="glassy color"
 				:inert="store.viewMode !== 'heatmap' ? 'true' : undefined"
@@ -519,7 +252,7 @@ const selectedDayIdx = computed((): number | null => {
 			<HelpButton help="multiEventPanel" />
 		</MultiEventSmartPanel>
 
-		<!-- Event Info Panel -->
+		<!-- Event info panel toggle button -->
 		<button
 			id="info-button"
 			class="glassy color"
@@ -547,6 +280,8 @@ const selectedDayIdx = computed((): number | null => {
 			/>
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
+
+		<!-- Event info panel (right side, top) -->
 		<EventInfoPanel
 			id="event-info-panel"
 			:selected-event="eventStore.selectedEvent"
@@ -573,18 +308,23 @@ const selectedDayIdx = computed((): number | null => {
 		>
 			<HelpButton help="eventInfo" />
 		</EventInfoPanel>
+
+		<!-- Selected event info panel (dependent upon mode - RHS in timemachine, LHS in heatmap) -->
 		<SelectedEventInfoPanel
+			v-if="eventStore.selectedEvent"
 			id="selected-event-info-panel"
 			class="chart"
-			v-if="eventStore.selectedEvent"
 			:selected-event="eventStore.selectedEvent"
 			:event-store="eventStore"
 			:class="{
-				show: eventStore.selectedEvent !== null && store.showInfoPanel,
+				show:
+					eventStore.selectedEvent !== null &&
+					(store.showInfoPanel || store.viewMode === 'timemachine'),
 				single: store.viewMode === 'timemachine' && store.isFocused,
 			}"
 			:inert="
-				eventStore.selectedEvent === null || !store.showInfoPanel
+				eventStore.selectedEvent === null ||
+				!(store.showInfoPanel && store.viewMode === 'timemachine')
 					? 'true'
 					: undefined
 			"
@@ -592,7 +332,7 @@ const selectedDayIdx = computed((): number | null => {
 			<HelpButton help="selectedEventInfo" />
 		</SelectedEventInfoPanel>
 
-		<!-- Time Panel -->
+		<!-- Time panel (bottom) -->
 		<div
 			id="time-panel"
 			class="panel bottom active"
@@ -623,8 +363,9 @@ const selectedDayIdx = computed((): number | null => {
 				@playing="timeStore.isPlaying = true"
 				@paused="timeStore.isPlaying = false"
 				@hover="eventStore.setHoveringEvent"
-			>
-			</TimeReel>
+			/>
+
+			<!-- Time panel expand button -->
 			<button
 				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
 				class="panel-expand glassy color"
@@ -638,6 +379,8 @@ const selectedDayIdx = computed((): number | null => {
 				/>
 				<IconX v-else aria-hidden="true" />
 			</button>
+
+			<!-- Show bars toggle -->
 			<button
 				v-if="
 					store.viewMode === 'timemachine' &&
@@ -653,54 +396,14 @@ const selectedDayIdx = computed((): number | null => {
 			>
 				<IconChartBar class="bar-icon" aria-hidden="true" />
 			</button>
+
 			<HelpButton help="timeReel" />
 		</div>
-		<div class="logos">
-			<a href="https://www.copernicus.eu/en" target="_blank" rel="noopener">
-				<span class="sr-only">Copernicus European Union Programme</span>
-				<img
-					src="@/assets/img/eu-negative-logo.webp"
-					alt="European Union Logo"
-					class="logo"
-					aria-hidden="true"
-				/>
-			</a>
-			<a href="https://www.copernicus.eu/en" target="_blank" rel="noopener">
-				<span class="sr-only">Copernicus European Union Programme</span>
-				<img
-					src="@/assets/img/copernicus-negative-logo.webp"
-					alt="Copernicus Programme Logo"
-					class="logo"
-					aria-hidden="true"
-				/>
-			</a>
-			<a href="https://climate.copernicus.eu/" target="_blank" rel="noopener">
-				<span class="sr-only"
-					>Copernicus Climate Change Service (C3S) - European Climate
-					Observations, Modelling and Services</span
-				>
-				<img
-					src="@/assets/img/c3s-negative-logo.webp"
-					alt="Copernicus Climate Change Service Logo"
-					class="logo"
-					aria-hidden="true"
-				/>
-			</a>
-			<a href="https://www.ecmwf.int/" target="_blank" rel="noopener">
-				<span class="sr-only"
-					>European Centre for Medium-Range Weather Forecasts (ECMWF)</span
-				>
-				<img
-					src="@/assets/img/ecmwf-negative-logo.png"
-					alt="ECMWF Logo"
-					class="logo"
-					aria-hidden="true"
-				/>
-			</a>
-		</div>
 
-		<!-- Event Window -->
-		<!-- This is the invisible div that defines where the map should zoom to -->
+		<!-- Footer logos -->
+		<FooterLogos id="footer-logos" />
+
+		<!-- Event window (invisible div for map zoom boundaries) -->
 		<div
 			id="event-window"
 			:class="{
@@ -725,27 +428,12 @@ const selectedDayIdx = computed((): number | null => {
 	max-height: 100vh;
 	position: relative;
 
-	.logos {
+	#footer-logos {
 		position: absolute;
 		bottom: 0;
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 325;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--panel-bg-night);
-		backdrop-filter: $frosty;
-		padding: 0.25rem 0.5rem;
-		border-radius: $borderRadius;
-		border-bottom-right-radius: 0;
-		border-bottom-left-radius: 0;
-		box-shadow: var(--shadow-md);
-		gap: 1rem;
-		.logo {
-			height: 2rem;
-			width: auto;
-		}
 	}
 
 	#focus-frame {
@@ -767,136 +455,7 @@ const selectedDayIdx = computed((): number | null => {
 		position: absolute;
 		top: $panelMargin;
 		left: $panelMargin;
-		// width: calc(50% - 2 * $panelMargin - $modeButtonWidth);
 		z-index: 200;
-		pointer-events: none;
-		display: flex;
-		flex-direction: column;
-		gap: 0;
-
-		button.expand {
-			position: absolute;
-			bottom: 0;
-			right: 0;
-			padding: 0;
-			transform: translate(50%, 50%);
-			display: flex;
-			pointer-events: all;
-			transition: all $animTime $animEase $animTime;
-			z-index: 10;
-			&.disabled {
-				transition: all 0 $animEase;
-				opacity: 0;
-				pointer-events: none;
-			}
-
-			&.close {
-				bottom: unset;
-				top: 0;
-				transform: translate(0, 0);
-				border-radius: $borderRadius;
-				border-top-left-radius: 0;
-				border-bottom-right-radius: 0;
-				box-shadow: none;
-			}
-
-			svg {
-				margin: 0;
-			}
-		}
-		align-items: flex-start;
-		.title-wrapper {
-			z-index: 5;
-			background: var(--panel-bg);
-			border-radius: $borderRadius;
-			box-shadow: var(--shadow-md);
-			backdrop-filter: $frosty;
-			padding: 0.25rem 0.5rem;
-			display: flex;
-			align-items: center;
-			height: $headerHeight;
-			transition: all $animTime $animEase $animTime;
-
-			&.square {
-				transition: all 0s $animEase;
-				border-bottom-left-radius: 0;
-				border-bottom-right-radius: 0;
-				box-shadow: none;
-			}
-
-			img {
-				height: 100%;
-				width: auto;
-				margin-right: 0.5rem;
-			}
-
-			.eventtype {
-				color: var(--primary);
-				cursor: pointer;
-				pointer-events: auto;
-			}
-		}
-
-		.welcome {
-			max-width: max(40vw, 500px);
-			z-index: 0;
-			pointer-events: all;
-			font-size: 0.875rem;
-			line-height: 1.25rem;
-			display: flex;
-			flex-direction: column;
-			// align-items: center;
-			background: var(--panel-bg);
-			border-radius: $borderRadius;
-			box-shadow: var(--shadow-md);
-			backdrop-filter: $frosty;
-			border-top-left-radius: 0;
-			font-size: 1.1rem;
-
-			.scroll-wrap {
-				padding: 0 0.5rem;
-				overflow-y: auto;
-			}
-			h2 {
-				margin: 0 0 0rem 0;
-				font-size: 1.2rem;
-			}
-			h3 {
-				font-size: 1.1rem;
-				margin: 0.5rem 0 0.5rem 0;
-				display: flex;
-				align-items: center;
-				.button.decoration {
-					margin-right: 0.5rem;
-				}
-			}
-			ul {
-				padding-left: 1.25rem;
-				margin: 0;
-			}
-
-			button.collapse {
-				pointer-events: all;
-				height: 1.25rem;
-				width: 100%;
-				padding: 0;
-				border-top-left-radius: 0;
-				border-top-right-radius: 0;
-				margin-top: auto;
-				position: sticky;
-			}
-
-			flex: 1 1 auto;
-			max-height: calc(100vh - $headerHeight - 3 * $panelMargin);
-			height: calc(100vh - $headerHeight - 3 * $panelMargin);
-			transition: all $transition;
-			&.hidden {
-				overflow: hidden;
-				padding: 0;
-				// opacity: 0;
-				max-height: 0;
-			}
-		}
 	}
 
 	#mode-toggle {
@@ -907,6 +466,7 @@ const selectedDayIdx = computed((): number | null => {
 		transform: translateX(-50%) translateY(-1rem);
 		transition: transform $transition;
 		box-shadow: unset !important;
+
 		&.hidden {
 			transform: translateX(-50%) translateY(-150%);
 		}
@@ -952,6 +512,7 @@ const selectedDayIdx = computed((): number | null => {
 			$headerHeight
 	);
 	$eventPanelHeight: calc($eventGap * 0.5 - $panelMargin);
+
 	#event-day-panel {
 		position: absolute;
 		width: $eventPanelWidth;
@@ -960,6 +521,7 @@ const selectedDayIdx = computed((): number | null => {
 		bottom: calc(3 * $panelMargin + $smallTimePanelHeight + $eventPanelHeight);
 		z-index: 150;
 	}
+
 	#event-graphs {
 		position: absolute;
 		width: $eventPanelWidth;
@@ -967,14 +529,6 @@ const selectedDayIdx = computed((): number | null => {
 		height: $eventPanelHeight;
 		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
 		z-index: 150;
-		// display: flex;
-		// flex-direction: column;
-		// justify-content: flex-start;
-		// align-items: flex-start;
-		// border-radius: 0;
-		// backdrop-filter: none;
-		// box-shadow: none;
-		// background: transparent;
 	}
 
 	#multi-button {
@@ -999,6 +553,7 @@ const selectedDayIdx = computed((): number | null => {
 			transform: translateY(
 				calc($headerHeight + 3 * $panelMargin + $infoHeight)
 			);
+
 			&.hidden {
 				transform: translate(
 					200%,
@@ -1007,6 +562,7 @@ const selectedDayIdx = computed((): number | null => {
 			}
 		}
 	}
+
 	#multimax-button {
 		position: absolute;
 		top: 0;
@@ -1020,6 +576,7 @@ const selectedDayIdx = computed((): number | null => {
 		z-index: 250;
 		box-shadow: none !important;
 		opacity: 0.5;
+
 		&:hover {
 			opacity: 1;
 		}
@@ -1028,14 +585,15 @@ const selectedDayIdx = computed((): number | null => {
 			width: 1.25rem;
 		}
 	}
+
 	#multi-event-panel {
 		z-index: 180;
 		width: calc($infoWidth * 2 + $panelMargin);
 		height: calc(
-			100vh - 5 * $panelMargin - #{$smallTimePanelHeight} - $infoHeight - 3rem
+			100vh - 5 * $panelMargin - $smallTimePanelHeight - $infoHeight - 3rem
 		);
 		right: calc($panelMargin);
-		bottom: calc(2 * $panelMargin + #{$smallTimePanelHeight});
+		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
 		background-color: var(--panel-bg-alt);
 		backdrop-filter: $frosty;
 		overflow: visible;
@@ -1049,10 +607,10 @@ const selectedDayIdx = computed((): number | null => {
 		&.maximize {
 			width: calc(100% - 2 * $panelMargin);
 			height: calc(
-				100vh - 4 * $panelMargin - #{$smallTimePanelHeight} - $headerHeight
+				100vh - 4 * $panelMargin - $smallTimePanelHeight - $headerHeight
 			);
 			right: $panelMargin;
-			bottom: calc(2 * $panelMargin + #{$smallTimePanelHeight});
+			bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
 		}
 	}
 
@@ -1071,6 +629,7 @@ const selectedDayIdx = computed((): number | null => {
 			transform: translateX(200%);
 		}
 	}
+
 	#event-info-panel {
 		height: $infoHeight !important;
 		width: $infoWidth !important;
@@ -1079,16 +638,17 @@ const selectedDayIdx = computed((): number | null => {
 		position: absolute;
 		top: calc($headerHeight + 2 * $panelMargin);
 		right: $panelMargin;
+		transform: translate(0, calc(-200% - 2 * $panelMargin));
 
 		.event-info {
 			width: 100%;
 		}
 
-		transform: translate(0, calc(-200% - 2 * $panelMargin));
 		&.show {
 			transform: translate(0, 0);
 		}
 	}
+
 	#selected-event-info-panel {
 		z-index: 150;
 		transition: all $transition;
@@ -1098,17 +658,15 @@ const selectedDayIdx = computed((): number | null => {
 		transform: translate(0, calc(-250% - 2 * $panelMargin));
 		height: $infoHeight !important;
 		width: $infoWidth !important;
+
 		&.single {
-			// transform: translate(calc(100% - 100vw), calc(-250% - 2 * $panelMargin));
 			right: calc(100vw - $eventPanelWidth - $panelMargin);
 			width: calc($eventPanelWidth) !important;
 			height: calc($infoHeight * 0.5) !important;
 		}
+
 		&.show {
 			transform: translate(0, 0);
-			// &.single {
-			// 	transform: translate(calc(100% - 100vw), 0);
-			// }
 		}
 	}
 
@@ -1127,7 +685,7 @@ const selectedDayIdx = computed((): number | null => {
 			height: calc(100% - 2 * $panelMargin);
 			z-index: 350;
 		}
-		
+
 		&.event {
 			z-index: 350;
 			height: $smallTimePanelHeight;
@@ -1144,7 +702,6 @@ const selectedDayIdx = computed((): number | null => {
 		&.heatmap {
 			height: $smallTimePanelHeight;
 			background-color: var(--panel-bg-alt);
-			// transition: height $transition;
 		}
 
 		#times {
@@ -1160,6 +717,7 @@ const selectedDayIdx = computed((): number | null => {
 				border-radius: $borderRadius !important;
 			}
 		}
+
 		.show-bars,
 		.panel-expand {
 			padding: 0.5rem;
@@ -1172,33 +730,34 @@ const selectedDayIdx = computed((): number | null => {
 			border-radius: 0;
 			box-shadow: unset;
 		}
+
 		.show-bars {
 			border-bottom-right-radius: $borderRadius;
 			border-top-left-radius: $borderRadius;
 		}
+
 		.panel-expand {
 			border-top-right-radius: $borderRadius;
 			border-bottom-left-radius: $borderRadius;
-			// background-color: var(--primary-glass);
 		}
+
 		&.expanded {
 			.panel-expand {
-				// right: -$panelMargin;
-				// top: -$panelMargin;
 				width: 2rem;
 				height: 2rem;
 				padding: 0.25rem;
 			}
 		}
+
 		.panel-sideline {
 			position: absolute;
 			left: -20px;
 			z-index: 20;
 		}
+
 		.show-bars {
 			right: unset;
 			left: 0;
-
 			z-index: 20;
 		}
 	}
@@ -1212,8 +771,6 @@ const selectedDayIdx = computed((): number | null => {
 		pointer-events: none;
 		z-index: 10000;
 
-		// background-color: rgba(0,255,0,0.1);
-
 		&.eventPanelOn {
 			left: calc($panelMargin + $eventPanelWidth);
 			width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
@@ -1223,6 +780,7 @@ const selectedDayIdx = computed((): number | null => {
 		&.multiEventPanelOn {
 			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 			width: calc(100% - $multiEventPanelWidth - $panelMargin);
+
 			&.eventPanelOn {
 				width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
 			}

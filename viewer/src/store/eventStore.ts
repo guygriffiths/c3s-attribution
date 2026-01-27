@@ -203,7 +203,7 @@ export const useStore = defineStore('events', {
 			return d3
 				.scaleLinear()
 				.domain(state.coldIntensityRange)
-				.range([0, 1])
+				.range([1, 0])
 				.clamp(true)
 		},
 		colorForEvent: (state: State) => {
