@@ -114,19 +114,5 @@ P2
 * Similar-event selection on scatters
 * Filter max pixels out of region filters?
 
-Less crowded graphs
-Add lots of text/explanation.
-.l1 .l2 - level 1 and 2 detail, so that they can all be hidden.
 
-Mark's feedback
-* Needs documentation, beginner's guide
-* Add features list of what it can do (to become achievements)
-* Loading spinner properly
-* Year on the event date
-* Expand button on the multi-graph for full-screen
-
-Missing close button
-Show all by default
-Draggable filter box
-
-WHO BROKE THE BACKGROUND MAPS?!?!
+OK, so pick things from feedback reports, do them one at a time, commit after each feature, cherry pick to the main branch for P1 release

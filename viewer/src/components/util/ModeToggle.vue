@@ -30,10 +30,14 @@ onMounted(() => {
 					const radius = Math.min(rect.width, rect.height) * 0.15
 					const pupilX = Math.cos(angle) * radius
 					const pupilY = Math.sin(angle) * radius
+					// console.log(`Mouse: (${e.clientX}, ${e.clientY}), Eye Center: (${eyeCenterX}, ${eyeCenterY}), Pupil Offset: (${pupilX.toFixed(2)}, ${pupilY.toFixed(2)})`)
 					pupilElement.setAttribute(
 						'transform',
 						`translate(${pupilX}, ${pupilY})`,
 					)
+				} else {
+					// console.log('Could not get bounding rect for pupil element.')
+					pupilElement.setAttribute('transform', `translate(0, 0)`)
 				}
 				// handsElement?.setAttribute('transform', `rotate(0)`)
 			} else if (mode.value === 'timemachine') {
