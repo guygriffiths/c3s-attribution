@@ -98,6 +98,7 @@ const ready = ref(true)
 				<IconMapPin class="icon" aria-hidden="true" />
 			</button>
 		</div>
+		<slot />
 	</div>
 </template>
 
@@ -111,8 +112,9 @@ const ready = ref(true)
 	position: relative;
 	margin-top: 0.75rem;
 	margin-left: 0.25rem;
-	padding: 0;
+	padding: 0 2rem 2rem 0;
 	border-radius: 0.5rem;
+	// background-color: aqua;
 
 	.label {
 		font-weight: bolder;
@@ -143,6 +145,20 @@ const ready = ref(true)
 		&:last-child {
 			border-top-right-radius: $borderRadius;
 			border-bottom-right-radius: $borderRadius;
+		}
+	}
+
+	:deep(.help-button) {
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity $animTime $animEase;
+	}
+
+	&:hover,
+	&:focus {
+		:deep(.help-button) {
+			opacity: 1;
+			pointer-events: all;
 		}
 	}
 }

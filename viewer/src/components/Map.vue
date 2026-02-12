@@ -35,6 +35,7 @@ import {
 import { drawEventTile, TILE_SIZE } from '@/lib/renderer'
 import { Feature, MultiPolygon, Polygon } from 'geojson'
 import RegionControl from './util/RegionControl.vue'
+import HelpButton from './util/HelpButton.vue'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import * as d3 from 'd3'
 import L from 'leaflet'
@@ -268,56 +269,6 @@ watch(
 		// }
 	},
 )
-
-// If we change what kind of events are being shown, update the heatmap and filtered events
-// watch(
-// 	() => [
-// 		eventStore.eventTypeMode,
-// 		timeStore.startTimeFilter,
-// 		timeStore.endTimeFilter,
-// 	],
-// 	() => {
-// 		globalHeatmapEvents.value = getTimeRangedEvents(
-// 			timeStore.startTimeFilter,
-// 			timeStore.endTimeFilter,
-// 		)
-// 		currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
-// 		if (store.viewMode === 'heatmap') {
-// 			try {
-// 				// console.log('calling manualHeatmapUpdate from event type/time filter change')
-// 				manualHeatmapUpdate()
-// 			} catch (e) {
-// 				console.warn('Error updating heatmap renderer', e)
-// 			}
-// 			if (store.filteringByPoint || store.filteringByRegion) {
-// 				regionFilteredEvents = getFilteredEvents().filter(
-// 					(event) =>
-// 						new Date(event.times[event.times.length - 1]) >=
-// 							timeStore.startTimeFilter! &&
-// 						new Date(event.times[0]) <= timeStore.endTimeFilter!,
-// 				)
-// 				try {
-// 					// @ts-ignore
-// 					fastRenderer._update()
-// 				} catch (e) {
-// 					console.warn('Error updating fast renderer', e)
-// 				}
-// 			}
-// 		}
-// 	},
-// 	{ immediate: true },
-// )
-
-// watch(
-// 	() => store.showInfoPanel,
-// 	(newVal) => {
-// 		if (!mapRef.value) return
-// 		const el = document.getElementById('event-window')
-// 		if (!el) return
-// 		centreMapOnDiv(mapRef.value.leafletObject as L.Map, el, !newVal)
-// 	},
-// 	{ immediate: true },
-// )
 
 // Watch for events which cause the view to change - e.g. to accomodate a panel etc.
 // This is done by defining #event-window (TODO: currently in Main.vue, but could live here and teleport?)
@@ -754,7 +705,9 @@ const resetZoom = () => {
 							? 'true'
 							: undefined
 					"
-				/>
+				>
+					<HelpButton help="regionControl" />
+				</RegionControl>
 			</LControl>
 			<LControlScale
 				:max-width="200"
@@ -811,6 +764,15 @@ const resetZoom = () => {
 			transform: translate(-150%, 2rem);
 		}
 		transition: transform $transition;
+
+		button {
+			transform: translate(-50%, -50%);
+			width: 1.75rem;
+			height: 1.75rem;
+			z-index: 300;
+			border-radius: $borderRadius;
+			box-shadow: var(--shadow-md);
+		}
 	}
 
 	:deep(.region-select) {

@@ -35,7 +35,7 @@ const eventStore = useEventStore()
 				<span class="icon-li" v-elif="eventStore.eventTypeMode === 'cold'" >
 					<IconTemperatureMinus class="icon" aria-hidden="true" /> Minimum temperature reached by a single grid cell within this event
 				</span class="icon-li">
-				</div>
+			</div>
 		</p>
 
 		<p>
@@ -58,19 +58,4 @@ const eventStore = useEventStore()
 	top: 0.25rem;
 }
 
-.icon-ul {
-	display: flex;
-	flex-direction: column;
-	padding-left: 1.5rem;
-
-	.icon-li {
-		display: flex;
-		align-items: center;
-		margin-bottom: 0.5rem;
-
-		.icon {
-			margin-right: 0.5rem;
-		}
-	}
-}
 </style>

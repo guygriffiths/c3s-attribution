@@ -137,7 +137,6 @@ button {
 			}
 		}
 
-
 		&:hover {
 			box-shadow: var(--shadow-md), var(--shadow-lg);
 			background: var(--primary-glass-shine);
@@ -241,6 +240,25 @@ button.cycle-sort-button {
 		height: 1.5rem;
 	}
 	box-shadow: none !important;
+}
+
+.help-content {
+	.icon-ul {
+		display: flex;
+		flex-direction: column;
+		padding-left: 1.5rem;
+
+		.icon-li {
+			display: flex;
+			align-items: center;
+			margin-bottom: 0.5rem;
+
+			.icon {
+				margin-right: 0.5rem;
+				flex: 0 0 auto;
+			}
+		}
+	}
 }
 
 svg.bar-icon {

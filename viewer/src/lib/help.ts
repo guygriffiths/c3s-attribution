@@ -29,6 +29,9 @@ const multiEventPanelHelp = defineAsyncComponent(
 const selectedEventInfoHelp = defineAsyncComponent(
 	() => import('@/components/help/SelectedInfoHelp.vue'),
 )
+const regionControlHelp = defineAsyncComponent(
+	() => import('@/components/help/RegionControlHelp.vue'),
+)
 
 // Help text entries
 
@@ -80,6 +83,11 @@ export const helpText = {
 		component: defineAsyncComponent(
 			() => import('@/components/help/AboutInfoHelp.vue'),
 		),
+	},
+	regionControl: {
+		title: 'Region Selection',
+		component: regionControlHelp,
+		target: '#map.region-control',
 	},
 } as const satisfies Record<string, HelpTextEntry>
 
