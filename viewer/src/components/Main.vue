@@ -4,7 +4,7 @@ import { differenceInDays } from 'date-fns'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
-import { useStore as useEventStore } from '@/store/eventStore'
+import { colorForValue, useStore as useEventStore } from '@/store/eventStore'
 import { helpMe } from '@/lib/help'
 import MapComponent from './Map.vue'
 import AppLogo from './AppLogo.vue'
@@ -32,6 +32,9 @@ import {
 	IconInfoOctagon,
 } from '@tabler/icons-vue'
 import { useEventFilters } from '@/lib/eventFilters'
+import ColorScale from './ColorScale.vue'
+import { interpolateCool } from 'd3'
+import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
 
 // Stores
 const $l = useLabels()
@@ -87,6 +90,23 @@ const selectedDayIdx = computed((): number | null => {
 
 		<!-- Main map component -->
 		<MapComponent id="map" />
+
+		<div id="color-scale" class="panel" :class="{ rhs: store.isFocused && store.viewMode === 'timemachine' }">
+			<ColorScale
+				:colorfunc="(val: number) => colorForValue(val, true, eventStore.hotScale)"
+				:domain="eventStore.hotScale.domain()"
+				label="scale"
+				unit="degC"
+				v-if="eventStore.eventTypeMode === 'hot' || eventStore.eventTypeMode === 'hotcold'"
+			/>
+			<ColorScale
+				:colorfunc="(val: number) => colorForValue(val, false, eventStore.coldScale)"
+				:domain="eventStore.coldScale.domain()"
+				label="scale"
+				unit="degC"
+				v-if="eventStore.eventTypeMode === 'cold' || eventStore.eventTypeMode === 'hotcold'"
+			/>
+		</div>
 
 		<!-- Logo and title section -->
 		<AppLogo id="logo" />
@@ -428,12 +448,29 @@ const selectedDayIdx = computed((): number | null => {
 	max-height: 100vh;
 	position: relative;
 
+	#color-scale {
+		position: absolute;
+		bottom: $panelMargin * 0.5;
+		left: $panelMargin * 0.5;
+		z-index: 550;
+		padding: 0.5rem;
+		width: calc(0.5 * (100vw - 35rem - 2 * $panelMargin));
+		background: var(--panel-bg);
+		gap: 0.5rem;
+		transition: all $transition;
+
+		&.rhs {
+			left: calc(50vw + $panelMargin * 0.5 + 0.5 * 35rem);
+		}
+	}
+
 	#footer-logos {
 		position: absolute;
 		bottom: 0;
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 325;
+		width: 35rem;
 	}
 
 	#focus-frame {

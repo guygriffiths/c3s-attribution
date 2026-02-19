@@ -79,7 +79,7 @@ const zoom = ref(2)
 const bgLayers = {
 	light: {
 		name: 'C3S Light',
-		url: 'https://extreme-events.climate.copernicus.eu/maps/styles/light/{z}/{x}/{y}{r}.png',
+		url: 'https://extreme-events.climate.copernicus.eu/maps/styles/c3s-light/{z}/{x}/{y}{r}.png',
 		labelsUrl:
 			'https://extreme-events.climate.copernicus.eu/maps/styles/light-labels/{z}/{x}/{y}{r}.png',
 		attribution:
@@ -87,7 +87,7 @@ const bgLayers = {
 	},
 	dark: {
 		name: 'C3S Dark',
-		url: 'https://extreme-events.climate.copernicus.eu/maps/styles/darkish/{z}/{x}/{y}{r}.png',
+		url: 'https://extreme-events.climate.copernicus.eu/maps/styles/c3s-time-machine/{z}/{x}/{y}{r}.png',
 		labelsUrl:
 			'https://extreme-events.climate.copernicus.eu/maps/styles/dark-labels/{z}/{x}/{y}{r}.png',
 		attribution:
@@ -559,8 +559,8 @@ const resetZoom = () => {
 					event.id === eventStore.selectedEventId
 						? 4
 						: event.id === eventStore.hoveringEvent?.id
-							? 8
-							: 1
+							? 2
+							: 0.5
 				"
 				:fill="true"
 				:fill-opacity="
@@ -571,10 +571,11 @@ const resetZoom = () => {
 							: 0.5
 				"
 				:color="
-					event.id === eventStore.selectedEventId ||
-					event.id === eventStore.hoveringEvent?.id
+					event.id === eventStore.selectedEventId
 						? scssVars.lightbulb
-						: eventStore.colorForEvent(event)
+						: event.event_type === 'hot'
+							? scssVars.c3sred
+							: scssVars.c3sblue
 				"
 				:fill-color="
 					event.id === eventStore.hoveringEvent?.id
@@ -709,13 +710,13 @@ const resetZoom = () => {
 					<HelpButton help="regionControl" />
 				</RegionControl>
 			</LControl>
-			<LControlScale
+			<!-- <LControlScale
 				:max-width="200"
 				:metric="true"
 				:imperial="false"
 				position="bottomleft"
 				class="map-scale"
-			></LControlScale>
+			></LControlScale> -->
 		</LMap>
 	</div>
 </template>
