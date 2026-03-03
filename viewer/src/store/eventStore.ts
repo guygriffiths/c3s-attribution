@@ -373,13 +373,14 @@ export const useStore = defineStore('events', {
 			// Hard-code start date, get end date from current year.
 			const timeStore = useTimeStore()
 			const from = 1979
-			const to = 2025
+			const to = new Date().getUTCFullYear()
 			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
 			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
 			timeStore.startTimeFilter = new Date(
 				Date.UTC(Math.max(to - 20, from), 0, 1),
 			)
 			timeStore.endTimeFilter = new Date(Date.UTC(to, 11, 31))
+			timeStore.selectedTime = new Date()
 
 			// watch(
 			// 	() => [timeStore.startTimeFilter, timeStore.endTimeFilter],
@@ -391,7 +392,7 @@ export const useStore = defineStore('events', {
 
 			onParameterFilterChanged(() => {
 				const events = getParameterFilteredEvents()
-				// console.trace('global events ready, count:', events.length)
+				console.trace('global events ready, count:', events.length)
 				// this.refilterEventsDB()
 				if (events.length > 0) {
 					if (!this.firstEventSetLoaded) {
@@ -399,7 +400,7 @@ export const useStore = defineStore('events', {
 						mainStore.setLoadingDone()
 						setTimeout(() => {
 							mainStore.showInfoPanel = true
-						}, 1500)
+						}, 500)
 					} else {
 						// console.log('Setting loading...')
 						// mainStore.setLoading()

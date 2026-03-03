@@ -329,9 +329,9 @@ const rowsToShow = computed(() => {
 })
 watch(rowsToShow, () => updateRowHeight())
 
-const maxSimultaneousEvents = ref(3)
+const maxSimultaneousEvents = ref(5)
 
-const eventHeight = computed(() => 1.0 / maxSimultaneousEvents.value)
+const eventHeight = computed(() => 1.0 / (maxSimultaneousEvents.value + 1))
 
 const isDragging = ref(false)
 const hasMoved = ref(false)

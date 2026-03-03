@@ -1,6 +1,7 @@
 import FetchAndIndexWorker from '@/lib/worker/fetchAndIndexWorker?worker'
 import { EventStore } from '@/store/eventStore'
 import { useStore as useMainStore } from '@/store/store'
+import { useStore as useTimeStore } from '@/store/timeStore'
 import { bbox, booleanPointInPolygon, point, polygon } from '@turf/turf'
 import type { MultiPolygon, Polygon } from 'geojson'
 import { nextTick } from 'vue'
@@ -107,7 +108,7 @@ fetchAndIndexWorker.onmessage = (
 		monthIndex: mIndex,
 	} = e.data
 
-	// console.log(`Main thread received ${events.length} events from worker`)
+	// console.log(`Main thread received ${events.length} events from worker for year ${year}`)
 
 	_events.push(...events)
 
@@ -146,6 +147,11 @@ fetchAndIndexWorker.onmessage = (
 		for (const cb of globalEventsChangedTriggers) {
 			cb()
 		}
+		if( year === latestYear) {
+			const timeStore = useTimeStore()
+			timeStore.selectedTime = new Date(events[events.length - 1].times[events[events.length - 1].times.length - 1])
+		}
+
 		// Trigger a build of the entire filter chain
 		//
 		// This starts with parameter filters, which triggers spatial filter rebuild,
