@@ -88,7 +88,7 @@ const labelsEn = {
 	maxTempDaily: 'Daily Maximum Temperature (°C)',
 	temperature: 'Temperature (°C)',
 	pixelCount: 'Number of grid cells',
-	pixelDistDaily: 'Daily grid cell temperature distribution',
+	pixelDistDaily: 'Histogram of daily grid cell temperature',
 	durationHisto: 'Event distribution by duration',
 	intensityHisto: 'Event distribution by temperature',
 	sizeHisto: 'Event distribution by area',
