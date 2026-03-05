@@ -28,6 +28,7 @@ from sklearn.cluster import DBSCAN
 
 # Mean Earth radius in kilometers
 R = 6371.0088
+WET_DAY_THRESHOLD = 1.0 * 1e-3  # 1mm in meters - minimum precipitation for "wet day"
 
 # ============================================================================
 # Distance and Geometry Calculations
@@ -368,8 +369,8 @@ def get_id(eventtype: str, event: 'Eventlet') -> str:
     
     The ID encodes the peak pixel's properties: event type, date, location, and value.
     The peak pixel is defined differently based on event type:
-    - For "hot" events: pixel with MAXIMUM temperature value
-    - For "cold" or "drought" events: pixel with MINIMUM value
+    - For "hot" or "wet" events: pixel with MAXIMUM temperature value
+    - For "cold" or "dry" events: pixel with MINIMUM value
     
     Ties are broken by: (1) earliest time, (2) lowest latitude, (3) lowest longitude.
     
@@ -379,7 +380,7 @@ def get_id(eventtype: str, event: 'Eventlet') -> str:
     - Human-readable and sortable by date
     
     Args:
-        eventtype: Event type ("hot", "cold", "drought", etc.)
+        eventtype: Event type ("hot", "cold", "wet", etc.)
         event: Eventlet object containing time slices, coordinates, and values
         
     Returns:
@@ -398,7 +399,7 @@ def get_id(eventtype: str, event: 'Eventlet') -> str:
         - Location coordinates shifted to positive range for consistent formatting
         
     Peak pixel selection:
-        1. Find pixel with extreme value (max for hot, min for cold/drought)
+        1. Find pixel with extreme value (max for hot/wet, min for cold/dry)
         2. If tied, use earliest occurrence (first time slice)
         3. If still tied, use lowest latitude
         4. If still tied, use lowest longitude
@@ -422,12 +423,12 @@ def get_id(eventtype: str, event: 'Eventlet') -> str:
     all_times = np.array(all_times)    # Shape: (N,)
     
     # Determine whether to find max or min based on event type
-    if eventtype.lower() in ['cold', 'drought']:
+    if eventtype.lower() in ['cold', 'dry']:
         # For cold/drought events, find minimum value
         extreme_value = np.min(all_values)
         extreme_indices = np.where(all_values == extreme_value)[0]
     else:
-        # For hot events (and default), find maximum value
+        # For hot/wet events (and default), find maximum value
         extreme_value = np.max(all_values)
         extreme_indices = np.where(all_values == extreme_value)[0]
     
@@ -490,30 +491,33 @@ def get_id(eventtype: str, event: 'Eventlet') -> str:
 def load_data(
     data_path: str,
     ref_path: str,
-    land_sea_mask_path: Optional[str]
-) -> Tuple[xr.DataArray, xr.DataArray, Optional[xr.DataArray]]:
+    ref_path_p75: Optional[str] = None,
+    ref_path_p25: Optional[str] = None,
+    land_sea_mask_path: Optional[str] = None
+) -> Tuple[xr.DataArray, xr.DataArray, Optional[xr.DataArray], Optional[xr.DataArray], Optional[xr.DataArray]]:
     """
     Load and preprocess NetCDF climate data files.
     
-    Opens multiple data files (temperature, reference, land-sea mask) and
-    standardizes longitude coordinates to -180 to +180 range.
+    Opens multiple data files (temperature/precipitation, references, land-sea mask)
+    and standardizes longitude coordinates to -180 to +180 range.
     
     Args:
-        data_path: Path or glob pattern for main temperature data (t2m)
-        ref_path: Path to reference/baseline temperature dataset
+        data_path: Path or glob pattern for main data (t2m or tp)
+        ref_path: Path to reference/threshold dataset
+        ref_path_p75: Path to 75th percentile (for precip IQR, optional)
+        ref_path_p25: Path to 25th percentile (for precip IQR, optional)
         land_sea_mask_path: Path to land-sea mask file (optional)
         
     Returns:
-        Tuple of (temperature_data, reference_data, land_sea_mask)
-        where land_sea_mask is None if not provided
-        
-    Note:
-        Automatically shifts longitudes from 0-360 to -180-180 range
-        and sorts by longitude for consistent indexing.
+        Tuple of (data, ref_data, ref_p75, ref_p25, land_sea_mask)
+        where ref_p75, ref_p25, and land_sea_mask may be None
     """
     # Open datasets
     ds = xr.open_mfdataset(data_path)
     ref = xr.open_dataset(ref_path)
+    
+    ref_p75 = xr.open_dataset(ref_path_p75) if ref_path_p75 else None
+    ref_p25 = xr.open_dataset(ref_path_p25) if ref_path_p25 else None
     
     if land_sea_mask_path:
         land_sea_mask = xr.open_dataset(land_sea_mask_path)
@@ -525,13 +529,18 @@ def load_data(
         da = da.assign_coords(longitude=(((da.longitude + 180) % 360) - 180))
         return da.sortby("longitude")
 
+    # Determine variable name (t2m or tp)
+    var_name = 't2m' if 't2m' in ds else 'tp'
+    
     # Apply longitude transformation to all datasets
-    t2m_data = shift_longitudes(ds["t2m"])
-    t2m_ref = shift_longitudes(ref["t2m"])
+    data = shift_longitudes(ds[var_name])
+    ref_data = shift_longitudes(ref[var_name])
+    ref_p75_data = shift_longitudes(ref_p75[var_name]) if ref_p75 else None
+    ref_p25_data = shift_longitudes(ref_p25[var_name]) if ref_p25 else None
     lsm_data = (shift_longitudes(land_sea_mask["lsm"]) 
                 if land_sea_mask is not None else None)
     
-    return t2m_data, t2m_ref, lsm_data
+    return data, ref_data, ref_p75_data, ref_p25_data, lsm_data
 
 
 # ============================================================================
@@ -901,17 +910,19 @@ class EventletFactory:
     it generates comprehensive metadata including geometries, statistics, and time series.
     
     Key responsibilities:
-    - Threshold detection with persistence filtering
+    - Threshold detection with persistence filtering (temperature only)
     - Spatial clustering of threshold-exceeding points
     - Temporal tracking of clusters across time slices
     - Event lifecycle management (creation, extension, expiration)
     - Output generation in JSON format
     
     Attributes:
-        data: xarray DataArray with temperature/variable data
-        threshold: Numeric threshold value for event detection
+        data: xarray DataArray with temperature/precipitation/variable data
+        threshold: Numeric threshold value for event detection (temperature only)
         over_threshold: If True, detect values > threshold; if False, detect values < threshold
-        ref_data: Reference/baseline data for anomaly detection
+        ref_data: Reference/threshold data
+        ref_p75: 75th percentile reference (for precipitation IQR)
+        ref_p25: 25th percentile reference (for precipitation IQR)
         land_sea_mask: Optional mask to filter land/ocean points
         expiry_days: Days without new data before an event expires
         min_length: Minimum number of time slices for a valid event
@@ -921,16 +932,19 @@ class EventletFactory:
         output_queue: Queue of finalized events ready for output
         output_path: Directory path for output files
         use_dbscan: If True, use sklearn DBSCAN; if False, use custom walk_scan
-        eventtype: Event type label (e.g., 'hot', 'cold', 'dry')
+        eventtype: Event type label (e.g., 'hot', 'cold', 'wet')
         land_only: If True, only track events over land
         ocean_only: If True, only track events over ocean
+        is_precip: If True, use precipitation-specific logic (IQR, no persistence)
     """
     
     def __init__(
         self,
         data,
         ref_data,
-        threshold,
+        ref_p75=None,
+        ref_p25=None,
+        threshold=None,
         over_threshold=True,
         land_sea_mask=None,
         expiry_days=1,
@@ -943,35 +957,44 @@ class EventletFactory:
         eventtype='hot',
         land_only=False,
         ocean_only=False,
+        is_precip=False,
     ):
         """
         Initialize the EventletFactory with data and configuration parameters.
         
+        For precipitation: Uses IQR normalization, no persistence requirement
+        For temperature: Uses absolute threshold + persistence filtering
+        
         Args:
             data: xarray DataArray with dimensions (time, latitude, longitude)
-            ref_data: Reference/baseline data with same dimensions as data
+            ref_data: Reference/threshold data with same dimensions as data
+            ref_p75: 75th percentile reference (for precip IQR calculation)
+            ref_p25: 25th percentile reference (for precip IQR calculation)
             threshold: Threshold value for event detection (e.g., temperature in Kelvin)
             over_threshold: If True, detect values > threshold; otherwise < threshold
             land_sea_mask: Optional xarray DataArray with land-sea mask (1=land, 0=ocean)
             expiry_days: Number of days without updates before event expires
-            min_length: Minimum time slices required for valid event
+            min_length: Minimum time slices required for valid event (ignored for precip)
             neighbor_radius: Maximum distance (km) for spatial clustering
             min_samples: Minimum cluster size for DBSCAN/walk_scan
             output_path: Directory path for output files
             use_dbscan: If True, use sklearn DBSCAN instead of custom walk_scan
             last_slice_name: Optional filename with previous run state for resumption
-            eventtype: Event type label for output (e.g., 'hot', 'cold')
+            eventtype: Event type label for output (e.g., 'hot', 'cold', 'wet')
             land_only: If True, only track events over land (removes ocean points)
             ocean_only: If True, only track events over ocean (removes land points)
+            is_precip: If True, use precipitation-specific logic
         """
         # Store configuration
         self.data = data
         self.threshold = threshold
         self.over_threshold = over_threshold
         self.ref_data = ref_data
+        self.ref_p75 = ref_p75
+        self.ref_p25 = ref_p25
         self.land_sea_mask = land_sea_mask
         self.expiry_days = expiry_days
-        self.min_length = min_length
+        self.min_length = min_length if not is_precip else 1
         self.min_samples = min_samples
         self.radius = neighbor_radius
         self.output_path = output_path
@@ -979,6 +1002,7 @@ class EventletFactory:
         self.eventtype = eventtype
         self.land_only = land_only
         self.ocean_only = ocean_only
+        self.is_precip = is_precip
         
         # Initialize state
         self.active = []  # Currently tracked events
@@ -987,20 +1011,27 @@ class EventletFactory:
         self.id = 0
         self.skipToTime = None
 
-        # Create threshold mask: points exceeding threshold AND reference
-        if self.over_threshold:
-            self.raw_mask = (data > self.threshold) & (data > ref_data)
+        # Create threshold mask based on event type
+        if is_precip:
+            # Precipitation: (precip - ref) / IQR > 0
+            # Only calculate for wet days (>= 1mm)
+            iqr = ref_p75 - ref_p25
+            anomaly = (data - ref_data) / iqr
+            self.raw_mask = (data >= WET_DAY_THRESHOLD) & (anomaly > 0)
+            # No persistence filtering for precipitation
+            self.enduring_pixels = self.raw_mask
         else:
-            self.raw_mask = (data < self.threshold) & (data < ref_data)
+            # Temperature: existing logic
+            if self.over_threshold:
+                self.raw_mask = (data > self.threshold) & (data > ref_data)
+            else:
+                self.raw_mask = (data < self.threshold) & (data < ref_data)
+            
+            # Filter for persistence: require 3 consecutive time steps
+            self.enduring_pixels = (
+                self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
+            )
 
-        # Filter for persistence: require 3 consecutive time steps
-        # This reduces false positives from transient spikes
-        self.enduring_pixels = (
-            self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
-        )
-
-        # Convert to NumPy for performance
-        #self.raw_mask = self.raw_mask.values
         self.times = self.data.valid_time.values
 
         # Resume from previous state if provided
@@ -1034,7 +1065,7 @@ class EventletFactory:
         Process a single time slice: detect clusters, update active events, expire old ones.
         
         This is the main processing method called for each time step. It:
-        1. Identifies threshold-exceeding points with persistence
+        1. Identifies threshold-exceeding points with persistence (temp) or wet days (precip)
         2. Clusters them spatially using distance-based clustering
         3. Matches clusters to existing events or creates new events
         4. Expires events that haven't been updated recently
@@ -1049,7 +1080,7 @@ class EventletFactory:
         data_slice = self.data.sel(valid_time=time).load()
         t = np.searchsorted(self.times, np.datetime64(time))
 
-        # Apply persistence filter to raw mask
+        # Apply persistence filter to raw mask (or just raw mask for precip)
         raw_mask_slice = self.raw_mask.isel(valid_time=t).values
         enduring_slice = np.where(self.enduring_pixels[t], raw_mask_slice, False)
 
@@ -1483,7 +1514,7 @@ if not logger.handlers:
 # Parameter set definition
 ParamSet = namedtuple(
     "ParamSet",
-    ["stat", "perc", "thresh", "nr", "ms", "dbscan", "heatwave"]
+    ["stat", "perc", "thresh", "nr", "ms", "dbscan", "event_mode", "is_precip"]
 )
 
 
@@ -1495,13 +1526,14 @@ def get_default_params() -> List[ParamSet]:
         List of ParamSet tuples defining detection parameters
         
     Parameter descriptions:
-        stat: Temperature statistic ('min' or 'max')
-        perc: Climatological percentile threshold (e.g., '99.0')
-        thresh: Absolute temperature threshold in Celsius (0 for cold, 28 for heat)
+        stat: Statistic type ('min', 'max' for temp, 'tp' for precip)
+        perc: Climatological percentile threshold (e.g., '99.0', '95.0')
+        thresh: Absolute threshold in Celsius (None for precip)
         nr: Neighbor radius in km for spatial clustering (default: 250)
         ms: Minimum samples for DBSCAN cluster size (default: 30)
         dbscan: Use sklearn DBSCAN if True, custom walk_scan if False
-        heatwave: Detect heatwaves if True, cold snaps if False
+        event_mode: 'hot', 'cold', or 'wet'
+        is_precip: True for precipitation events
     """
     return [
         ParamSet(
@@ -1511,7 +1543,8 @@ def get_default_params() -> List[ParamSet]:
             nr=250,
             ms=30,
             dbscan=False,
-            heatwave=False  # Cold snaps
+            event_mode='cold',
+            is_precip=False
         ),
         ParamSet(
             stat="max",
@@ -1520,7 +1553,18 @@ def get_default_params() -> List[ParamSet]:
             nr=250,
             ms=30,
             dbscan=False,
-            heatwave=True  # Heatwaves
+            event_mode='hot',
+            is_precip=False
+        ),
+        ParamSet(
+            stat="tp",
+            perc="95.0",
+            thresh=None,
+            nr=250,
+            ms=30,
+            dbscan=False,
+            event_mode='wet',
+            is_precip=True
         ),
     ]
 
@@ -1541,24 +1585,35 @@ def process_parameter_set(
     Returns:
         True if processing succeeded, False otherwise
     """
-    event_type = 'hot' if param.heatwave else 'cold'
-    logger.info(f"Processing {event_type} events with parameters: {param}")
+    logger.info(f"Processing {param.event_mode} events with parameters: {param}")
     
     try:
         # Load input data
         logger.info("Loading data...")
-        data_var, ref_data, land_sea_mask = load_data(
-            f"{input_dir}/{param.stat}/era5_daily_{param.stat}_temperature*.nc",
-            f"{input_dir}/climatology/era5_daily_{param.stat}_temperature_{param.perc}pc_1991-2020.nc",
-            f"{input_dir}/era5_land_sea_mask.nc",
-        )
+        
+        if param.is_precip:
+            # Load precipitation data with IQR percentiles
+            data_var, ref_data, ref_p75, ref_p25, land_sea_mask = load_data(
+                f"{input_dir}/precip/era5_daily_total_precipitation*.nc",
+                f"{input_dir}/climatology/era5_daily_total_precipitation_95.0pc_wetdays_1991-2020.nc",
+                ref_path_p75=f"{input_dir}/climatology/era5_daily_total_precipitation_75.0pc_wetdays_1991-2020.nc",
+                ref_path_p25=f"{input_dir}/climatology/era5_daily_total_precipitation_25.0pc_wetdays_1991-2020.nc",
+                land_sea_mask_path=f"{input_dir}/era5_land_sea_mask.nc",
+            )
+        else:
+            # Load temperature data
+            data_var, ref_data, ref_p75, ref_p25, land_sea_mask = load_data(
+                f"{input_dir}/{param.stat}/era5_daily_{param.stat}_temperature*.nc",
+                f"{input_dir}/climatology/era5_daily_{param.stat}_temperature_{param.perc}pc_1991-2020.nc",
+                land_sea_mask_path=f"{input_dir}/era5_land_sea_mask.nc",
+            )
         
         # Generate parameter string for filenames
         param_str = (
-            f"{param.stat}-{param.perc}-{param.thresh}-"
+            f"{param.stat}-{param.perc}-{param.thresh if param.thresh else 'iqr'}-"
             f"nr{param.nr}-ms{param.ms}-"
             f"{'dbscan' if param.dbscan else 'walk'}-"
-            f"{'hw' if param.heatwave else 'cw'}"
+            f"{param.event_mode}"
         )
         
         # Set up output directories
@@ -1571,16 +1626,19 @@ def process_parameter_set(
         factory = EventletFactory(
             data_var,
             ref_data=ref_data,
-            threshold=273.15 + param.thresh,  # Convert Celsius to Kelvin
-            over_threshold=param.heatwave,
+            ref_p75=ref_p75,
+            ref_p25=ref_p25,
+            threshold=273.15 + param.thresh if param.thresh is not None else None,
+            over_threshold=param.event_mode == 'hot',
             land_sea_mask=land_sea_mask,
             neighbor_radius=param.nr,
             min_samples=param.ms,
             output_path=out_path,
             use_dbscan=param.dbscan,
             last_slice_name=f"{out_path}/last_slice-{param_str}.pkl",
-            eventtype=event_type,
-            land_only=land_sea_mask is not None,
+            eventtype=param.event_mode,
+            land_only=land_sea_mask is not None and not param.is_precip,
+            is_precip=param.is_precip,
         )
 
         # Process all time slices
@@ -1591,11 +1649,11 @@ def process_parameter_set(
         # Now the factory is up-to-date. There are still events in the pipeline, but
         # these have been persisted to disk for resumption later.
         
-        logger.info(f"Successfully completed {event_type} event detection")
+        logger.info(f"Successfully completed {param.event_mode} event detection")
         return True
         
     except Exception as e:
-        logger.error(f"Failed to process {event_type} events: {e}", exc_info=True)
+        logger.error(f"Failed to process {param.event_mode} events: {e}", exc_info=True)
         return False
 
 
@@ -1626,9 +1684,8 @@ def main():
     # Process each parameter set
     results = {}
     for param in params:
-        event_type = 'hot' if param.heatwave else 'cold'
         success = process_parameter_set(param, input_dir, output_dir)
-        results[event_type] = success
+        results[param.event_mode] = success
     
     # Summary
     logger.info("\n" + "=" * 60)
