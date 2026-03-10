@@ -1,5 +1,5 @@
 import FetchAndIndexWorker from '@/lib/worker/fetchAndIndexWorker?worker'
-import { EventStore } from '@/store/eventStore'
+import { EventStore, useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useMainStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { bbox, booleanPointInPolygon, point, polygon } from '@turf/turf'
@@ -97,6 +97,7 @@ fetchAndIndexWorker.onmessage = (
 		pixelIndex: Record<number, number[]>
 		dateIndex: Record<number, number[]>
 		monthIndex: Record<string, number[]>
+		eventType: EventType
 	}>,
 ) => {
 	retrievedCount++
@@ -106,6 +107,7 @@ fetchAndIndexWorker.onmessage = (
 		pixelIndex: pIndex,
 		dateIndex: dIndex,
 		monthIndex: mIndex,
+		eventType,
 	} = e.data
 
 	// console.log(`Main thread received ${events.length} events from worker for year ${year}`)
@@ -143,13 +145,23 @@ fetchAndIndexWorker.onmessage = (
 
 	if (year === latestYear || retrievedCount === postedCount) {
 		const mainStore = useMainStore()
+		const eventStore = useEventStore()
 		mainStore.setLoading()
 		for (const cb of globalEventsChangedTriggers) {
 			cb()
 		}
-		if( year === latestYear) {
+		if (year === latestYear && eventType === 'hot') {
 			const timeStore = useTimeStore()
-			timeStore.selectedTime = new Date(events[events.length - 1].times[events[events.length - 1].times.length - 1])
+			if (events.length > 0) {
+				timeStore.selectedTime = new Date(
+					events[events.length - 1].times[
+						events[events.length - 1].times.length - 1
+					],
+				)
+			} 
+			// TODO - Get the latest updated date
+			// Set to 6 days before the current date
+			// timeStore.selectedTime = new Date()
 		}
 
 		// Trigger a build of the entire filter chain
@@ -184,7 +196,7 @@ fetchAndIndexWorker.onmessage = (
  * Initialise global store
  */
 export async function fetchAndIndexEvents(
-	prefixes: string[],
+	eventTypes: EventType[],
 	from: number,
 	to: number,
 ) {
@@ -198,9 +210,9 @@ export async function fetchAndIndexEvents(
 	).reverse()
 
 	for (const year of years) {
-		for (const prefix of prefixes) {
+		for (const eventType of eventTypes) {
 			postedCount++
-			fetchAndIndexWorker.postMessage({ year, prefix })
+			fetchAndIndexWorker.postMessage({ year, eventType })
 		}
 	}
 }

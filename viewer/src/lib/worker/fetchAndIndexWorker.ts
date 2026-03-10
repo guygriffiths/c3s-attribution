@@ -4,9 +4,9 @@ export { }
 
 let startI = 0
 self.onmessage = async (e: MessageEvent) => {
-	const { year, prefix } = e.data
+	const { year, eventType } = e.data
 
-	const events = await fetch(`${DATA_ROOT}events-${prefix}-${year}.jsonl`)
+	const events = await fetch(`${DATA_ROOT}events-${eventType}-${year}.jsonl`)
 		.then((r) => r.text())
 		.then((t) =>
 			t
@@ -33,7 +33,7 @@ self.onmessage = async (e: MessageEvent) => {
 			pixelIndex[pid].push(idx + startI)
 		}
 	}
-	// console.log(`Worker built pixel index for ${prefix} ${year}`)
+	// console.log(`Worker built pixel index for ${eventType} ${year}`)
 	
 	const dateIndex: Record<number, number[]> = {}
 	const monthIndex: Record<string, number[]> = {}
@@ -55,8 +55,8 @@ self.onmessage = async (e: MessageEvent) => {
 		}
 	}
 
-	// console.log(`Worker built date index for ${prefix} ${year}`)
+	// console.log(`Worker built date index for ${eventType} ${year}`)
 	startI += events.length
 
-	self.postMessage({ year, events, pixelIndex, dateIndex, monthIndex })
+	self.postMessage({ year, events, pixelIndex, dateIndex, monthIndex, eventType })
 }
