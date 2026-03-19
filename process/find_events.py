@@ -513,6 +513,7 @@ def load_data(
         where ref_p75, ref_p25, and land_sea_mask may be None
     """
     # Open datasets
+    logger.info(f"{data_path}, {ref_path}")
     ds = xr.open_mfdataset(data_path)
     ref = xr.open_dataset(ref_path)
     
@@ -935,7 +936,6 @@ class EventletFactory:
         eventtype: Event type label (e.g., 'hot', 'cold', 'wet')
         land_only: If True, only track events over land
         ocean_only: If True, only track events over ocean
-        is_precip: If True, use precipitation-specific logic (IQR, no persistence)
     """
     
     def __init__(
@@ -956,8 +956,7 @@ class EventletFactory:
         last_slice_name=None,
         eventtype='hot',
         land_only=False,
-        ocean_only=False,
-        is_precip=False,
+        ocean_only=False
     ):
         """
         Initialize the EventletFactory with data and configuration parameters.
@@ -983,7 +982,6 @@ class EventletFactory:
             eventtype: Event type label for output (e.g., 'hot', 'cold', 'wet')
             land_only: If True, only track events over land (removes ocean points)
             ocean_only: If True, only track events over ocean (removes land points)
-            is_precip: If True, use precipitation-specific logic
         """
         # Store configuration
         self.data = data
@@ -994,7 +992,7 @@ class EventletFactory:
         self.ref_p25 = ref_p25
         self.land_sea_mask = land_sea_mask
         self.expiry_days = expiry_days
-        self.min_length = min_length if not is_precip else 1
+        self.min_length = min_length if eventtype != 'wet' else 1
         self.min_samples = min_samples
         self.radius = neighbor_radius
         self.output_path = output_path
@@ -1002,7 +1000,6 @@ class EventletFactory:
         self.eventtype = eventtype
         self.land_only = land_only
         self.ocean_only = ocean_only
-        self.is_precip = is_precip
         
         # Initialize state
         self.active = []  # Currently tracked events
@@ -1012,12 +1009,12 @@ class EventletFactory:
         self.skipToTime = None
 
         # Create threshold mask based on event type
-        if is_precip:
+        if eventtype == 'wet':
             # Precipitation: (precip - ref) / IQR > 0
             # Only calculate for wet days (>= 1mm)
             iqr = ref_p75 - ref_p25
             anomaly = (data - ref_data) / iqr
-            self.raw_mask = (data >= WET_DAY_THRESHOLD) & (anomaly > 0)
+            self.raw_mask = anomaly > self.threshold
             # No persistence filtering for precipitation
             self.enduring_pixels = self.raw_mask
         else:
@@ -1057,6 +1054,7 @@ class EventletFactory:
                    self.times[self._t_index] <= np.datetime64(self.skipToTime)):
                 self._t_index += 1
         
+        logger.info(f"{self._t_index} is the t index, {self.skipToTime}")
     def has_more(self):
         return self._t_index < len(self.times)
 
@@ -1152,6 +1150,7 @@ class EventletFactory:
 
         # Sort active events by size (largest first) for better matching
         self.active.sort(key=lambda ev: len(ev.values[-1]), reverse=True)
+        logger.info(f"Slice processed, {len(self.active)} active events")
 
         # Update oldest active time
         self.oldest_active_time = min(
@@ -1497,6 +1496,10 @@ class EventletFactory:
             f.write(json.dumps(round_floats(full_event)) + "\n")
 
 
+# Configure logging
+root_logger = logging.getLogger()
+if root_logger.hasHandlers():
+    root_logger.handlers.clear()
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -1514,7 +1517,7 @@ if not logger.handlers:
 # Parameter set definition
 ParamSet = namedtuple(
     "ParamSet",
-    ["stat", "perc", "thresh", "nr", "ms", "dbscan", "event_mode", "is_precip"]
+    ["stat", "perc", "thresh", "nr", "ms", "dbscan", "event_mode"]
 )
 
 
@@ -1533,7 +1536,6 @@ def get_default_params() -> List[ParamSet]:
         ms: Minimum samples for DBSCAN cluster size (default: 30)
         dbscan: Use sklearn DBSCAN if True, custom walk_scan if False
         event_mode: 'hot', 'cold', or 'wet'
-        is_precip: True for precipitation events
     """
     return [
         ParamSet(
@@ -1543,8 +1545,7 @@ def get_default_params() -> List[ParamSet]:
             nr=250,
             ms=30,
             dbscan=False,
-            event_mode='cold',
-            is_precip=False
+            event_mode='cold'
         ),
         ParamSet(
             stat="max",
@@ -1553,18 +1554,16 @@ def get_default_params() -> List[ParamSet]:
             nr=250,
             ms=30,
             dbscan=False,
-            event_mode='hot',
-            is_precip=False
+            event_mode='hot'
         ),
         ParamSet(
             stat="tp",
             perc="95.0",
-            thresh=None,
+            thresh=0.25,
             nr=250,
             ms=30,
             dbscan=False,
-            event_mode='wet',
-            is_precip=True
+            event_mode='wet'
         ),
     ]
 
@@ -1591,7 +1590,7 @@ def process_parameter_set(
         # Load input data
         logger.info("Loading data...")
         
-        if param.is_precip:
+        if param.event_mode == 'wet':
             # Load precipitation data with IQR percentiles
             data_var, ref_data, ref_p75, ref_p25, land_sea_mask = load_data(
                 f"{input_dir}/precip/era5_daily_total_precipitation*.nc",
@@ -1603,14 +1602,14 @@ def process_parameter_set(
         else:
             # Load temperature data
             data_var, ref_data, ref_p75, ref_p25, land_sea_mask = load_data(
-                f"{input_dir}/{param.stat}/era5_daily_{param.stat}_temperature*.nc",
+                f"{input_dir}/t2m/{param.stat}/era5_daily_{param.stat}_temperature*.nc",
                 f"{input_dir}/climatology/era5_daily_{param.stat}_temperature_{param.perc}pc_1991-2020.nc",
                 land_sea_mask_path=f"{input_dir}/era5_land_sea_mask.nc",
             )
         
         # Generate parameter string for filenames
         param_str = (
-            f"{param.stat}-{param.perc}-{param.thresh if param.thresh else 'iqr'}-"
+            f"{param.stat}-{param.perc}-{param.thresh if param.thresh is not None else 'iqr'}-"
             f"nr{param.nr}-ms{param.ms}-"
             f"{'dbscan' if param.dbscan else 'walk'}-"
             f"{param.event_mode}"
@@ -1628,7 +1627,7 @@ def process_parameter_set(
             ref_data=ref_data,
             ref_p75=ref_p75,
             ref_p25=ref_p25,
-            threshold=273.15 + param.thresh if param.thresh is not None else None,
+            threshold=273.15 + param.thresh if param.event_mode != 'wet' else param.thresh,
             over_threshold=param.event_mode == 'hot',
             land_sea_mask=land_sea_mask,
             neighbor_radius=param.nr,
@@ -1637,9 +1636,9 @@ def process_parameter_set(
             use_dbscan=param.dbscan,
             last_slice_name=f"{out_path}/last_slice-{param_str}.pkl",
             eventtype=param.event_mode,
-            land_only=land_sea_mask is not None and not param.is_precip,
-            is_precip=param.is_precip,
+            land_only=land_sea_mask is not None
         )
+        logger.info(f"{out_path}/last_slice-{param_str} ,_ last slice")
 
         # Process all time slices
         logger.info("Processing time slices...")
