@@ -992,7 +992,7 @@ class EventletFactory:
         self.ref_p25 = ref_p25
         self.land_sea_mask = land_sea_mask
         self.expiry_days = expiry_days
-        self.min_length = min_length if eventtype != 'wet' else 1
+        self.min_length = min_length
         self.min_samples = min_samples
         self.radius = neighbor_radius
         self.output_path = output_path
@@ -1026,7 +1026,7 @@ class EventletFactory:
             
             # Filter for persistence: require 3 consecutive time steps
             self.enduring_pixels = (
-                self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
+                self.raw_mask.rolling(valid_time=3, center=False).sum().fillna(0) >= 3
             )
 
         self.times = self.data.valid_time.values
@@ -1559,7 +1559,7 @@ def get_default_params() -> List[ParamSet]:
         ParamSet(
             stat="tp",
             perc="95.0",
-            thresh=0.25,
+            thresh=0.0,
             nr=250,
             ms=30,
             dbscan=False,
