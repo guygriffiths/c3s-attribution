@@ -27,10 +27,10 @@ const props = defineProps<{
 
 const timeString = computed(() =>
 	props.mainStore.viewMode === 'timemachine'
-		? format(props.timeStore.selectedTime, 'dd MMM yy')
-		: format(props.timeStore.startTimeFilter, 'MMM yy') +
-			' - ' +
-			format(props.timeStore.endTimeFilter, 'MMM yy'),
+		? format(props.timeStore.selectedTime, 'dd MMM yyyy')
+		: format(props.timeStore.startTimeFilter, 'MMM yyyy') +
+			'-' +
+			format(props.timeStore.endTimeFilter, 'MMM yyyy'),
 )
 const dateNumber = computed(() => {
 	return props.mainStore.viewMode === 'timemachine'
@@ -101,9 +101,14 @@ const sortFunc = computed(() => {
 				}}</span>
 			</div>
 		</div>
+
+		<div class="info-row intertext">
+			<p v-if="mainStore.viewMode === 'timemachine'">{{ $l.eventsOn}}</p>
+			<p v-else>{{ $l.eventsOver}}</p>
+		</div>
 		<div class="info-row title">
 			<CalendarIcon :size="24" :date="dateNumber" aria-hidden="true" />
-			<span class="value mono">{{ timeString }}</span>
+			<span class="value mono" :class="{ 'date-str': mainStore.viewMode === 'heatmap' }">{{ timeString }}</span>
 		</div>
 		<div class="buttons">
 			<span
@@ -248,6 +253,19 @@ const sortFunc = computed(() => {
 		}
 	}
 
+	&.intertext {
+		font-size: 0.8rem;
+		color: var(--text-secondary);
+		justify-content: center;
+		margin: 0;
+		padding: 0;
+
+		p {
+			margin: 0;
+			padding: 0;
+		}
+	}
+
 	&.header {
 		position: relative;
 		z-index: 10;
@@ -301,6 +319,10 @@ const sortFunc = computed(() => {
 	text-align: left;
 	text-wrap: nowrap;
 	color: var(--text-primary);
+	
+	&.date-str {
+		font-size: 0.9rem;
+	}
 
 	.small {
 		font-size: 0.7rem;
