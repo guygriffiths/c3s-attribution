@@ -452,7 +452,7 @@ const selectedDayIdx = computed((): number | null => {
 		position: absolute;
 		bottom: $panelMargin * 0.5;
 		left: $panelMargin * 0.5;
-		z-index: 550;
+		z-index: 350;
 		padding: 0.5rem;
 		width: calc(0.5 * (100vw - 35rem - 2 * $panelMargin));
 		background: var(--panel-bg);

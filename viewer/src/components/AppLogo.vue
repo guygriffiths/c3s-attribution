@@ -83,7 +83,6 @@ const $l = useLabels()
 			margin: 0;
 		}
 	}
-
 	.title-wrapper {
 		z-index: 5;
 		background: var(--panel-bg);
@@ -95,6 +94,7 @@ const $l = useLabels()
 		align-items: center;
 		height: $headerHeight;
 		transition: all $animTime $animEase $animTime;
+		width: 100%;
 
 		&.square {
 			transition: all 0s $animEase;
@@ -107,6 +107,14 @@ const $l = useLabels()
 			height: 100%;
 			width: auto;
 			margin-right: 0.5rem;
+		}
+
+		h1 {
+			// font-size: $headerHeight * 0.6;
+			margin: 0;
+			white-space: nowrap;
+			line-height: 1;
+			font-size: clamp(1.5rem, 2vw, $headerHeight * 0.8);
 		}
 
 		.eventtype {
