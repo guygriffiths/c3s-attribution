@@ -1,4 +1,5 @@
 // lib/help.ts
+import { IconInfoOctagon } from '@tabler/icons-vue'
 import { Component, defineAsyncComponent, shallowRef } from 'vue'
 
 export type HelpTextEntry = {
@@ -6,6 +7,7 @@ export type HelpTextEntry = {
 	component: Component // Instead of html string
 	target?: string
 	on?: 'top' | 'bottom' | 'left' | 'right'
+	icon?: Component
 }
 
 const eventInfoHelp = defineAsyncComponent(
@@ -83,6 +85,7 @@ export const helpText = {
 		component: defineAsyncComponent(
 			() => import('@/components/help/AboutInfoHelp.vue'),
 		),
+		icon: IconInfoOctagon,
 	},
 	regionControl: {
 		title: 'Region Selection',

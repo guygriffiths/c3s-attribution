@@ -104,7 +104,8 @@ if (typeof ResizeObserver !== 'undefined') {
 					<IconX aria-hidden="true" />
 				</button>
 				<div class="title-wrapper">
-					<IconHelp size="32" aria-hidden="true" />
+					<IconHelp size="32" aria-hidden="true" v-if="!activeHelp.icon" />
+					<component :is="activeHelp.icon" size="32" aria-hidden="true" v-else />
 					<h1>{{ activeHelp.title }}</h1>
 				</div>
 
@@ -120,8 +121,6 @@ if (typeof ResizeObserver !== 'undefined') {
 </template>
 
 <style scoped>
-/* ... existing styles ... */
-
 .help-loading {
 	min-height: 100px; /* Give it some space while loading */
 	display: flex;
