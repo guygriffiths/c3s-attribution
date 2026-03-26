@@ -46,6 +46,7 @@ export const getSpaceTimeFilteredEvents = (): ExtremeEvent[] =>
 let _parameterFilters: EventStore['filters'] | null = null
 let _hotOn = true
 let _coldOn = true
+let _wetOn = true
 let _pointFilter: [number, number] | null = null
 let _regionFilter: GeoJSON.Feature<Polygon | MultiPolygon> | null = null
 let _timeFilter: { start: Date; end: Date } | null = null
@@ -237,9 +238,10 @@ export function setParameterFilters(
 	buildParameterFilterResults()
 }
 
-export function setEventTypeFilter(hotOn: boolean, coldOn: boolean) {
+export function setEventTypeFilter(hotOn: boolean, coldOn: boolean, wetOn: boolean) {
 	_hotOn = hotOn
 	_coldOn = coldOn
+	_wetOn = wetOn
 	buildParameterFilterResults()
 }
 
@@ -303,6 +305,7 @@ const buildParameterFilterResults = (): ExtremeEvent[] => {
 	_parameterFilterEvents = _parameterFilterEvents.filter((e) => {
 		if (e.event_type === 'hot' && !_hotOn) return false
 		if (e.event_type === 'cold' && !_coldOn) return false
+		if (e.event_type === 'wet' && !_wetOn) return false
 		return true
 	})
 	_parameterFilterEventIds = new Set(_parameterFilterEvents.map((e) => e.id))

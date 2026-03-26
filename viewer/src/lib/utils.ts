@@ -1,4 +1,4 @@
-import * as d3 from 'd3';
+import * as d3 from 'd3'
 
 export const DATA_ROOT = `${import.meta.env.X_PUBLIC_PATH || ''}data/`
 export const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
@@ -78,6 +78,18 @@ export const interpolateColorCold = (
 	}
 }
 
+export const interpolateColorWet = (
+	baseColor: string = 'rgb(44, 102, 162)',
+) => {
+	const hcl = d3.lch(baseColor)
+	return (t: number) => {
+		const H = hcl.h + Math.pow(t, 2) * 30
+		const C = Math.pow(t, 2) * 75
+		const L = 80 - t * 60
+		return d3.lch(L, C, H).formatRgb()
+	}
+}
+
 export const colorMixer = (
 	startColor: string,
 	startPct: number,
@@ -94,7 +106,7 @@ export const colorMixer = (
 }
 
 // Switch to a specific theme
-export const setTheme = (themeName: 'hot' | 'cold' | 'hotcold') => {
+export const setTheme = (themeName: SelectedEventType) => {
 	console.time(`Setting theme to ${themeName}`)
 	const root = document.documentElement
 	const themePrefix = `--theme-${themeName}-`

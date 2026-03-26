@@ -6,17 +6,19 @@ import { useLabels } from '@/lib/labels'
 const store = useStore()
 const eventStore = useEventStore()
 const $l = useLabels()
+const getLabelForEventType = (type: SelectedEventType) => {
+	if (type === 'hot') return $l.value.hotTitle
+	if (type === 'cold') return $l.value.coldTitle
+	if (type === 'wet') return $l.value.wetTitle
+	return type
+}
 </script>
 <template>
 	<div
 		class="app-logo"
 		:class="{ 'disable-pointer-events': store.isFocused }"
 		:aria-label="
-			eventStore.eventTypeMode === 'hot'
-				? $l.hotTitle
-				: eventStore.eventTypeMode === 'cold'
-					? $l.coldTitle
-					: $l.hotcoldTitle
+			'Extreme ' + getLabelForEventType(eventStore.eventTypeMode) + ' Explorer'
 		"
 	>
 		<div class="title-wrapper" :class="{ square: store.mainHelpOpen }">
@@ -30,11 +32,7 @@ const $l = useLabels()
 					tabindex="-1"
 				>
 					{{
-						eventStore.eventTypeMode === 'hot'
-							? 'Heat'
-							: eventStore.eventTypeMode === 'cold'
-								? 'Cold'
-								: 'Temperature'
+						getLabelForEventType(eventStore.eventTypeMode)
 					}}
 				</span>
 			</h1>

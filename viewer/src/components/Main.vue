@@ -35,7 +35,7 @@ import {
 import { useEventFilters } from '@/lib/eventFilters'
 import { interpolateCool } from 'd3'
 import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
-import { c3sred, c3sblue } from '@/assets/styles/scssVars.module.scss'
+import { c3sred, c3sblue, c3sgreen } from '@/assets/styles/scssVars.module.scss'
 
 // Stores
 const $l = useLabels()
@@ -99,6 +99,14 @@ const coldScaleOn = computed(() => {
 	}
 })
 
+const wetScaleOn = computed(() => {
+	if (store.viewMode === 'timemachine') {
+		return eventStore.eventTypeMode.indexOf('wet') > -1
+	} else {
+		return eventStore.selectedEvent?.event_type === 'wet'
+	}
+})
+
 const hotHeatmapOn = computed(() => {
 	return (
 		store.viewMode === 'heatmap' && eventStore.eventTypeMode.indexOf('hot') > -1
@@ -112,7 +120,17 @@ const coldHeatmapOn = computed(() => {
 	)
 })
 
-const hslToRgb01 = (h: number, s: number, l: number): [number, number, number] => {
+const wetHeatmapOn = computed(() => {
+	return (
+		store.viewMode === 'heatmap' && eventStore.eventTypeMode.indexOf('wet') > -1
+	)
+})
+
+const hslToRgb01 = (
+	h: number,
+	s: number,
+	l: number,
+): [number, number, number] => {
 	const hue = ((h % 360) + 360) % 360
 	const sat = Math.max(0, Math.min(1, s))
 	const lig = Math.max(0, Math.min(1, l))
@@ -187,6 +205,11 @@ const getStackedC3sRed = (value: number): string => {
 const getStackedC3sBlue = (value: number): string => {
 	return multiplyStackedColor(c3sblue, value)
 }
+
+const getStackedC3sGreen = (value: number): string => {
+	// C3S green is not in HSL format, so we hardcode an approximation here
+	return multiplyStackedColor(c3sgreen, value)
+}
 </script>
 
 <template>
@@ -207,7 +230,7 @@ const getStackedC3sBlue = (value: number): string => {
 		>
 			<ColorScale
 				:colorfunc="
-					(val: number) => colorForValue(val, true, eventStore.hotScale)
+					(val: number) => colorForValue(val, 'hot', eventStore.hotScale)
 				"
 				:domain="eventStore.hotScale.domain()"
 				:label="eventStore.eventSelected ? $l.cellTemp : $l.eventMax"
@@ -216,12 +239,21 @@ const getStackedC3sBlue = (value: number): string => {
 			/>
 			<ColorScale
 				:colorfunc="
-					(val: number) => colorForValue(val, false, eventStore.coldScale)
+					(val: number) => colorForValue(val, 'cold', eventStore.coldScale)
 				"
 				:domain="eventStore.coldScale.domain()"
 				:units="eventStore.coldIntensityUnits"
 				:label="eventStore.eventSelected ? $l.cellTemp : $l.eventMin"
 				v-if="coldScaleOn"
+			/>
+			<ColorScale
+				:colorfunc="
+					(val: number) => colorForValue(val, 'wet', eventStore.wetScale)
+				"
+				:domain="eventStore.wetScale.domain()"
+				label="scale"
+				unit="degC"
+				v-if="wetScaleOn"
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3sRed"
@@ -234,6 +266,12 @@ const getStackedC3sBlue = (value: number): string => {
 				:domain="[0, 30]"
 				label="events"
 				v-if="coldHeatmapOn"
+			/>
+			<ColorScale
+				:colorfunc="getStackedC3sGreen"
+				:domain="[0, 30]"
+				label="events"
+				v-if="wetHeatmapOn"
 			/>
 		</div>
 
@@ -260,7 +298,11 @@ const getStackedC3sBlue = (value: number): string => {
 			@click="helpMe('aboutInfo')"
 			v-tooltip="$l.aboutInfo"
 		>
-			<IconInfoCircle size="24" aria-hidden="true" v-if="!store.hamburgerMenuOpen" />
+			<IconInfoCircle
+				size="24"
+				aria-hidden="true"
+				v-if="!store.hamburgerMenuOpen"
+			/>
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
 
@@ -437,11 +479,7 @@ const getStackedC3sBlue = (value: number): string => {
 			@click="store.showInfoPanel = !store.showInfoPanel"
 			v-tooltip="store.showInfoPanel ? $l.close : $l.showInfoPanel"
 		>
-			<IconReport
-				size="24"
-				aria-hidden="true"
-				v-if="!store.showInfoPanel"
-			/>
+			<IconReport size="24" aria-hidden="true" v-if="!store.showInfoPanel" />
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
 
@@ -594,7 +632,7 @@ const getStackedC3sBlue = (value: number): string => {
 
 	#color-scale {
 		position: absolute;
-		
+
 		z-index: 350;
 		padding: 0.5rem;
 		width: calc(0.5 * (100vw - 35rem - 2 * $panelMargin));
@@ -602,13 +640,13 @@ const getStackedC3sBlue = (value: number): string => {
 		gap: 0.5rem;
 		transition: all $transition;
 
-			bottom: calc($panelMargin + $smallTimePanelHeight + $panelMargin);
-			
-			&.timemachine {
-				display: flex;
-				bottom: $panelMargin * 0.5;
-				left: $panelMargin * 0.5;
-				&.selected {
+		bottom: calc($panelMargin + $smallTimePanelHeight + $panelMargin);
+
+		&.timemachine {
+			display: flex;
+			bottom: $panelMargin * 0.5;
+			left: $panelMargin * 0.5;
+			&.selected {
 				bottom: calc($panelMargin + $smallTimePanelHeight + $panelMargin);
 				left: calc(50vw + 0.5 * 35rem);
 			}
@@ -664,7 +702,7 @@ const getStackedC3sBlue = (value: number): string => {
 		position: absolute;
 		top: $panelMargin;
 		right: 2 * $panelMargin + $buttonSize;
-		border-radius: 100%; 
+		border-radius: 100%;
 		width: 2.5rem;
 		height: 2.5rem;
 		padding: 0.5rem;
@@ -701,7 +739,7 @@ const getStackedC3sBlue = (value: number): string => {
 		display: flex;
 		flex-direction: column;
 		justify-content: stretch;
-		align-items: stretch;;
+		align-items: stretch;
 		gap: $panelMargin * 0.5;
 		z-index: 350;
 

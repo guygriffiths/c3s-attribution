@@ -12,7 +12,7 @@ type Props = {
 	ymax: number
 	xbg?: number[]
 	ybg?: number[]
-	types?: ('hot' | 'cold' | 'bg')[]
+	types?: (EventType | 'bg')[]
 	ids?: string[]
 	selectedX: number | null
 	selectedY: number | null
@@ -103,7 +103,7 @@ const xyData = computed(() => {
 	const pts: {
 		x: number
 		y: number
-		type: 'hot' | 'cold' | 'bg'
+		type: EventType | 'bg'
 		id: string | null
 	}[] = []
 	for (let i = 0; i < n; i++) {

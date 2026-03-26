@@ -5,6 +5,7 @@
 $c3sred: hsl(345, 77%, 33%);
 $c3sorange: hsl(20, 77%, 33%);
 $c3sgreen: hsl(101, 77%, 33%);
+$c3steal: hsl(159, 77%, 33%);
 $c3sblue: hsl(211, 57%, 40%);
 $c3spurple: hsl(281, 28%, 35%);
 $lightbulb: rgb(247, 205, 81);
@@ -185,6 +186,65 @@ $themes: (
 		// Interactive text/links
 		text-interactive: $c3sblue,
 		text-interactive-hover: color.adjust($c3sblue, $lightness: -10%),
+		// Highlight
+		highlight: $lightbulb,
+		highlight-hover: color.adjust($lightbulb, $lightness: -8%),
+		highlight-bg: color.adjust($lightbulb, $lightness: +45%, $saturation: -20%),
+		// Focus states
+		focus-ring: rgba(30, 58, 138, 0.4),
+		// Neutral interactive states
+		hover-bg: rgba(0, 0, 0, 0.04),
+		hover-bg-dark: rgba(0, 0, 0, 0.08),
+		// Dividers
+		divider-subtle: rgba(0, 0, 0, 0.06),
+		divider: rgba(0, 0, 0, 0.1),
+		shadow-sm: $shd-sm $shd-sm $shd-sm rgba(0, 0, 0, 0.5),
+		shadow-md: $shd-md $shd-md $shd-md rgba(0, 0, 0, 0.2),
+		shadow-lg: $shd-lg $shd-lg $shd-lg rgba(0, 0, 0, 0.15),
+	),
+	wet: (
+		// Panel backgrounds (cool)
+		panel-bg: linear-gradient(
+				123deg,
+				hsla(305, 35%, 96%, 0.85) 0%,
+				hsla(335, 35%, 96%, 0.85) 25%,
+				hsla(5, 35%, 96%, 0.85) 50%,
+				hsla(35, 35%, 96%, 0.85) 75%,
+				hsla(65, 35%, 96%, 0.85) 100%
+			),
+		panel-solid: rgba(248, 249, 250, 0.9),
+		panel-bg-alt: rgba(218, 219, 220, 0.8),
+		panel-bg-dark: rgba(189, 191, 193, 0.8),
+		panel-surface: rgb(253, 254, 255),
+		panel-hint: rgba(253, 254, 255, 0.1),
+		chart-bg: rgb(243, 245, 247),
+		chart-bg-alt: rgba(248, 249, 250, 0.8),
+		border: rgb(222, 226, 230),
+		// Primary interactive elements
+		primary: $c3steal,
+		constrast: $c3sred,
+		primary-glass: rgba($c3steal, 0.7),
+		primary-glass-shine: rgba(
+				color.adjust($c3steal, $saturation: -10%, $lightness: 10%),
+				0.7
+			),
+		primary-glass-dark: rgba(
+				color.adjust($c3steal, $saturation: -10%, $lightness: -10%),
+				0.7
+			),
+		primary-hover: color.adjust($c3steal, $lightness: -8%),
+		primary-active: color.adjust($c3steal, $lightness: -12%),
+		primary-muted: color.adjust($c3steal, $lightness: +50%),
+		primary-selected: color.adjust($c3steal, $lightness: +65%),
+		primary-unselected: color.adjust($c3steal, $saturation: -30%),
+		// Text hierarchy
+		text-primary: rgb(17, 17, 19),
+		text-secondary: rgb(100, 100, 105),
+		text-tertiary: rgb(142, 142, 147),
+		text-on-primary: rgb(255, 255, 255),
+		// Interactive text/links
+		text-interactive: $c3steal,
+		text-interactive-hover: color.adjust($c3steal, $lightness: -10%),
 		// Highlight
 		highlight: $lightbulb,
 		highlight-hover: color.adjust($lightbulb, $lightness: -8%),

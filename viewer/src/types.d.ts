@@ -9,7 +9,8 @@ declare global {
 
 	type TimeReelMode = 'default' | 'timeline' | 'eventzoom' | 'overview'
 
-	type EventType = 'hot' | 'cold' //| 'wet' // | 'windy' | 'dry'
+	type EventType = 'hot' | 'cold' | 'wet'
+	type SelectedEventType = EventType | 'hotcold' | 'hotwet' | 'coldwet' | 'all'
 
 	type Variable = 'duration' | 'size' | 'intensity'
 
@@ -71,6 +72,11 @@ declare global {
 		coldIntensity: {
 			minimum: boolean
 			type: 'intensity' | 'min' | 'mean' | 'max'
+			value: number
+			active: boolean
+		}
+		wetIntensity: {
+			minimum: boolean
 			value: number
 			active: boolean
 		}

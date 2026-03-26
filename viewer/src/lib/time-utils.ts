@@ -50,7 +50,7 @@ export function getEventBoxes(
 	events: {
 		times: number[]
 		id: string
-		event_type: 'hot' | 'cold'
+		event_type: EventType
 		color: string
 	}[],
 	year: number,

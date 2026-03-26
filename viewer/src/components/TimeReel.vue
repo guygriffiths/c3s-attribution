@@ -53,7 +53,7 @@ const props = defineProps<{
 	hoverEvent: ExtremeEvent | null
 	mode: TimeReelMode
 	showBars: boolean
-	eventType: 'hotcold' | 'hot' | 'cold'
+	eventType: SelectedEventType
 	colorForEvent: (event: ExtremeEvent) => string | null
 	speedFactor: number
 }>()
@@ -658,7 +658,7 @@ const endNeedleOffsetPx = computed(() => {
 })
 
 const eventBoxesForYear = ref<Record<number, EventBox[]>>({})
-const positionY = (y: number, eventType: 'hot' | 'cold') => {
+const positionY = (y: number, eventType: EventType) => {
 	if (props.eventType === 'hotcold') {
 		return (0.5 + y) * eventHeight.value * (eventType === 'hot' ? -1 : 1)
 	} else {
@@ -1539,12 +1539,6 @@ const dateTranslate = computed(() => {
 			}
 		}
 
-		&.timeline {
-			// top: calc(100% - 1.75rem);
-			// left: 50%;
-			// transform: translate(-50%, 0%);
-		}
-
 		&.hidden {
 			display: none;
 		}
@@ -1817,6 +1811,7 @@ const dateTranslate = computed(() => {
 
 					&.range {
 						background: transparent;
+						z-index: 10;
 
 						&.off {
 							background: rgba(black, 0.1);
@@ -1916,7 +1911,8 @@ const dateTranslate = computed(() => {
 					user-select: none;
 					display: flex;
 					flex-direction: row;
-					color: var(--text-secondary);
+					color: var(--text-tertiary);
+
 					p {
 						pointer-events: none;
 						user-select: none;
@@ -2003,6 +1999,9 @@ const dateTranslate = computed(() => {
 			}
 			&.cold {
 				stroke: $c3sblue;
+			}
+			&.wet {
+				stroke: $c3steal;
 			}
 			&.selected {
 				stroke: black;

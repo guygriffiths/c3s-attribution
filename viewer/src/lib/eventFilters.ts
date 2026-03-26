@@ -96,11 +96,19 @@ export const useEventFilters = () => {
 		() => [eventStore.eventTypeMode],
 		() => {
 			if (eventStore.eventTypeMode === 'cold') {
-				setEventTypeFilter(false, true)
+				setEventTypeFilter(false, true, false)
 			} else if (eventStore.eventTypeMode === 'hot') {
-				setEventTypeFilter(true, false)
+				setEventTypeFilter(true, false, false)
+			} else if (eventStore.eventTypeMode === 'wet') {
+				setEventTypeFilter(false, false, true)
+			} else if (eventStore.eventTypeMode === 'hotcold') {
+				setEventTypeFilter(true, true, false)
+			} else if (eventStore.eventTypeMode === 'hotwet') {
+				setEventTypeFilter(true, false, true)
+			} else if (eventStore.eventTypeMode === 'coldwet') {
+				setEventTypeFilter(false, true, true)
 			} else {
-				setEventTypeFilter(true, true)
+				setEventTypeFilter(true, true, true)
 			}
 		},
 		{ immediate: true },

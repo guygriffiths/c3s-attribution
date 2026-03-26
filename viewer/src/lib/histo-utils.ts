@@ -3,7 +3,7 @@
 // This means the last bin will be wider than the others
 export const getBins = (
 	data: number[],
-	types: ('hot' | 'cold')[],
+	types: EventType[],
 	xmin: number,
 	xmax: number,
 	nbins: number,

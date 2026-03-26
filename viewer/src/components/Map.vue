@@ -423,11 +423,11 @@ const renderTile = (props: any) => {
 		(v: number) =>
 			colorForValue(
 				v,
-				eventStore.selectedEvent?.event_type === 'hot',
+				eventStore.selectedEvent?.event_type,
 				cScale.value,
 			),
 		(v: number) =>
-			intensityForValue(v, eventStore.selectedEvent?.event_type === 'hot'),
+			intensityForValue(v, eventStore.selectedEvent?.event_type !== 'wet'),
 	) as any
 }
 

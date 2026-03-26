@@ -9,6 +9,7 @@ import {
 	DATA_ROOT,
 	interpolateColorCold,
 	interpolateColorHot,
+	interpolateColorWet,
 	setTheme,
 } from '@/lib/utils'
 import * as d3 from 'd3'
@@ -24,20 +25,25 @@ interface State {
 
 	heatDurationRange: [number, number]
 	coldDurationRange: [number, number]
+	wetDurationRange: [number, number]
 	durationUnits: string
 	heatSizeRange: [number, number]
 	coldSizeRange: [number, number]
+	wetSizeRange: [number, number]
 	sizeUnits: string
 	heatIntensityRange: [number, number]
 	heatIntensityUnits: string
 	coldIntensityRange: [number, number]
 	coldIntensityUnits: string
+	wetIntensityRange: [number, number]
+	wetIntensityUnits: string
 	durationP90: number | null
 	sizeP90: number | null
 	heatIntensityP90: number | null
 	coldIntensityP90: number | null
+	wetIntensityP90: number | null
 
-	eventTypeMode: 'hot' | 'cold' | 'hotcold'
+	eventTypeMode: SelectedEventType
 
 	eventSetsLoaded: number
 
@@ -45,29 +51,23 @@ interface State {
 	firstEventSetLoaded: boolean
 }
 
-export const intensityForValue = (v: number, hot: boolean) => {
+export const intensityForValue = (v: number, temperature: boolean) => {
 	if (v == null || isNaN(v)) return 0
-	// console.log('intensityForValue', v, hot, v - (hot ? 273.15 : 273.15))
-	return v - (hot ? 273.15 : 273.15)
-	// if (hot) {
-	// 	let baseline = 301.15
-	// 	return v - baseline
-	// } else {
-	// 	let baseline = 275.15
-	// 	return baseline - v
-	// }
+	return v - (temperature ? 273.15 : 0)
 }
 
 export const colorForValue = (
 	v: number,
-	hot: boolean,
+	type: EventType,
 	scale: d3.ScaleLinear<number, number>,
 ) => {
 	// if (!event || !scale) return (v: number) => 'transparent'
-	if (hot) {
+	if (type === 'hot') {
 		return interpolateColorHot(scssVars.c3sred)(scale(v))
-	} else {
+	} else if (type === 'cold') {
 		return interpolateColorCold(scssVars.c3sblue)(scale(v))
+	} else if (type === 'wet') {
+		return interpolateColorWet(scssVars.c3steal)(scale(v))
 	}
 }
 
@@ -76,8 +76,12 @@ export const colorForEvent = (
 	scale: d3.ScaleLinear<number, number>,
 ) => {
 	const value = intensityForValue(
-		event.event_type === 'hot' ? event.max_value : event.min_value,
-		event.event_type === 'hot',
+		event.event_type === 'hot'
+			? event.max_value
+			: event.event_type === 'cold'
+				? event.min_value
+				: event.mean_value,
+		event.event_type === 'hot' || event.event_type === 'cold',
 	)
 	// console.log(
 	// 	'intensity for event',
@@ -87,7 +91,7 @@ export const colorForEvent = (
 	// 	intensityForValue,
 	// 	colorForValue,
 	// )
-	return colorForValue(value, event.event_type === 'hot', scale)
+	return colorForValue(value, event.event_type, scale)
 }
 
 export const useStore = defineStore('events', {
@@ -98,18 +102,23 @@ export const useStore = defineStore('events', {
 			hoveringEvent: null,
 			heatDurationRange: [3, 14],
 			coldDurationRange: [3, 14],
+			wetDurationRange: [3, 14],
 			durationUnits: 'days',
 			heatSizeRange: [0, 100],
 			coldSizeRange: [0, 100],
+			wetSizeRange: [0, 100],
 			sizeUnits: 'km²',
 			heatIntensityRange: [28, 40],
 			heatIntensityUnits: '°C',
 			coldIntensityRange: [-20, 2],
 			coldIntensityUnits: '°C',
+			wetIntensityRange: [0, 2],
+			wetIntensityUnits: 'precipitation index',
 			durationP90: null,
 			sizeP90: null,
 			heatIntensityP90: null,
 			coldIntensityP90: null,
+			wetIntensityP90: null,
 			eventTypeMode: 'hot',
 			eventSetsLoaded: 0,
 			filters: {
@@ -131,6 +140,11 @@ export const useStore = defineStore('events', {
 					minimum: false,
 					type: 'min',
 					value: 0,
+					active: false,
+				},
+				wetIntensity: {
+					minimum: true,
+					value: 2,
 					active: false,
 				},
 			},
@@ -206,6 +220,13 @@ export const useStore = defineStore('events', {
 				.range([1, 0])
 				.clamp(true)
 		},
+		wetScale: (state: State) => {
+			return d3
+				.scaleLinear()
+				.domain(state.wetIntensityRange)
+				.range([0, 1])
+				.clamp(true)
+		},
 		colorForEvent: (state: State) => {
 			// TODO Logic for configurable intensity definition.
 			return (event: ExtremeEvent | ExtremeEventFull) => {
@@ -213,7 +234,7 @@ export const useStore = defineStore('events', {
 				return colorForValue(
 					// @ts-ignore - this is a getter
 					state.intensityForEvent(event),
-					hot,
+					event.event_type,
 					// @ts-ignore - these are getters
 					hot ? state.hotScale : state.coldScale,
 				)
@@ -225,7 +246,7 @@ export const useStore = defineStore('events', {
 		},
 		sizeForEvent: (state: State) => {
 			return (event: ExtremeEvent | ExtremeEventFull | null) =>
-				(event?.total_area || 0)
+				event?.total_area || 0
 		},
 		intensityForEvent: (state: State) => {
 			return (event: ExtremeEvent | ExtremeEventFull | null) => {
@@ -331,9 +352,7 @@ export const useStore = defineStore('events', {
 		setHoveringEvent(event: ExtremeEvent | null) {
 			this.hoveringEvent = event
 		},
-		async setEventTypeMode(
-			mode: 'hot' | 'cold' | 'hotcold' | null | undefined,
-		) {
+		async setEventTypeMode(mode: SelectedEventType | null = null) {
 			const mainStore = useMainStore()
 			await mainStore.setLoading('Changing event type...')
 			this.eventTypeMode = mode || 'hot'
@@ -419,11 +438,14 @@ export const useStore = defineStore('events', {
 				const sizeTop: number[] = []
 				const heatTop: number[] = []
 				const coldTop: number[] = []
+				const wetTop: number[] = []
 
 				let localHeatMin = Infinity
 				let localColdMin = Infinity
+				let localWetMin = Infinity
 				let localHeatMax = -Infinity
 				let localColdMax = -Infinity
+				let localWetMax = -Infinity
 				events.forEach((e) => {
 					const duration = this.durationForEvent(e)
 
@@ -468,12 +490,32 @@ export const useStore = defineStore('events', {
 						if (intensity > localColdMax) {
 							localColdMax = intensity
 						}
+					} else if (e.event_type === 'wet') {
+						if (duration < this.wetDurationRange[0]) {
+							this.wetDurationRange[0] = duration
+						}
+						if (duration > this.wetDurationRange[1]) {
+							this.wetDurationRange[1] = duration
+						}
+						if (size < this.wetSizeRange[0]) {
+							this.wetSizeRange[0] = size
+						}
+						if (size > this.wetSizeRange[1]) {
+							this.wetSizeRange[1] = size
+						}
+						if (intensity < localWetMin) {
+							localWetMin = intensity
+						}
+						if (intensity > localWetMax) {
+							localWetMax = intensity
+						}
 					}
 
 					pushTop(durationTop, duration)
 					pushTop(sizeTop, size)
 					if (e.event_type === 'hot') pushTop(heatTop, intensity)
-					else pushTop(coldTop, intensity)
+					else if (e.event_type === 'cold') pushTop(coldTop, intensity)
+					else if (e.event_type === 'wet') pushTop(wetTop, intensity)
 				})
 				durationTop.sort()
 				this.durationP90 = durationTop.length
@@ -482,6 +524,7 @@ export const useStore = defineStore('events', {
 				this.sizeP90 = sizeTop.length ? Math.min(...sizeTop) : null
 				this.heatIntensityP90 = heatTop.length ? Math.min(...heatTop) : null
 				this.coldIntensityP90 = coldTop.length ? Math.min(...coldTop) : null
+				this.wetIntensityP90 = wetTop.length ? Math.min(...wetTop) : null
 				this.heatIntensityRange = [
 					localHeatMin === Infinity ? 0 : localHeatMin,
 					localHeatMax === -Infinity ? 0 : localHeatMax,
@@ -490,10 +533,14 @@ export const useStore = defineStore('events', {
 					localColdMin === Infinity ? 0 : localColdMin,
 					localColdMax === -Infinity ? 0 : localColdMax,
 				]
+				this.wetIntensityRange = [
+					localWetMin === Infinity ? 0 : localWetMin,
+					localWetMax === -Infinity ? 0 : localWetMax,
+				]
 			})
 
 			// Load hot and cold events
-			await fetchAndIndexEvents(['hot', 'cold'], from, to)
+			await fetchAndIndexEvents(['hot', 'cold', 'wet'], from, to)
 		},
 	},
 })
