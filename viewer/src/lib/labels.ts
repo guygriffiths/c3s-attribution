@@ -72,6 +72,8 @@ const labelsEn = {
 	hotcoldTitle: 'Extreme Event Explorer',
 	sortAscending: 'Sort ascending (currently sorted descending)',
 	sortDescending: 'Sort descending (currently sorted ascending)',
+	eventsOn: 'events on',
+	eventsOver: 'events over the period',
 	close: 'Close',
 	multiEventPanel: 'Show multi-event charts',
 	maximiseMultiEventPanel: 'Expand multi-event panel',

@@ -496,6 +496,12 @@ const resetZoom = () => {
 		[-70, -180, 85, 180],
 	)
 }
+const mapClicked = (event: LeafletMouseEvent) => {
+	if (store.viewMode === 'heatmap' && store.filteringByPoint) {
+		// Move the point selector to the clicked location
+		store.lastPoint = [event.latlng.lat, event.latlng.lng]
+	}
+}
 </script>
 
 <template>
@@ -523,6 +529,7 @@ const resetZoom = () => {
 			:world-copy-jump="true"
 			:zoom-animation="true"
 			@ready="addEventPanes"
+			@click="mapClicked"
 		>
 			<!-- Background layers -->
 			<LTileLayer
