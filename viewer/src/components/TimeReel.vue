@@ -1855,13 +1855,14 @@ const dateTranslate = computed(() => {
 								// color: black;
 								flex: 1 1 50%;
 								height: 50%;
-								opacity: 0.05;
+								opacity: 0.35;
 								transition: opacity $transition;
 								pointer-events: none;
+								filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 1));
 							}
 
 							&:hover .tabler-icon {
-								opacity: 0.75;
+								opacity: 0.95;
 								filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 1));
 							}
 						}
