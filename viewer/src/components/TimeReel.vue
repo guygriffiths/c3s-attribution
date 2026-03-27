@@ -1424,6 +1424,15 @@ const dateTranslate = computed(() => {
 					<p v-show="!isZoom" class="nov">{{ $l.months.nov }}</p>
 					<p v-show="!isZoom" class="dec">{{ $l.months.dec }}</p>
 				</div>
+				<div class="year-labels" v-if="isTimeline">
+					<p
+						v-for="year in years"
+						:key="year"
+						:style="`width: ${scroller.clientWidth / years.length}px;`"
+					>
+						{{ year }}
+					</p>
+				</div>
 			</div>
 			<div
 				class="highlight-row fade-bottom"
@@ -1881,6 +1890,25 @@ const dateTranslate = computed(() => {
 						transition: all $transition;
 					}
 				}
+				.year-labels {
+					pointer-events: none;
+					user-select: none;
+					display: flex;
+					flex-direction: row;
+					color: var(--text-tertiary);
+					align-items: flex-start;
+					justify-content: flex-start;
+					p {
+						transform: rotate(-90deg) translate(-100%, 0);
+						pointer-events: none;
+						user-select: none;
+						margin: 0;
+						display: flex;
+						justify-content: center;
+						align-items: flex-end;
+					}
+				}
+
 				.month-labels {
 					flex: 0 0 100%;
 					pointer-events: none;
