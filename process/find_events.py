@@ -1025,11 +1025,17 @@ class EventletFactory:
                 self.raw_mask = (data < self.threshold) & (data < ref_data)
             
             # Filter for persistence: require 3 consecutive time steps
+            # two step process using rolling to first find centre of sequences (hits) using .rolling.sum() then
+            # assign all elements of a sequence (enduring_pixels) using .rolling.max().
+            hits = (
+                    self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
+            )
             self.enduring_pixels = (
-                self.raw_mask.rolling(valid_time=3, center=False).sum().fillna(0) >= 3
+                hits.rolling(valid_time=3, center=True).max().fillna(0).astype(bool)
             )
 
-        self.times = self.data.valid_time.values
+        # Exclude last 2 time steps where rolling window is incomplete
+        self.times = self.data.valid_time.values[:-2]
 
         # Resume from previous state if provided
         if last_slice_name:
@@ -1055,6 +1061,7 @@ class EventletFactory:
                 self._t_index += 1
         
         logger.info(f"{self._t_index} is the t index, {self.skipToTime}")
+        
     def has_more(self):
         return self._t_index < len(self.times)
 
