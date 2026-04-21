@@ -1428,7 +1428,7 @@ const dateTranslate = computed(() => {
 					<p
 						v-for="year in years"
 						:key="year"
-						:style="`width: ${scroller.clientWidth / years.length}px;`"
+						:style="`width: ${scroller!.clientWidth / years.length}px;`"
 					>
 						{{ year }}
 					</p>

@@ -14,7 +14,7 @@ const store = useStore()
 <template>
 	<div class="help-content">
 		<p>This panel provides detailed information about all of the events currently
-		drawn on the map. From top-to-bottom, it features:
+		drawn on the map. From top-to-bottom, it features:</p>
 		<ul>
 			<li>The number of events currently displayed.</li>
 			<li>The selected date or date range currently being displayed.</li>
@@ -56,15 +56,14 @@ const store = useStore()
 					<li>Each event is represented by a bar, where:
 						<ul>
 							<li><strong>Length</strong> indicates the <strong>duration</strong> of the event</li>
-							<li><strong>Thickness</strong> indicates the <strong>area</strong> of the event</li>
-							<li><strong>Colour</strong> indicates the <strong>temperature</strong> of the event</li>
+							<li><strong>Thickness</strong> indicates the <strong>area</strong> covered by the entire event</li>
+							<li><strong>Colour</strong> indicates the min/max <strong>temperature</strong> of the entire event</li>
 						</ul>
 					</li>
 				</ul>
 			</li>
 			<li>Clicking on an event in the rankings table selects it to show further details.</li>
 		</ul>
-		</p>
 	</div>
 </template>
 

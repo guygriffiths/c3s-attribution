@@ -9,7 +9,7 @@ declare global {
 
 	type TimeReelMode = 'default' | 'timeline' | 'eventzoom' | 'overview'
 
-	type EventType = 'hot' | 'cold' | 'wet' // | 'windy' | 'dry'
+	type EventType = 'hot' | 'cold' //| 'wet' // | 'windy' | 'dry'
 
 	type Variable = 'duration' | 'size' | 'intensity'
 
