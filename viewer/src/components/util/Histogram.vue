@@ -231,9 +231,9 @@ const tooltipForBin = (b: any) => {
 						<rect
 							class="bar-rect"
 							:x="1"
-							:y="b.y - 3"
+							:y="b.y"
 							:width="Math.max(3, b.w - 2)"
-							:height="b.h + 3"
+							:height="b.h"
 							:class="{
 								highlight: highlightBin === b.idx,
 							}"
