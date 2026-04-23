@@ -1864,7 +1864,7 @@ const dateTranslate = computed(() => {
 								// color: black;
 								flex: 1 1 50%;
 								height: 50%;
-								opacity: 0.35;
+								opacity: 0.5;
 								transition: opacity $transition;
 								pointer-events: none;
 								filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 1));

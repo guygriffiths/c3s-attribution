@@ -1,3 +1,4 @@
+import { addDays } from 'date-fns'
 import { defineStore } from 'pinia'
 
 interface TimeState {
@@ -51,7 +52,18 @@ export const useStore = defineStore('time', {
 			return state.selectedTime.toISOString()
 		},
 	},
-	actions: {},
+	actions: {
+		nextDay() {
+			if(this.selectedTime < this.endTime) {
+				this.selectedTime = addDays(this.selectedTime, 1)
+			}
+		},
+		prevDay() {
+			if(this.selectedTime > this.startTime) {
+				this.selectedTime = addDays(this.selectedTime, -1)
+			}
+		}
+	},
 })
 
 export type TimeStore = ReturnType<typeof useStore>

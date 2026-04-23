@@ -183,6 +183,7 @@ button {
 			&.color {
 				background: var(--primary-glass-dark);
 			}
+			opacity: 0.5;
 		}
 
 		.icon {
@@ -209,6 +210,10 @@ button {
 	padding: 0.5rem 1rem;
 	transition: all $transition;
 
+	&.tight {
+		padding: 0.25rem 0;
+	}
+
 	&.close {
 		border-radius: $borderRadius !important;
 		border-top-left-radius: 0 !important;
@@ -228,8 +233,7 @@ button {
 		justify-content: center;
 		box-shadow: none;
 		position: relative;
-		top: 0.25rem;
-
+		top: 0.125rem 0
 		svg {
 			width: 90%;
 			height: 90%;

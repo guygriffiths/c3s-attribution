@@ -9,12 +9,15 @@ import {
 	useStore as useEventStore,
 	intensityForValue,
 } from '@/store/eventStore'
+import { useStore as useTimeStore } from '@/store/timeStore'
 import {
 	IconDimensions,
 	IconGridDots,
 	IconTemperature,
 	IconTemperaturePlus,
 	IconTemperatureMinus,
+	IconChevronLeft,
+	IconChevronRight,
 } from '@tabler/icons-vue'
 import { niceNumber } from '@/lib/utils'
 import { getBins } from '@/lib/histo-utils'
@@ -24,6 +27,7 @@ import { useLabels } from '@/lib/labels'
 const $l = useLabels()
 const store = useStore()
 const eventStore = useEventStore()
+const timeStore = useTimeStore()
 
 const props = defineProps<{
 	selectedEvent: ExtremeEventFull | null
@@ -227,6 +231,9 @@ const size = computed(() => {
 			</div>
 			<div class="day-info">
 				<div class="info-row header">
+					<button class="glassy flat tight" @click="timeStore.prevDay()" :disabled="props.selectedIndex <= 0">
+						<IconChevronLeft aria-hidden="true" />
+					</button>
 					<CalendarIcon
 						:size="24"
 						:date="
@@ -235,9 +242,12 @@ const size = computed(() => {
 					/>
 					<span class="mono">
 						{{
-							dateStr(new Date(selectedEvent.times[props.selectedIndex] || 0))
+							dateStr(new Date(selectedEvent.times[props.selectedIndex] || 0)).slice(0, -4)
 						}}
 					</span>
+					<button class="glassy flat tight" @click="timeStore.nextDay()" :disabled="props.selectedIndex >= days.length - 1">
+						<IconChevronRight aria-hidden="true" />
+					</button>
 				</div>
 				<div
 					class="info-row"
