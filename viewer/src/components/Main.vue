@@ -84,7 +84,7 @@ const selectedDayIdx = computed((): number | null => {
 })
 
 const hotScaleOn = computed(() => {
-	if(store.viewMode === 'timemachine') {
+	if (store.viewMode === 'timemachine') {
 		return eventStore.eventTypeMode.indexOf('hot') > -1
 	} else {
 		return eventStore.selectedEvent?.event_type === 'hot'
@@ -92,7 +92,7 @@ const hotScaleOn = computed(() => {
 })
 
 const coldScaleOn = computed(() => {
-	if(store.viewMode === 'timemachine') {
+	if (store.viewMode === 'timemachine') {
 		return `${eventStore.eventTypeMode}`.indexOf('cold') > -1
 	} else {
 		return eventStore.selectedEvent?.event_type === 'cold'
@@ -100,11 +100,16 @@ const coldScaleOn = computed(() => {
 })
 
 const hotHeatmapOn = computed(() => {
-	return store.viewMode === 'heatmap' && eventStore.eventTypeMode.indexOf('hot') > -1
+	return (
+		store.viewMode === 'heatmap' && eventStore.eventTypeMode.indexOf('hot') > -1
+	)
 })
 
 const coldHeatmapOn = computed(() => {
-	return store.viewMode === 'heatmap' && eventStore.eventTypeMode.indexOf('cold') > -1
+	return (
+		store.viewMode === 'heatmap' &&
+		eventStore.eventTypeMode.indexOf('cold') > -1
+	)
 })
 
 const withAlpha = (hslColor: string, alpha: number): string => {
@@ -120,6 +125,7 @@ const getStackedC3sRed = (value: number): string => {
 	const effectiveAlpha = 1 - Math.pow(1 - singleLayerAlpha, layers)
 	return withAlpha(c3sred, effectiveAlpha)
 }
+
 const getStackedC3sBlue = (value: number): string => {
 	const layers = Math.max(0, Math.min(50, Math.round(value)))
 	const singleLayerAlpha = 0.1
@@ -163,17 +169,13 @@ const getStackedC3sBlue = (value: number): string => {
 				v-if="coldScaleOn"
 			/>
 			<ColorScale
-				:colorfunc="
-					getStackedC3sRed
-				"
+				:colorfunc="getStackedC3sRed"
 				:domain="[0, 20]"
 				label="events"
 				v-if="hotHeatmapOn"
 			/>
 			<ColorScale
-				:colorfunc="
-					getStackedC3sBlue
-				"
+				:colorfunc="getStackedC3sBlue"
 				:domain="[0, 20]"
 				label="events"
 				v-if="coldHeatmapOn"
@@ -215,11 +217,17 @@ const getStackedC3sBlue = (value: number): string => {
 			:class="{ active: store.hamburgerMenuOpen && !store.isFocused }"
 			:inert="!store.hamburgerMenuOpen ? 'true' : undefined"
 		>
-			<EventTypeToggle
-				:model-value="eventStore.eventTypeMode"
-				@update:model-value="eventStore.setEventTypeMode"
-			/>
-			<FilterPanel v-model="eventStore.filters" />
+			<div class="menu-section">
+				<h2>{{ $l.chooseEventType }}</h2>
+				<EventTypeToggle
+					:model-value="eventStore.eventTypeMode"
+					@update:model-value="eventStore.setEventTypeMode"
+				/>
+			</div>
+			<div class="menu-section">
+				<h2>{{ $l.chooseFilters }}</h2>
+				<FilterPanel v-model="eventStore.filters" />
+			</div>
 			<button
 				class="about-button glassy color"
 				@click="helpMe('aboutInfo')"
@@ -227,7 +235,7 @@ const getStackedC3sBlue = (value: number): string => {
 			>
 				<IconInfoOctagon size="24" aria-hidden="true" />{{ $l.aboutInfo }}
 			</button>
-			<HelpButton help="hamburgerMenu" />
+			<!-- <HelpButton help="hamburgerMenu" /> -->
 		</div>
 
 		<!-- Event day panel (time machine mode, left side) -->
@@ -611,17 +619,32 @@ const getStackedC3sBlue = (value: number): string => {
 		backdrop-filter: $frosty;
 		top: $panelMargin;
 		right: $panelMargin;
-		padding: $panelMargin;
+		padding: $panelMargin * 0.5;
 		display: flex;
 		flex-direction: column;
-		gap: $panelMargin;
+		justify-content: stretch;
+		align-items: stretch;;
+		gap: $panelMargin * 0.5;
 		z-index: 350;
 
 		.about-button {
 			margin-top: auto;
 			display: flex;
 			align-items: center !important;
+			justify-content: center;
 			gap: 0.5rem;
+		}
+
+		.menu-section {
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+			padding: 0;
+
+			h2 {
+				font-size: 1rem;
+				margin: 0.25rem 0 0 0;
+			}
 		}
 	}
 

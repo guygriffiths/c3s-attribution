@@ -121,8 +121,6 @@ const sizeGetter = computed({
 
 <template>
 	<div class="filter-panel">
-		<IconFilter class="header-icon" />
-
 		<div class="filters">
 			<div class="filter-row">
 				<IconStopwatch v-tooltip.bottom="$l.duration" />

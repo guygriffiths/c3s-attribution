@@ -106,6 +106,8 @@ const labelsEn = {
 	eventSizeTS: 'Event Area by Day',
 	nEvents: 'Number of Events',
 	nEventsShort: 'Events',
+	chooseEventType: 'Choose event type to explore',
+	chooseFilters: 'Choose filters to apply to events',
 	loading: 'Loading data...',
 	noEvents: 'No events found for the selected filters and time range.',
 	welcome: 'Show welcome information',
