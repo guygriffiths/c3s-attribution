@@ -89,25 +89,25 @@ const toggleColdLtGt = async () => {
 	store.setLoadingDone()
 }
 
-const durationTooltip = computed(() => {
-	return `${$l.value.duration} ${model.value.duration.minimum ? $l.value.greaterThan : $l.value.lessThan} ${model.value.duration.value} days`
-})
+// const durationTooltip = computed(() => {
+// 	return `${$l.value.duration} ${model.value.duration.minimum ? $l.value.greaterThan : $l.value.lessThan} ${model.value.duration.value} days`
+// })
 
-const sizeTooltip = computed(() => {
-	return `${$l.value.size} ${model.value.size.minimum ? $l.value.greaterThan : $l.value.lessThan} ${model.value.size.value} km²`
-})
+// const sizeTooltip = computed(() => {
+// 	return `${$l.value.size} ${model.value.size.minimum ? $l.value.greaterThan : $l.value.lessThan} ${model.value.size.value} km²`
+// })
 
-const heatIntensityTooltip = computed(() => {
-	return `${$l.value.intensity} ${
-		model.value.heatIntensity.minimum ? $l.value.greaterThan : $l.value.lessThan
-	} ${model.value.heatIntensity.value} °C`
-})
+// const heatIntensityTooltip = computed(() => {
+// 	return `${$l.value.intensity} ${
+// 		model.value.heatIntensity.minimum ? $l.value.greaterThan : $l.value.lessThan
+// 	} ${model.value.heatIntensity.value} °C`
+// })
 
-const coldIntensityTooltip = computed(() => {
-	return `${$l.value.intensity} ${
-		model.value.coldIntensity.minimum ? $l.value.greaterThan : $l.value.lessThan
-	} ${model.value.coldIntensity.value} °C`
-})
+// const coldIntensityTooltip = computed(() => {
+// 	return `${$l.value.intensity} ${
+// 		model.value.coldIntensity.minimum ? $l.value.greaterThan : $l.value.lessThan
+// 	} ${model.value.coldIntensity.value} °C`
+// })
 </script>
 
 <template>
@@ -115,7 +115,7 @@ const coldIntensityTooltip = computed(() => {
 		<IconFilter class="header-icon" />
 
 		<div class="filters">
-			<div class="filter-row" v-tooltip="durationTooltip">
+			<div class="filter-row">
 				<IconStopwatch v-tooltip.bottom="$l.duration" />
 				<button
 					@click="toggleDurationLtGt"
@@ -154,7 +154,7 @@ const coldIntensityTooltip = computed(() => {
 					<IconRefreshAlert aria-hidden="true" />
 				</button>
 			</div>
-			<div class="filter-row" v-tooltip="sizeTooltip">
+			<div class="filter-row">
 				<IconDimensions v-tooltip.bottom="$l.size" />
 				<button
 					@click="toggleSizeLtGt"
