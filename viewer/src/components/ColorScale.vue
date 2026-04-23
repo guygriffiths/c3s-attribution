@@ -5,6 +5,7 @@ interface Props {
 	colorfunc: (val: number) => string
     domain: [number, number] | number[]
 	units?: string
+	label?: string
 }
 
 const props = defineProps<Props>()
@@ -86,6 +87,7 @@ watch(() => props.domain, () => {
 			
 			<span class="value max">{{ formatValue(props.domain[1]) }}{{ props.units }}</span>
 		</div>
+		<div class="scale-label" v-if="props.label">{{ props.label }}</div>
 	</div>
 </template>
 
@@ -95,14 +97,17 @@ watch(() => props.domain, () => {
 .color-scale {
 	display: flex;
 	flex-direction: column;
-	gap: 0.25rem;
 	align-items: stretch;
 	font-size: 0.875rem;
 	width: 100%;
 	
 	.scale-label {
 		font-weight: 500;
-		opacity: 0.8;
+		opacity: 0.6;
+		font-size: 0.65rem;
+		align-self: center;
+		margin: 0;
+		padding: 0;
 	}
 	
 	.scale-wrapper {
@@ -115,7 +120,6 @@ watch(() => props.domain, () => {
 	.value {
 		font-size: 0.75rem;
 		font-weight: 500;
-		min-width: 2rem;
 		text-align: center;
 		opacity: 0.9;
 		flex-shrink: 0;

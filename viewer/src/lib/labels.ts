@@ -108,6 +108,9 @@ const labelsEn = {
 	loading: 'Loading data...',
 	noEvents: 'No events found for the selected filters and time range.',
 	welcome: 'Show welcome information',
+	cellTemp: 'Temperature of grid cell',
+	eventMax: 'Maximum event temperature',
+	eventMin: 'Minimum event temperature',
 	months: {
 		jan: 'Jan',
 		feb: 'Feb',

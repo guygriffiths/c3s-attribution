@@ -35,6 +35,7 @@ import {
 import { useEventFilters } from '@/lib/eventFilters'
 import { interpolateCool } from 'd3'
 import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
+import { c3sred, c3sblue } from '@/assets/styles/scssVars.module.scss'
 
 // Stores
 const $l = useLabels()
@@ -81,6 +82,50 @@ const selectedDayIdx = computed((): number | null => {
 	if (selectedDay < 0 || selectedDay >= totalDays) return null
 	return selectedDay
 })
+
+const hotScaleOn = computed(() => {
+	if(store.viewMode === 'timemachine') {
+		return eventStore.eventTypeMode.indexOf('hot') > -1
+	} else {
+		return eventStore.selectedEvent?.event_type === 'hot'
+	}
+})
+
+const coldScaleOn = computed(() => {
+	if(store.viewMode === 'timemachine') {
+		return `${eventStore.eventTypeMode}`.indexOf('cold') > -1
+	} else {
+		return eventStore.selectedEvent?.event_type === 'cold'
+	}
+})
+
+const hotHeatmapOn = computed(() => {
+	return store.viewMode === 'heatmap' && eventStore.eventTypeMode.indexOf('hot') > -1
+})
+
+const coldHeatmapOn = computed(() => {
+	return store.viewMode === 'heatmap' && eventStore.eventTypeMode.indexOf('cold') > -1
+})
+
+const withAlpha = (hslColor: string, alpha: number): string => {
+	if (hslColor.startsWith('hsl(') && hslColor.endsWith(')')) {
+		return `hsla(${hslColor.slice(4, -1)} , ${alpha})`
+	}
+	return hslColor
+}
+
+const getStackedC3sRed = (value: number): string => {
+	const layers = Math.max(0, Math.min(50, Math.round(value)))
+	const singleLayerAlpha = 0.1
+	const effectiveAlpha = 1 - Math.pow(1 - singleLayerAlpha, layers)
+	return withAlpha(c3sred, effectiveAlpha)
+}
+const getStackedC3sBlue = (value: number): string => {
+	const layers = Math.max(0, Math.min(50, Math.round(value)))
+	const singleLayerAlpha = 0.1
+	const effectiveAlpha = 1 - Math.pow(1 - singleLayerAlpha, layers)
+	return withAlpha(c3sblue, effectiveAlpha)
+}
 </script>
 
 <template>
@@ -91,20 +136,47 @@ const selectedDayIdx = computed((): number | null => {
 		<!-- Main map component -->
 		<MapComponent id="map" />
 
-		<div id="color-scale" class="panel" :class="{ rhs: store.isFocused && store.viewMode === 'timemachine' }">
+		<div
+			id="color-scale"
+			class="panel"
+			:class="{
+				selected: store.isFocused,
+				timemachine: store.viewMode === 'timemachine',
+			}"
+		>
 			<ColorScale
-				:colorfunc="(val: number) => colorForValue(val, true, eventStore.hotScale)"
+				:colorfunc="
+					(val: number) => colorForValue(val, true, eventStore.hotScale)
+				"
 				:domain="eventStore.hotScale.domain()"
-				label="scale"
+				:label="eventStore.eventSelected ? $l.cellTemp : $l.eventMax"
 				:units="eventStore.heatIntensityUnits"
-				v-if="eventStore.eventTypeMode === 'hot' || eventStore.eventTypeMode === 'hotcold'"
+				v-if="hotScaleOn"
 			/>
 			<ColorScale
-				:colorfunc="(val: number) => colorForValue(val, false, eventStore.coldScale)"
+				:colorfunc="
+					(val: number) => colorForValue(val, false, eventStore.coldScale)
+				"
 				:domain="eventStore.coldScale.domain()"
-				label="scale"
 				:units="eventStore.coldIntensityUnits"
-				v-if="eventStore.eventTypeMode === 'cold' || eventStore.eventTypeMode === 'hotcold'"
+				:label="eventStore.eventSelected ? $l.cellTemp : $l.eventMin"
+				v-if="coldScaleOn"
+			/>
+			<ColorScale
+				:colorfunc="
+					getStackedC3sRed
+				"
+				:domain="[0, 20]"
+				label="events"
+				v-if="hotHeatmapOn"
+			/>
+			<ColorScale
+				:colorfunc="
+					getStackedC3sBlue
+				"
+				:domain="[0, 20]"
+				label="events"
+				v-if="coldHeatmapOn"
 			/>
 		</div>
 
@@ -459,8 +531,17 @@ const selectedDayIdx = computed((): number | null => {
 		gap: 0.5rem;
 		transition: all $transition;
 
-		&.rhs {
-			left: calc(50vw + $panelMargin * 0.5 + 0.5 * 35rem);
+		&.selected {
+			bottom: calc($panelMargin + $smallTimePanelHeight + $panelMargin);
+			left: $panelMargin;
+			display: flex;
+		}
+
+		&.timemachine {
+			display: flex;
+			&.selected {
+				left: calc(50vw + 0.5 * 35rem);
+			}
 		}
 	}
 
