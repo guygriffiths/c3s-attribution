@@ -4,6 +4,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 interface Props {
 	colorfunc: (val: number) => string
     domain: [number, number] | number[]
+	units?: string
 }
 
 const props = defineProps<Props>()
@@ -73,7 +74,7 @@ watch(() => props.domain, () => {
 <template>
 	<div class="color-scale">
 		<div class="scale-wrapper">
-			<span class="value min">{{ formatValue(props.domain[0]) }}</span>
+			<span class="value min">{{ formatValue(props.domain[0]) }}{{ props.units }}</span>
 			
 			<div class="scale-bar" ref="containerRef">
 				<canvas
@@ -83,7 +84,7 @@ watch(() => props.domain, () => {
 				/>
 			</div>
 			
-			<span class="value max">{{ formatValue(props.domain[1]) }}</span>
+			<span class="value max">{{ formatValue(props.domain[1]) }}{{ props.units }}</span>
 		</div>
 	</div>
 </template>

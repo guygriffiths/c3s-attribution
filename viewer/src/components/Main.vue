@@ -20,6 +20,7 @@ import ModeToggle from './util/ModeToggle.vue'
 import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
 import EventDayPanel from './EventDayPanel.vue'
 import HelpButton from './util/HelpButton.vue'
+import ColorScale from './ColorScale.vue'
 import {
 	IconCalendarWeek,
 	IconChartBar,
@@ -32,7 +33,6 @@ import {
 	IconInfoOctagon,
 } from '@tabler/icons-vue'
 import { useEventFilters } from '@/lib/eventFilters'
-import ColorScale from './ColorScale.vue'
 import { interpolateCool } from 'd3'
 import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
 
@@ -96,14 +96,14 @@ const selectedDayIdx = computed((): number | null => {
 				:colorfunc="(val: number) => colorForValue(val, true, eventStore.hotScale)"
 				:domain="eventStore.hotScale.domain()"
 				label="scale"
-				unit="degC"
+				:units="eventStore.heatIntensityUnits"
 				v-if="eventStore.eventTypeMode === 'hot' || eventStore.eventTypeMode === 'hotcold'"
 			/>
 			<ColorScale
 				:colorfunc="(val: number) => colorForValue(val, false, eventStore.coldScale)"
 				:domain="eventStore.coldScale.domain()"
 				label="scale"
-				unit="degC"
+				:units="eventStore.coldIntensityUnits"
 				v-if="eventStore.eventTypeMode === 'cold' || eventStore.eventTypeMode === 'hotcold'"
 			/>
 		</div>

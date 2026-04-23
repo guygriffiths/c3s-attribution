@@ -191,7 +191,6 @@ const toggleColdLtGt = async () => {
 			<div
 				class="filter-row"
 				v-if="model.heatIntensity.active"
-				v-tooltip="heatIntensityTooltip"
 			>
 				<button @click="cycleHeatMode" v-tooltip.bottom="$l.intensityCycle">
 					<IconTemperature
@@ -251,7 +250,6 @@ const toggleColdLtGt = async () => {
 			<div
 				class="filter-row"
 				v-if="model.coldIntensity.active"
-				v-tooltip="coldIntensityTooltip"
 			>
 				<button @click="cycleColdMode" v-tooltip.bottom="$l.intensityCycle">
 					<IconTemperature
