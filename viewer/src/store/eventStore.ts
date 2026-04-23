@@ -392,7 +392,7 @@ export const useStore = defineStore('events', {
 
 			onParameterFilterChanged(() => {
 				const events = getParameterFilteredEvents()
-				console.trace('global events ready, count:', events.length)
+				// console.trace('global events ready, count:', events.length)
 				// this.refilterEventsDB()
 				if (events.length > 0) {
 					if (!this.firstEventSetLoaded) {

@@ -105,6 +105,7 @@ const labelsEn = {
 	eventIntensityTS: 'Event Temperature by Day',
 	eventSizeTS: 'Event Area by Day',
 	nEvents: 'Number of Events',
+	nEventsShort: 'Events',
 	loading: 'Loading data...',
 	noEvents: 'No events found for the selected filters and time range.',
 	welcome: 'Show welcome information',

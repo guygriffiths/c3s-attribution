@@ -233,6 +233,7 @@ export function setParameterFilters(
 	_heatIntensityGetter = heatIntensityGetter
 	_coldIntensityGetter = coldIntensityGetter
 	_sizeGetter = sizeGetter
+	console.log('Set parameter filters', filters)
 	buildParameterFilterResults()
 }
 

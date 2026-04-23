@@ -255,8 +255,10 @@ const getXYScatterTitle = computed(() => {
 							{{ 0 }}
 						</div>
 						<span class="units icon" v-tooltip="$l.nEvents"
-							><IconLayersIntersect aria-hidden="true"
-						/></span>
+							><IconLayersIntersect aria-hidden="true" />{{
+								$l.nEventsShort
+							}}</span
+						>
 						<div class="label mono">
 							{{ maxCount }}
 						</div>
@@ -310,6 +312,13 @@ const getXYScatterTitle = computed(() => {
 							/>
 							<IconTemperature v-else aria-hidden="true" />
 						</button>
+						<span v-if="store.focusVariable === 'duration'">{{
+							$l.duration
+						}}</span>
+						<span v-else-if="store.focusVariable === 'size'">{{
+							$l.size
+						}}</span>
+						<span v-else>{{ $l.intensity }}</span>
 					</span>
 					<div class="label mono">
 						{{ niceNumber(xmax) }}
@@ -335,10 +344,19 @@ const getXYScatterTitle = computed(() => {
 									')'
 								"
 							>
-								<IconStopwatch v-if="scatterY === 'duration'" aria-hidden="true" />
-								<IconDimensions v-else-if="scatterY === 'size'" aria-hidden="true" />
+								<IconStopwatch
+									v-if="scatterY === 'duration'"
+									aria-hidden="true"
+								/>
+								<IconDimensions
+									v-else-if="scatterY === 'size'"
+									aria-hidden="true"
+								/>
 								<IconTemperature v-else aria-hidden="true" />
 							</button>
+							<span v-if="scatterY === 'duration'">{{ $l.duration }}</span>
+							<span v-else-if="scatterY === 'size'">{{ $l.size }}</span>
+							<span v-else>{{ $l.intensity }}</span>
 						</span>
 						<div class="label mono">
 							{{ niceNumber(ymax) }}
@@ -368,7 +386,10 @@ const getXYScatterTitle = computed(() => {
 						{{ niceNumber(xmin) }}
 					</div>
 					<span class="units icon">
-						<button @click="store.cycleSorts" class="cycle-sort-button glassy" v-tooltip="
+						<button
+							@click="store.cycleSorts"
+							class="cycle-sort-button glassy"
+							v-tooltip="
 								(store.focusVariable === 'duration'
 									? $l.duration
 									: store.focusVariable === 'size'
@@ -377,11 +398,25 @@ const getXYScatterTitle = computed(() => {
 								' (' +
 								$l.cycleSortVariable +
 								')'
-							">
-							<IconStopwatch v-if="store.focusVariable === 'duration'" aria-hidden="true"/>
-							<IconDimensions v-else-if="store.focusVariable === 'size'" aria-hidden="true"/>
-							<IconTemperature v-else aria-hidden="true"/>
+							"
+						>
+							<IconStopwatch
+								v-if="store.focusVariable === 'duration'"
+								aria-hidden="true"
+							/>
+							<IconDimensions
+								v-else-if="store.focusVariable === 'size'"
+								aria-hidden="true"
+							/>
+							<IconTemperature v-else aria-hidden="true" />
 						</button>
+						<span v-if="store.focusVariable === 'duration'">{{
+							$l.duration
+						}}</span>
+						<span v-else-if="store.focusVariable === 'size'">{{
+							$l.size
+						}}</span>
+						<span v-else>{{ $l.intensity }}</span>
 					</span>
 					<div class="label mono">
 						{{ niceNumber(xmax) }}
@@ -397,20 +432,33 @@ const getXYScatterTitle = computed(() => {
 								@click="store.cycleSorts"
 								class="cycle-sort-button glassy"
 								v-tooltip="
-								(store.focusVariable === 'duration'
-									? $l.duration
-									: store.focusVariable === 'size'
-										? $l.size
-										: $l.intensity) +
-								' (' +
-								$l.cycleSortVariable +
-								')'
-							"
+									(store.focusVariable === 'duration'
+										? $l.duration
+										: store.focusVariable === 'size'
+											? $l.size
+											: $l.intensity) +
+									' (' +
+									$l.cycleSortVariable +
+									')'
+								"
 							>
-								<IconStopwatch v-if="store.focusVariable === 'duration'" aria-hidden="true" />
-								<IconDimensions v-else-if="store.focusVariable === 'size'" aria-hidden="true" />
+								<IconStopwatch
+									v-if="store.focusVariable === 'duration'"
+									aria-hidden="true"
+								/>
+								<IconDimensions
+									v-else-if="store.focusVariable === 'size'"
+									aria-hidden="true"
+								/>
 								<IconTemperature v-else aria-hidden="true" />
 							</button>
+							<span v-if="store.focusVariable === 'duration'">{{
+								$l.duration
+							}}</span>
+							<span v-else-if="store.focusVariable === 'size'">{{
+								$l.size
+							}}</span>
+							<span v-else>{{ $l.intensity }}</span>
 						</span>
 						<div class="label mono">
 							{{ niceNumber(xmax) }}
@@ -444,13 +492,13 @@ const getXYScatterTitle = computed(() => {
 					/>
 				</div>
 				<div class="axis horizontal">
-					<div class="label mono">
+					<div class="label mono date">
 						{{ timeStore.startTimeFilter.toISOString().slice(0, 10) }}
 					</div>
 					<span class="units icon" v-tooltip="$l.time">
 						<IconCalendar aria-hidden="true" />
 					</span>
-					<div class="label mono">
+					<div class="label mono date">
 						{{ timeStore.endTimeFilter.toISOString().slice(0, 10) }}
 					</div>
 				</div>
@@ -597,7 +645,11 @@ const getXYScatterTitle = computed(() => {
 				flex: 0 0 1rem;
 			}
 			.axis.horizontal .label {
-				flex: 0 0 33%;
+				flex: 1 1 33%;
+
+				&.date {
+					flex: 1 1 100%;
+				}
 
 				&:first-child {
 					text-align: left;
@@ -606,8 +658,23 @@ const getXYScatterTitle = computed(() => {
 					text-align: right;
 				}
 			}
+			.axis .icon {
+				flex: 1 1 100%;
+				flex-direction: column-reverse;
+				span {
+					writing-mode: vertical-rl;
+					transform: rotate(180deg);
+				}
+			}
 			.axis.horizontal .icon {
-				flex: 0 0 33%;
+				flex: 1 1 100%;
+				flex-direction: row;
+
+				span {
+					writing-mode: horizontal-tb;
+					margin-left: 0.25rem;
+					transform: none;
+				}
 			}
 			.histogram-root,
 			.scatter-root {

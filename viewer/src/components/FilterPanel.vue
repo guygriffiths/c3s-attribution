@@ -108,6 +108,15 @@ const toggleColdLtGt = async () => {
 // 		model.value.coldIntensity.minimum ? $l.value.greaterThan : $l.value.lessThan
 // 	} ${model.value.coldIntensity.value} °C`
 // })
+
+const sizeGetter = computed({
+	get: () => model.value.size.value / 100_000,
+	set: (val: number) => {
+		store.setLoading('Updating size filter...')
+		model.value.size.value = val * 100_000
+		store.setLoadingDone()
+	},
+})
 </script>
 
 <template>
@@ -169,16 +178,16 @@ const toggleColdLtGt = async () => {
 					<IconMathEqualLower v-else aria-hidden="true" />
 				</button>
 				<NumberSelect
-					v-model="model.size.value"
+					v-model="sizeGetter"
 					:min="0"
-					:max="1200"
+					:max="100"
 					:step="1"
 					class="number-input"
 					@loading-start="store.setLoading('Updating size filter...')"
 					@loading-end="store.setLoadingDone()"
 					v-tooltip.bottom="$l.sizeNumberOfSquareKilometers"
 				/>
-				<span class="units">km²</span>
+				<span class="units">x100,000km²</span>
 				<button
 					@click="resetSize"
 					:disabled="model.size.value === 0 && model.size.minimum === true"
