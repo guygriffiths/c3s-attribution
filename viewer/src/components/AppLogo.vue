@@ -22,7 +22,7 @@ const $l = useLabels()
 		<div class="title-wrapper" :class="{ square: store.mainHelpOpen }">
 			<img src="@/assets/img/c3s-logo.png" alt="C3S Logo" aria-hidden="true" />
 			<h1 aria-hidden="true">
-				Extreme
+				{{$l.title}} - 
 				<span
 					class="eventtype"
 					@click="eventStore.cycleEventType()"
@@ -31,13 +31,12 @@ const $l = useLabels()
 				>
 					{{
 						eventStore.eventTypeMode === 'hot'
-							? 'Heat Event'
+							? 'Heat'
 							: eventStore.eventTypeMode === 'cold'
-								? 'Cold Event'
-								: 'Event'
+								? 'Cold'
+								: 'Temperature'
 					}}
 				</span>
-				Explorer
 			</h1>
 		</div>
 	</div>
