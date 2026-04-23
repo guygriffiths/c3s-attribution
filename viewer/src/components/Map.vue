@@ -558,7 +558,9 @@ const mapClicked = (event: LeafletMouseEvent) => {
 			<!-- Current events as polygons -->
 			<LPolygon
 				v-if="store.viewMode === 'timemachine'"
-				v-for="event in currentEvents"
+				v-for="event in [eventStore.hoveringEvent, ...currentEvents].filter(
+					(e) => e !== null,
+				).filter((e, i, arr) => arr.findIndex(x => x.id === e.id) === i)"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event, timeStore.selectedTime)"
 				:opacity="event.id === eventStore.hoveringEvent?.id ? 0.8 : 1.0"
@@ -606,8 +608,10 @@ const mapClicked = (event: LeafletMouseEvent) => {
 				:fill-opacity="0.8"
 				:color="scssVars.lightbulb"
 				:fill-color="scssVars.lightbulb"
+				style="pointer-events: none;"
 			>
 			</LPolygon>
+
 			<!-- Heatmap and fast filter events have now moved to their own renderers. They are blisteringly fast -->
 			<!-- They were previously loops of LPolygon components, like this, but it proved too slow for interactive use -->
 
