@@ -112,25 +112,80 @@ const coldHeatmapOn = computed(() => {
 	)
 })
 
-const withAlpha = (hslColor: string, alpha: number): string => {
-	if (hslColor.startsWith('hsl(') && hslColor.endsWith(')')) {
-		return `hsla(${hslColor.slice(4, -1)} , ${alpha})`
+const hslToRgb01 = (h: number, s: number, l: number): [number, number, number] => {
+	const hue = ((h % 360) + 360) % 360
+	const sat = Math.max(0, Math.min(1, s))
+	const lig = Math.max(0, Math.min(1, l))
+
+	const c = (1 - Math.abs(2 * lig - 1)) * sat
+	const x = c * (1 - Math.abs(((hue / 60) % 2) - 1))
+	const m = lig - c / 2
+
+	let r = 0
+	let g = 0
+	let b = 0
+
+	if (hue < 60) {
+		r = c
+		g = x
+	} else if (hue < 120) {
+		r = x
+		g = c
+	} else if (hue < 180) {
+		g = c
+		b = x
+	} else if (hue < 240) {
+		g = x
+		b = c
+	} else if (hue < 300) {
+		r = x
+		b = c
+	} else {
+		r = c
+		b = x
 	}
-	return hslColor
+
+	return [r + m, g + m, b + m]
+}
+
+const parseHslColor = (hslColor: string): [number, number, number] | null => {
+	const match = hslColor
+		.trim()
+		.match(/^hsla?\(\s*([-\d.]+)(?:deg)?[\s,]+([-\d.]+)%[\s,]+([-\d.]+)%/i)
+
+	if (!match) return null
+
+	const h = Number(match[1])
+	const s = Number(match[2]) / 100
+	const l = Number(match[3]) / 100
+	return hslToRgb01(h, s, l)
+}
+
+const multiplyStackedColor = (baseColor: string, value: number): string => {
+	const rgb = parseHslColor(baseColor)
+	if (!rgb) return baseColor
+
+	const layers = Math.max(0, Math.round(value))
+	const alpha = 0.1
+
+	const applyMultiplyLayer = (sourceChannel: number): number => {
+		const step = 1 - alpha * (1 - sourceChannel)
+		return Math.pow(step, layers)
+	}
+
+	const r = Math.round(255 * applyMultiplyLayer(rgb[0]))
+	const g = Math.round(255 * applyMultiplyLayer(rgb[1]))
+	const b = Math.round(255 * applyMultiplyLayer(rgb[2]))
+
+	return `rgb(${r}, ${g}, ${b})`
 }
 
 const getStackedC3sRed = (value: number): string => {
-	const layers = Math.max(0, Math.min(50, Math.round(value)))
-	const singleLayerAlpha = 0.1
-	const effectiveAlpha = 1 - Math.pow(1 - singleLayerAlpha, layers)
-	return withAlpha(c3sred, effectiveAlpha)
+	return multiplyStackedColor(c3sred, value)
 }
 
 const getStackedC3sBlue = (value: number): string => {
-	const layers = Math.max(0, Math.min(50, Math.round(value)))
-	const singleLayerAlpha = 0.1
-	const effectiveAlpha = 1 - Math.pow(1 - singleLayerAlpha, layers)
-	return withAlpha(c3sblue, effectiveAlpha)
+	return multiplyStackedColor(c3sblue, value)
 }
 </script>
 
@@ -170,13 +225,13 @@ const getStackedC3sBlue = (value: number): string => {
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3sRed"
-				:domain="[0, 100]"
+				:domain="[0, 30]"
 				label="events"
 				v-if="hotHeatmapOn"
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3sBlue"
-				:domain="[0, 100]"
+				:domain="[0, 30]"
 				label="events"
 				v-if="coldHeatmapOn"
 			/>
