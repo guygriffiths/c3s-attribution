@@ -130,7 +130,7 @@ export const useStore = defineStore('events', {
 				coldIntensity: {
 					minimum: false,
 					type: 'mean',
-					value: 2,
+					value: 0,
 					active: false,
 				},
 			},

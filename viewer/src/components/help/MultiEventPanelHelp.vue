@@ -17,11 +17,18 @@ const eventStore = useEventStore()
 <template>
 	<div class="help-content">
 		<p>
-			This panel provides summary charts of all of the events currently plotted
-			on the map. It consists of 3 charts which can be scrolled between.
+			The Multi-Event Panel shows summary charts for all events currently displayed on the map.
+			In Overview mode, open it using the
+			<span class="button glassy color decoration">
+				<IconChartBar class="icon" aria-hidden="true" />
+			</span>
+			button. If it is already open, it can be expanded to full screen with the maximise button.
 		</p>
 		<p>
-			All charts will plot the same variable, which can be selected using the buttons on the chart axes. Clicking the button will cycle through available variables:
+			It consists of 3 charts which can be scrolled between.
+		</p>
+		<p>
+			All charts plot the same variable, which can be selected using the buttons on the chart axes. Clicking the button will cycle through available variables:
 			<div class="icon-ul">
 				<span class="icon-li">
 					<IconStopwatch class="icon" aria-hidden="true" /> Event durations
@@ -40,7 +47,7 @@ const eventStore = useEventStore()
 
 		<p>
 			<IconChartBar class="icon" aria-hidden="true" /> The first chart shows the
-			distribution of plotted event values. 
+			distribution of plotted event values.
 		</p>
 		<p>
 			<IconChartScatter class="icon" aria-hidden="true" /> The second chart shows two parameters of the events plotted against each other. The X and Y axes can be changed by clicking on the axis labels.
@@ -48,7 +55,14 @@ const eventStore = useEventStore()
 		<p>
 			<IconTimeline class="icon" aria-hidden="true" /> The third chart shows how the selected variable changes over time for all events. The X axis is always time, and the range shown corresponds to the time range selected in the time selector.
 		</p>
-
+		<p>
+			The chart axis range can be controlled using the buttons at the bottom of the panel:
+			<ul>
+				<li><strong>Show most events</strong>: the axis is scaled to the 90th percentile range — most events will be visible, but very extreme outliers may fall outside the chart area.</li>
+				<li><strong>Show all events</strong>: the axis covers the full range, including all outliers. This is the default.</li>
+				<li><strong>Focus on selected event</strong>: the axis is scaled around the currently selected event.</li>
+			</ul>
+		</p>
 	</div>
 </template>
 

@@ -1371,6 +1371,7 @@ const dateTranslate = computed(() => {
 				class="highlight-row highlight"
 				:style="`height: ${highlightRowHeight};`"
 				:class="{ examining: isDefault }"
+				v-tooltip="Drag"
 			>
 				<div
 					class="needle"
@@ -1381,8 +1382,9 @@ const dateTranslate = computed(() => {
 					v-if="isDefault || isZoom || selectedEvent"
 					:style="`transform: translateX(calc(${needleOffsetPx - 6}px));`"
 					@mousedown="startDrag"
+					
 				>
-					<div class="line" />
+					<div class="line"  />
 				</div>
 				<div
 					class="needle range off"

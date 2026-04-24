@@ -49,6 +49,7 @@ const downloadEvent = () => {
 
 <template>
 	<div class="event-info panel">
+		<h3 class="panel-title">{{ $l.eventInformation }}</h3>
 		<button
 			class="download-button glassy color"
 			@click="downloadEvent"
@@ -82,17 +83,14 @@ const downloadEvent = () => {
 			<IconDimensions class="icon" aria-hidden="true" />
 			<!-- <span class="label">{{ $l.size }}:</span> -->
 			<span class="value mono"
-				>{{ niceNumber(eventStore.sizeForEvent(props.selectedEvent))
-				}} {{ eventStore.sizeUnits }}</span
+				>{{ niceNumber(eventStore.sizeForEvent(props.selectedEvent)) }}
+				{{ eventStore.sizeUnits }}</span
 			>
 		</div>
 		<div
 			class="info-row"
 			v-tooltip="
-				props.selectedEvent.event_type === 'hot'
-					? $l.maxTemp
-					:  $l.minTemp
-						
+				props.selectedEvent.event_type === 'hot' ? $l.maxTemp : $l.minTemp
 			"
 		>
 			<IconTemperaturePlus
@@ -108,13 +106,15 @@ const downloadEvent = () => {
 			<IconTemperature class="icon" v-else aria-hidden="true" />
 			<!-- <span class="label">{{ $l.intensity }}:</span> -->
 			<span class="value mono"
-				>{{ niceNumber(eventStore.intensityForEvent(props.selectedEvent))
-				}} {{ eventStore.intensityUnits }}</span
+				>{{ niceNumber(eventStore.intensityForEvent(props.selectedEvent)) }}
+				{{ eventStore.intensityUnits }}</span
 			>
 		</div>
 
 		<div class="info-row" v-tooltip="$l.reportId">
-			<IconReport class="icon" aria-hidden="true" /><span class="value mono">N/A</span>
+			<IconReport class="icon" aria-hidden="true" /><span class="value mono"
+				>N/A</span
+			>
 		</div>
 		<slot></slot>
 	</div>
@@ -125,22 +125,27 @@ const downloadEvent = () => {
 	display: flex;
 	flex-direction: row;
 	flex-wrap: wrap;
-	align-items: center;
+	align-items: flex-start;
 	gap: 0.125rem 1.25rem;
-	padding: 0.5rem 1rem;
+	padding: 0rem 1rem 1rem;
 	font-size: 0.75rem;
 	justify-content: space-between;
 	position: relative;
 	z-index: 0;
+
+	.panel-title {
+		align-self: flex-end;
+		margin-right: 0;
+	}
 }
 
 .download-button {
 	position: absolute;
-	top: 0;
+	bottom: 0;
 	left: 0;
 	padding: 0.25rem 0 0.25rem 0.25rem;
-	border-top-right-radius: 0;
-	border-bottom-left-radius: 0;
+	border-top-left-radius: 0;
+	border-bottom-right-radius: 0;
 	display: flex;
 	justify-content: center;
 	align-items: center;
@@ -181,7 +186,7 @@ const downloadEvent = () => {
 		margin-left: 0.5rem;
 		.label {
 			/* margin-bottom: 0.5rem; */
-			font-size: 1.1rem;
+			font-size: 1rem;
 			font-weight: bold;
 			display: flex;
 			align-items: center;

@@ -16,8 +16,8 @@ const store = useStore()
 
 <template>
 	<div class="help-content">
-		<p>The time reel provides fast and intuitive navigation through the entire 45+ years of extreme event data. To use the time reel in its current mode, you can:
-			<ul>
+		<p>The time reel provides fast and intuitive navigation through the entire 45+ years of extreme event data. To use the time reel in its current mode:
+			<ul v-if="store.viewMode === 'timemachine'">
 				<li>Scroll through the timeline to navigate different years</li>
 				<li>Click and drag left or right to scrub through the days of the year</li>
 				<li>View event bars representing extreme events that occurred on each day
@@ -80,8 +80,14 @@ const store = useStore()
 				<li>Use the <span class="button glassy color decoration">
 					<IconCalendarWeek aria-hidden="true" />
 				</span>
-				<span class="sr-only">event history mode</span>
-				button to visualise the entire extreme event history at once. This will allow you to quickly see patterns and trends over the full dataset, as well as easily visually identifying periods of unusual activity</li>
+					<span class="sr-only">event history mode</span>
+				button to switch to the full timeline view, which shows the full dataset at once.
+				</li>
+			</ul>
+			<ul v-else>
+				<li>The time reel spans the entire available period. Drag the shaded <strong>start</strong> and <strong>end</strong> handles to select the date range to display on the map, or drag the entire range.</li>
+				<li>Using the play controls, you can move and animate the selected range around in time, showing long-term trends.</li>
+				<li>Use this mode to see a global picture of events over a particular time period.</li>
 			</ul>
 		</p>
 	</div>

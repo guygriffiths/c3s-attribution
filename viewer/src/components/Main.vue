@@ -170,13 +170,13 @@ const getStackedC3sBlue = (value: number): string => {
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3sRed"
-				:domain="[0, 20]"
+				:domain="[0, 100]"
 				label="events"
 				v-if="hotHeatmapOn"
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3sBlue"
-				:domain="[0, 20]"
+				:domain="[0, 100]"
 				label="events"
 				v-if="coldHeatmapOn"
 			/>

@@ -247,6 +247,7 @@ const getXYScatterTitle = computed(() => {
 <template>
 	<div class="multi-event-panel panel">
 		<slot />
+		<h3 class="panel-title">{{ $l.multiEventPanelTitle }}</h3>
 		<div class="scroller" ref="scrollerRef">
 			<div class="chart histo">
 				<div class="yaxis-chart">

@@ -76,6 +76,8 @@ const labelsEn = {
 	eventsOver: 'events over the period',
 	close: 'Close',
 	multiEventPanel: 'Show multi-event charts',
+	multiEventPanelTitle: 'Multiple event summaries',
+	eventInformation: 'Event information',
 	maximiseMultiEventPanel: 'Expand multi-event panel',
 	restoreMultiEventPanel: 'Shrink multi-event panel',
 	showInfoPanel: 'Events summary',
