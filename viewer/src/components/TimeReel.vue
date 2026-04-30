@@ -1371,7 +1371,6 @@ const dateTranslate = computed(() => {
 				class="highlight-row highlight"
 				:style="`height: ${highlightRowHeight};`"
 				:class="{ examining: isDefault }"
-				v-tooltip="Drag"
 			>
 				<div
 					class="needle"

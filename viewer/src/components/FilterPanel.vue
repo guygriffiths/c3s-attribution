@@ -195,27 +195,12 @@ const sizeGetter = computed({
 					<IconRefreshAlert aria-hidden="true" />
 				</button>
 			</div>
-			<div
-				class="filter-row"
-				v-if="model.heatIntensity.active"
-			>
-				<button @click="cycleHeatMode" v-tooltip.bottom="$l.intensityCycle">
-					<IconTemperature
-						v-if="model.heatIntensity.type === 'mean'"
-						class="hot"
-						aria-hidden="true"
-					/>
-					<IconTemperaturePlus
-						v-if="model.heatIntensity.type === 'max'"
-						class="hot"
-						aria-hidden="true"
-					/>
-					<IconTemperatureMinus
-						v-if="model.heatIntensity.type === 'min'"
-						class="hot"
-						aria-hidden="true"
-					/>
-				</button>
+			<div class="filter-row" v-if="model.heatIntensity.active">
+				<IconTemperature
+					class="hot"
+					aria-hidden="true"
+					v-tooltip.bottom="$l.intensity"
+				/>
 				<button
 					@click="toggleHeatLtGt"
 					class="ltgt-button hot"
@@ -254,27 +239,12 @@ const sizeGetter = computed({
 					<IconRefreshAlert aria-hidden="true" />
 				</button>
 			</div>
-			<div
-				class="filter-row"
-				v-if="model.coldIntensity.active"
-			>
-				<button @click="cycleColdMode" v-tooltip.bottom="$l.intensityCycle">
-					<IconTemperature
-						v-if="model.coldIntensity.type === 'mean'"
-						class="cold"
-						aria-hidden="true"
-					/>
-					<IconTemperaturePlus
-						v-if="model.coldIntensity.type === 'max'"
-						class="cold"
-						aria-hidden="true"
-					/>
-					<IconTemperatureMinus
-						v-if="model.coldIntensity.type === 'min'"
-						class="cold"
-						aria-hidden="true"
-					/>
-				</button>
+			<div class="filter-row" v-if="model.coldIntensity.active">
+				<IconTemperature
+					class="cold"
+					aria-hidden="true"
+					v-tooltip.bottom="$l.intensity"
+				/>
 				<button
 					@click="toggleColdLtGt"
 					class="ltgt-button cold"

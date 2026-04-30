@@ -2,8 +2,7 @@
 import {
 	IconStopwatch,
 	IconDimensions,
-	IconTemperaturePlus,
-	IconTemperatureMinus,
+	IconTemperature,
 	IconChartBar,
 	IconChartScatter,
 	IconTimeline,
@@ -37,10 +36,7 @@ const eventStore = useEventStore()
 					<IconDimensions class="icon" aria-hidden="true" /> Event sizes (total area covered, in km²)
 				</span class="icon-li">
 				<span class="icon-li" v-if="eventStore.eventTypeMode === 'hot'" >
-					<IconTemperaturePlus class="icon" aria-hidden="true" /> Maximum temperature reached by a single grid cell within this event
-				</span class="icon-li">
-				<span class="icon-li" v-elif="eventStore.eventTypeMode === 'cold'" >
-					<IconTemperatureMinus class="icon" aria-hidden="true" /> Minimum temperature reached by a single grid cell within this event
+					<IconTemperature class="icon" aria-hidden="true" /> Most extreme temperature reached by a single grid cell within this event
 				</span class="icon-li">
 			</div>
 		</p>

@@ -50,7 +50,12 @@ import {
 	onTimeFilterChanged,
 	getTimeFilteredEvents,
 } from '@/lib/eventsDB'
-import { IconZoomIn, IconZoomOut, IconZoomReset } from '@tabler/icons-vue'
+import {
+	IconZoomIn,
+	IconZoomOut,
+	IconZoomReset,
+	IconX,
+} from '@tabler/icons-vue'
 import { useLabels } from '@/lib/labels'
 
 const $l = useLabels()
@@ -173,6 +178,49 @@ const eventPointFilter = ref<[number, number] | null>(null)
 const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
 let regionFilteredEvents = [] as ExtremeEvent[]
 const globalHeatmapEvents = shallowRef([] as ExtremeEvent[])
+
+const regionHovered = ref(false)
+let regionHoverOutTimer: ReturnType<typeof setTimeout> | null = null
+
+const keepRegionHovered = () => {
+	if (regionHoverOutTimer) {
+		clearTimeout(regionHoverOutTimer)
+		regionHoverOutTimer = null
+	}
+	regionHovered.value = true
+}
+const scheduleRegionUnhover = () => {
+	regionHoverOutTimer = setTimeout(() => {
+		regionHovered.value = false
+	}, 150)
+}
+
+const regionCentroid = computed<[number, number] | null>(() => {
+	if (!eventRegionFilter.value) return null
+	const geom = eventRegionFilter.value.geometry
+	const ring: number[][] =
+		geom.type === 'Polygon' ? geom.coordinates[0] : geom.coordinates[0][0]
+	const maxLat = ring.reduce((m, c) => Math.max(m, c[1]), -Infinity)
+	const maxLng = ring.reduce((m, c) => Math.max(m, c[0]), -Infinity)
+	const closest = ring.reduce((best, c) => {
+		const d = (c[1] - maxLat) ** 2 + (c[0] - maxLng) ** 2
+		const bd = (best[1] - maxLat) ** 2 + (best[0] - maxLng) ** 2
+		return d < bd ? c : best
+	})
+	return [closest[1], closest[0]]
+})
+
+const closeRegionIcon = L.divIcon({
+	className: 'close-region-marker',
+	html: `<button class="close-region-btn glassy">${IconX.render ? '' : ''}<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></svg></button>`,
+	iconSize: [32, 32],
+	iconAnchor: [0, 32],
+})
+
+const clearRegionFilter = () => {
+	store.filteringByRegion = false
+	store.regionFilterReady = false
+}
 
 const drawRegion = () => {
 	drawControl.value.enable()
@@ -558,9 +606,9 @@ const mapClicked = (event: LeafletMouseEvent) => {
 			<!-- Current events as polygons -->
 			<LPolygon
 				v-if="store.viewMode === 'timemachine'"
-				v-for="event in [eventStore.hoveringEvent, ...currentEvents].filter(
-					(e) => e !== null,
-				).filter((e, i, arr) => arr.findIndex(x => x.id === e.id) === i)"
+				v-for="event in [eventStore.hoveringEvent, ...currentEvents]
+					.filter((e) => e !== null)
+					.filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
 				:lat-lngs="getEventRegion(event, timeStore.selectedTime)"
 				:opacity="event.id === eventStore.hoveringEvent?.id ? 0.8 : 1.0"
@@ -608,7 +656,7 @@ const mapClicked = (event: LeafletMouseEvent) => {
 				:fill-opacity="0.8"
 				:color="scssVars.lightbulb"
 				:fill-color="scssVars.lightbulb"
-				style="pointer-events: none;"
+				style="pointer-events: none"
 			>
 			</LPolygon>
 
@@ -641,9 +689,17 @@ const mapClicked = (event: LeafletMouseEvent) => {
 						className: 'region-select',
 					})
 				"
-				class="region-select"
-				@click="console.log('Clicked region')"
+				@mouseover="keepRegionHovered"
+				@mouseout="scheduleRegionUnhover"
 			></LGeoJson>
+			<LMarker
+				v-if="regionHovered && regionCentroid"
+				:lat-lng="regionCentroid"
+				:icon="closeRegionIcon as any"
+				@click="clearRegionFilter"
+				@mouseover="keepRegionHovered"
+				@mouseout="scheduleRegionUnhover"
+			/>
 
 			<!-- Point to select by -->
 			<div v-if="store.filteringByPoint">
@@ -721,13 +777,6 @@ const mapClicked = (event: LeafletMouseEvent) => {
 					<HelpButton help="regionControl" />
 				</RegionControl>
 			</LControl>
-			<!-- <LControlScale
-				:max-width="200"
-				:metric="true"
-				:imperial="false"
-				position="bottomleft"
-				class="map-scale"
-			></LControlScale> -->
 		</LMap>
 	</div>
 </template>
@@ -789,18 +838,49 @@ const mapClicked = (event: LeafletMouseEvent) => {
 
 	:deep(.region-select) {
 		stroke: var(--contrast);
-		stroke-width: 1;
+		stroke-width: 2;
+		stroke-dasharray: 6 4;
 		fill: $c3sgrey;
-		fill-opacity: 0.1;
-		pointer-events: none;
+		fill-opacity: 0.08;
+		cursor: default;
+	}
+
+	:deep(.close-region-marker) {
+		background: none;
+		border: none;
+	}
+
+	:deep(.close-region-btn) {
+		width: 2rem;
+		height: 2rem;
+		padding: 0.25rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 100%;
+		background: var(--panel-bg);
+		backdrop-filter: $frosty;
+		border: 1px solid var(--border);
+		box-shadow: var(--shadow-md);
+		cursor: pointer;
+		color: var(--text);
+		pointer-events: all;
+		transition:
+			background $transition,
+			box-shadow $transition;
+
+		&:hover {
+			background: var(--panel-bg-alt);
+			box-shadow: var(--shadow-lg);
+		}
 	}
 
 	.zoom-control {
 		transition: transform $transition;
 		margin: $panelMargin;
-		transform: translate(calc(0rem - 2.5rem - $panelMargin), 0);
+		transform: translate(calc(0rem - 2 * $buttonSize - 3 * $panelMargin), 0);
 		&.hidden {
-			transform: translate(calc(0rem - 2.5rem), -200%);
+			transform: translate(0rem - 2 * $buttonSize - 3 * $panelMargin, -200%);
 		}
 		.zoom-buttons {
 			display: flex;

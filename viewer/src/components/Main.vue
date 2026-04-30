@@ -25,12 +25,12 @@ import {
 	IconCalendarWeek,
 	IconChartBar,
 	IconChartHistogram,
-	IconInfoSquareRounded,
+	IconReport,
+	IconInfoCircle,
 	IconMenu2,
 	IconWindowMaximize,
 	IconWindowMinimize,
 	IconX,
-	IconInfoOctagon,
 } from '@tabler/icons-vue'
 import { useEventFilters } from '@/lib/eventFilters'
 import { interpolateCool } from 'd3'
@@ -247,6 +247,23 @@ const getStackedC3sBlue = (value: number): string => {
 			:class="{ hidden: timeStore.timePanelExpanded }"
 		/>
 
+		<!-- Help button -->
+		<button
+			id="help-button"
+			class="glassy color"
+			:class="{
+				hidden: store.isFocused || timeStore.timePanelExpanded,
+			}"
+			:inert="
+				store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined
+			"
+			@click="helpMe('aboutInfo')"
+			v-tooltip="$l.aboutInfo"
+		>
+			<IconInfoCircle size="24" aria-hidden="true" v-if="!store.hamburgerMenuOpen" />
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+
 		<!-- Hamburger menu button -->
 		<button
 			id="hamburger-button"
@@ -283,14 +300,6 @@ const getStackedC3sBlue = (value: number): string => {
 				<h2>{{ $l.chooseFilters }}</h2>
 				<FilterPanel v-model="eventStore.filters" />
 			</div>
-			<button
-				class="about-button glassy color"
-				@click="helpMe('aboutInfo')"
-				v-tooltip="$l.aboutInfo"
-			>
-				<IconInfoOctagon size="24" aria-hidden="true" />{{ $l.aboutInfo }}
-			</button>
-			<!-- <HelpButton help="hamburgerMenu" /> -->
 		</div>
 
 		<!-- Event day panel (time machine mode, left side) -->
@@ -428,7 +437,7 @@ const getStackedC3sBlue = (value: number): string => {
 			@click="store.showInfoPanel = !store.showInfoPanel"
 			v-tooltip="store.showInfoPanel ? $l.close : $l.showInfoPanel"
 		>
-			<IconInfoSquareRounded
+			<IconReport
 				size="24"
 				aria-hidden="true"
 				v-if="!store.showInfoPanel"
@@ -653,6 +662,22 @@ const getStackedC3sBlue = (value: number): string => {
 		}
 	}
 
+	#help-button {
+		position: absolute;
+		top: $panelMargin;
+		right: 2 * $panelMargin + $buttonSize;
+		border-radius: 100%; 
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 300;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+
+		&.hidden {
+			transform: translateY(-200%);
+		}
+	}
+
 	#hamburger-button {
 		position: absolute;
 		top: $panelMargin;
@@ -807,6 +832,7 @@ const getStackedC3sBlue = (value: number): string => {
 			);
 			right: $panelMargin;
 			bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+			z-index: 400;
 		}
 	}
 
