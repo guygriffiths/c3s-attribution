@@ -233,7 +233,7 @@ export function setParameterFilters(
 	_heatIntensityGetter = heatIntensityGetter
 	_coldIntensityGetter = coldIntensityGetter
 	_sizeGetter = sizeGetter
-	console.log('Set parameter filters', filters)
+	// console.log('Set parameter filters', filters)
 	buildParameterFilterResults()
 }
 
@@ -313,6 +313,13 @@ const buildParameterFilterResults = (): ExtremeEvent[] => {
 	buildSpatialFilterResults()
 	buildTimeFilterResults()
 	return _parameterFilterEvents
+}
+
+export function clearSpatialFilter(): ExtremeEvent[] {
+	_pointFilter = null
+	_regionFilter = null
+
+	return buildSpatialFilterResults()
 }
 
 export function setFilterToPoint(lat: number, lon: number): ExtremeEvent[] {

@@ -594,8 +594,7 @@ const getStackedC3sBlue = (value: number): string => {
 
 	#color-scale {
 		position: absolute;
-		bottom: $panelMargin * 0.5;
-		left: $panelMargin * 0.5;
+		
 		z-index: 350;
 		padding: 0.5rem;
 		width: calc(0.5 * (100vw - 35rem - 2 * $panelMargin));
@@ -603,15 +602,14 @@ const getStackedC3sBlue = (value: number): string => {
 		gap: 0.5rem;
 		transition: all $transition;
 
-		&.selected {
 			bottom: calc($panelMargin + $smallTimePanelHeight + $panelMargin);
-			left: $panelMargin;
-			display: flex;
-		}
-
-		&.timemachine {
-			display: flex;
-			&.selected {
+			
+			&.timemachine {
+				display: flex;
+				bottom: $panelMargin * 0.5;
+				left: $panelMargin * 0.5;
+				&.selected {
+				bottom: calc($panelMargin + $smallTimePanelHeight + $panelMargin);
 				left: calc(50vw + 0.5 * 35rem);
 			}
 		}

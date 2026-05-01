@@ -43,6 +43,7 @@ import {
 	getCurrentEvents,
 	setFilterToRegion,
 	setFilterToPoint,
+	clearSpatialFilter,
 	onParameterFilterChanged,
 	onSpatialFilterChanged,
 	getParameterFilteredEvents,
@@ -123,6 +124,16 @@ watch(
 	},
 )
 
+watch(
+	() => store.filteringByPoint,
+	(newVal) => {
+		if (!newVal) {
+			clearSpatialFilter()
+			currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
+		}
+	},
+)
+
 // The draw control for defining regions
 const drawControl = computed(
 	() =>
@@ -154,11 +165,9 @@ onParameterFilterChanged(() => {
 	}
 })
 onSpatialFilterChanged(() => {
-	// This will only happen in heatmap mode
-	console.log('spatial filter changed, updating heatmap events')
-
-	// When the spatial filter changes, we need to update the current events
+	// _spatiallyFilteredEventIds is now up to date — safe to refresh currentEvents
 	regionFilteredEvents = getSpatiallyFilteredEvents()
+	currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
 	try {
 		// @ts-ignore
 		fastRenderer._update()
@@ -168,8 +177,8 @@ onSpatialFilterChanged(() => {
 })
 onTimeFilterChanged(() => {
 	// This will only happen in heatmap mode
-	console.log('Time filter changed, updating heatmap events')
-	
+	// console.log('Time filter changed, updating heatmap events')
+
 	// When the time filter changes, we need to update the current events
 	globalHeatmapEvents.value = getTimeFilteredEvents()
 	try {
@@ -182,7 +191,7 @@ onTimeFilterChanged(() => {
 })
 onSpaceTimeFilterChanged(() => {
 	// This will only happen in heatmap mode
-	console.log('spacetime filter changed, updating heatmap events')
+	// console.log('spacetime filter changed, updating heatmap events')
 
 	// When the time filter changes, we need to update the current events
 	regionFilteredEvents = getSpaceTimeFilteredEvents()
@@ -196,6 +205,15 @@ onSpaceTimeFilterChanged(() => {
 
 const eventPointFilter = ref<[number, number] | null>(null)
 const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
+const hoverPolygonRef = ref<InstanceType<typeof LPolygon> | null>(null)
+watch(
+	() => eventStore.hoveringEvent,
+	() => {
+		nextTick(() => {
+			hoverPolygonRef.value?.leafletObject?.bringToBack()
+		})
+	},
+)
 const regionKey = ref(0)
 let regionFilteredEvents = [] as ExtremeEvent[]
 const globalHeatmapEvents = shallowRef([] as ExtremeEvent[])
@@ -216,7 +234,7 @@ const scheduleRegionUnhover = () => {
 	}, 2000)
 }
 
-const regionCentroid = computed<[number, number] | null>(() => {
+const closeBoxPosition = computed<[number, number] | null>(() => {
 	if (!eventRegionFilter.value) return null
 	const geom = eventRegionFilter.value.geometry
 	const ring: number[][] =
@@ -272,12 +290,14 @@ const drawRegion = () => {
 const cancelDrawRegion = () => {
 	drawControl.value.disable()
 	eventRegionFilter.value = null
+	clearSpatialFilter()
+	currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
 }
 
 const pointSelectorAdded = (event: any) => {
-	console.log('Setting point filter', store.filteringByPoint)
+	// console.log('Setting point filter', store.filteringByPoint)
 	const { lat, lng } = (event.target as L.Marker).getLatLng()
-	console.log('Setting point filter to', lat, lng)
+	// console.log('Setting point filter to', lat, lng)
 	regionFilteredEvents = setFilterToPoint(lat, lng)
 	try {
 		// @ts-ignore
@@ -287,7 +307,7 @@ const pointSelectorAdded = (event: any) => {
 	}
 
 	store.lastPoint = [lat, lng]
-	console.log('Set point filter to', lat, lng)
+	// console.log('Set point filter to', lat, lng)
 }
 const pointSelectorMoveStarted = (event: any) => {
 	store.draggingFilter = true
@@ -329,14 +349,17 @@ watch(
 	},
 )
 
-// When the time changes, update the list of current events to draw on the map
-// They will only be draw in timemachine mode, but get updated in heatmap ready for the switch back
+// When the time or spatial filter changes, update the list of current events to draw on the map
+// They will only be drawn in timemachine mode, but get updated in heatmap ready for the switch back
 watch(
-	() => timeStore.selectedTime,
-	(newVal) => {
-		currentEvents.value = getCurrentEvents(newVal, true)
+	() => [
+		timeStore.selectedTime,
+		store.regionFilterReady,
+	],
+	([time]) => {
+		currentEvents.value = getCurrentEvents(time as Date, true)
 		// if (wmtsUrl.value) {
-		// 	updateWmtsUrl(newVal.toISOString().split('T')[0])
+		// 	updateWmtsUrl((time as Date).toISOString().split('T')[0])
 		// }
 	},
 )
@@ -632,52 +655,10 @@ const mapClicked = (event: LeafletMouseEvent) => {
 			></LTileLayer> -->
 
 			<!-- Events -->
-			<!-- Current events as polygons -->
+			<!-- Hovered event: full total_region shown in both modes, kept behind daily regions via bringToBack() -->
 			<LPolygon
-				v-if="store.viewMode === 'timemachine'"
-				v-for="event in [eventStore.hoveringEvent, ...currentEvents]
-					.filter((e) => e !== null)
-					.filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)"
-				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
-				:lat-lngs="getEventRegion(event, timeStore.selectedTime)"
-				:opacity="event.id === eventStore.hoveringEvent?.id ? 0.8 : 1.0"
-				:weight="
-					event.id === eventStore.selectedEventId
-						? 4
-						: event.id === eventStore.hoveringEvent?.id
-							? 2
-							: 0.5
-				"
-				:fill="true"
-				:fill-opacity="
-					event.id === eventStore.selectedEventId
-						? 0.0
-						: event.id === eventStore.hoveringEvent?.id
-							? 1.0
-							: 0.5
-				"
-				:color="
-					event.id === eventStore.selectedEventId
-						? scssVars.lightbulb
-						: event.event_type === 'hot'
-							? scssVars.c3sred
-							: scssVars.c3sblue
-				"
-				:fill-color="
-					event.id === eventStore.hoveringEvent?.id
-						? scssVars.lightbulb
-						: eventStore.colorForEvent(event)
-				"
-				:transform="
-					event.id === eventStore.hoveringEvent?.id ? `scale(1.2)` : `scale(1)`
-				"
-				@click="eventStore.selectEvent(event)"
-				@mouseover="eventStore.setHoveringEvent(event)"
-				@mouseout="eventStore.setHoveringEvent(null)"
-			>
-			</LPolygon>
-			<LPolygon
-				v-else-if="eventStore.hoveringEvent"
+				v-if="eventStore.hoveringEvent"
+				ref="hoverPolygonRef"
 				:key="`ev-${eventStore.hoveringEvent.id}-hover`"
 				:lat-lngs="eventStore.hoveringEvent.total_region"
 				:weight="0"
@@ -685,7 +666,43 @@ const mapClicked = (event: LeafletMouseEvent) => {
 				:fill-opacity="0.8"
 				:color="scssVars.lightbulb"
 				:fill-color="scssVars.lightbulb"
-				style="pointer-events: none"
+				:options="{ interactive: false }"
+			>
+			</LPolygon>
+			<!-- Current events as daily-region polygons (timemachine only) -->
+			<!-- Hovered event has a thicker stroke and no fill so it stands out against the total_region overlay -->
+			<LPolygon
+				v-if="store.viewMode === 'timemachine'"
+				v-for="event in [eventStore.hoveringEvent, ...currentEvents]
+					.filter((e) => e !== null)
+					.filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)"
+				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
+				:lat-lngs="getEventRegion(event, timeStore.selectedTime)"
+				:weight="
+					event.id === eventStore.selectedEventId
+						? 2
+						: event.id === eventStore.hoveringEvent?.id
+							? 1.5
+							: 0.5
+				"
+				:fill="true"
+				:fill-opacity="
+					event.id === eventStore.selectedEventId ||
+					event.id === eventStore.hoveringEvent?.id
+						? 1
+						: 0.5
+				"
+				:color="
+					event.event_type === 'hot'
+						? scssVars.c3sred
+						: event.event_type === 'cold'
+							? scssVars.c3sblue
+							: scssVars.c3sgreen
+				"
+				:fill-color="eventStore.colorForEvent(event)"
+				@click="eventStore.selectEvent(event)"
+				@mouseover="eventStore.setHoveringEvent(event)"
+				@mouseout="eventStore.setHoveringEvent(null)"
 			>
 			</LPolygon>
 
@@ -722,8 +739,8 @@ const mapClicked = (event: LeafletMouseEvent) => {
 				@mouseout="scheduleRegionUnhover"
 			></LGeoJson>
 			<LMarker
-				v-if="regionHovered && regionCentroid"
-				:lat-lng="regionCentroid"
+				v-if="regionHovered && closeBoxPosition"
+				:lat-lng="closeBoxPosition"
 				:icon="closeRegionIcon as any"
 				@click="clearRegionFilter"
 				@mouseover="keepRegionHovered"
@@ -735,7 +752,7 @@ const mapClicked = (event: LeafletMouseEvent) => {
 				<LMarker
 					ref="markerRef"
 					:lat-lng="eventPointFilter || store.lastPoint || ECMWF_BONN"
-					:draggable="store.viewMode === 'heatmap'"
+					:draggable="true"
 					:icon="
 						(eventStore.eventTypeMode === 'cold'
 							? markerIconCold
@@ -791,14 +808,10 @@ const mapClicked = (event: LeafletMouseEvent) => {
 				<RegionControl
 					:class="{
 						hidden:
-							store.viewMode !== 'heatmap' ||
-							eventStore.selectedEvent !== null ||
-							store.maximizeMultiPanel,
+							eventStore.selectedEvent !== null || store.maximizeMultiPanel,
 					}"
 					:inert="
-						store.viewMode !== 'heatmap' ||
-						eventStore.selectedEvent !== null ||
-						store.maximizeMultiPanel
+						eventStore.selectedEvent !== null || store.maximizeMultiPanel
 							? 'true'
 							: undefined
 					"

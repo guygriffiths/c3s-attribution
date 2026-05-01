@@ -79,14 +79,14 @@ export const colorForEvent = (
 		event.event_type === 'hot' ? event.max_value : event.min_value,
 		event.event_type === 'hot',
 	)
-	console.log(
-		'intensity for event',
-		event.id,
-		'is',
-		value,
-		intensityForValue,
-		colorForValue,
-	)
+	// console.log(
+	// 	'intensity for event',
+	// 	event.id,
+	// 	'is',
+	// 	value,
+	// 	intensityForValue,
+	// 	colorForValue,
+	// )
 	return colorForValue(value, event.event_type === 'hot', scale)
 }
 
