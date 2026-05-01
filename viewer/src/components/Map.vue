@@ -47,7 +47,9 @@ import {
 	onSpatialFilterChanged,
 	getParameterFilteredEvents,
 	getSpatiallyFilteredEvents,
+	getSpaceTimeFilteredEvents,
 	onTimeFilterChanged,
+	onSpaceTimeFilterChanged,
 	getTimeFilteredEvents,
 } from '@/lib/eventsDB'
 import { IconZoomIn, IconZoomOut, IconZoomReset } from '@tabler/icons-vue'
@@ -140,7 +142,8 @@ const drawControl = computed(
 
 const currentEvents = ref<ExtremeEvent[]>([])
 onParameterFilterChanged(() => {
-	globalHeatmapEvents.value = getParameterFilteredEvents()
+	// globalHeatmapEvents and manualHeatmapUpdate are handled by onTimeFilterChanged,
+	// which always fires downstream after buildParameterFilterResults rebuilds the chain.
 	currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
 	if (store.viewMode === 'heatmap') {
 		try {
@@ -152,6 +155,7 @@ onParameterFilterChanged(() => {
 })
 onSpatialFilterChanged(() => {
 	// This will only happen in heatmap mode
+	console.log('spatial filter changed, updating heatmap events')
 
 	// When the spatial filter changes, we need to update the current events
 	regionFilteredEvents = getSpatiallyFilteredEvents()
@@ -164,11 +168,27 @@ onSpatialFilterChanged(() => {
 })
 onTimeFilterChanged(() => {
 	// This will only happen in heatmap mode
-
+	console.log('Time filter changed, updating heatmap events')
+	
 	// When the time filter changes, we need to update the current events
 	globalHeatmapEvents.value = getTimeFilteredEvents()
 	try {
 		manualHeatmapUpdate()
+		// @ts-ignore
+		fastRenderer._update()
+	} catch (e) {
+		console.warn('Error updating heatmap renderer', e)
+	}
+})
+onSpaceTimeFilterChanged(() => {
+	// This will only happen in heatmap mode
+	console.log('spacetime filter changed, updating heatmap events')
+
+	// When the time filter changes, we need to update the current events
+	regionFilteredEvents = getSpaceTimeFilteredEvents()
+	try {
+		// @ts-ignore
+		fastRenderer._update()
 	} catch (e) {
 		console.warn('Error updating heatmap renderer', e)
 	}
@@ -502,29 +522,22 @@ const addEventPanes = () => {
 // Manually trigger a heatmap update on the worker.
 // When it returns, blit the bitmap to the heatmap canvas.
 const manualHeatmapUpdate = () => {
-	if (eventStore.filteringByRegion) {
-		// Don't trigger a heatmap update if we're filtering by region, because the heatmap will be hidden and the update is expensive.
-		// We do need to trigger the fast renderer update though, to show the region filter changes
-		fastRenderer._update()
+	const canvasEl = (heatmapRenderer as any)._container
+	if (!canvasEl) {
+		console.warn('No canvas element for heatmap renderer')
 		return
-	} else {
-		const canvasEl = (heatmapRenderer as any)._container
-		if (!canvasEl) {
-			console.warn('No canvas element for heatmap renderer')
-			return
-		}
-
-		// Apparently this is enough to precache whatever was slowing it down.
-		const offscreen = new OffscreenCanvas(canvasEl.width, canvasEl.height)
-		heatmapWorker.postMessage(
-			{
-				canvas: offscreen,
-				events: [],
-				mapState: {},
-			},
-			[offscreen],
-		)
 	}
+
+	// Apparently this is enough to precache whatever was slowing it down.
+	const offscreen = new OffscreenCanvas(canvasEl.width, canvasEl.height)
+	heatmapWorker.postMessage(
+		{
+			canvas: offscreen,
+			events: [],
+			mapState: {},
+		},
+		[offscreen],
+	)
 }
 
 // Takes care of the blitting on the worker's return

@@ -3,6 +3,7 @@ import {
 	getParameterFilteredEvents,
 	getSpaceTimeFilteredEvents,
 	getSpatiallyFilteredEvents,
+	getTimeFilteredEvents,
 	onParameterFilterChanged,
 	onSpaceTimeFilterChanged,
 	onSpatialFilterChanged,
@@ -45,7 +46,11 @@ export const useEventFilters = () => {
 		if (store.viewMode === 'timemachine') {
 			summaryEvents.value = getCurrentEvents(timeStore.selectedTime, true)
 		} else {
-			summaryEvents.value = getSpaceTimeFilteredEvents()
+			if(!store.filteringByPoint && !store.filteringByRegion) {
+				summaryEvents.value = getTimeFilteredEvents()
+			} else {
+				summaryEvents.value = getSpaceTimeFilteredEvents()
+			}
 
 			// Ensure selected event is included
 			if (eventStore.selectedEvent) {
@@ -63,7 +68,7 @@ export const useEventFilters = () => {
 
 	onSpaceTimeFilterChanged(updateSummaryEvents)
 
-	watch(() => [store.viewMode, timeStore.selectedTime], updateSummaryEvents, {
+	watch(() => [store.viewMode, timeStore.selectedTime, store.exploreGlobal], updateSummaryEvents, {
 		immediate: true,
 	})
 
