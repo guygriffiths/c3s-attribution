@@ -1,7 +1,5 @@
+import { c3sblue, c3sred } from '@/assets/styles/colors'
 export { }
-
-const c3sred = 'rgb(151, 24, 65)'
-const c3sblue = 'rgb(44, 102, 162)'
 
 export const renderToContext = (
 	ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,

@@ -162,7 +162,7 @@ $themes: (
 		border: rgb(222, 226, 230),
 		// Primary interactive elements
 		primary: $c3sblue,
-		constrast: $c3sred,
+		contrast: $c3sred,
 		primary-glass: rgba($c3sblue, 0.7),
 		primary-glass-shine: rgba(
 				color.adjust($c3sblue, $saturation: -10%, $lightness: 10%),
@@ -220,7 +220,7 @@ $themes: (
 		border: rgb(225, 225, 224),
 		// Primary interactive elements
 		primary: $c3spurple,
-		contrast: $c3sorange,
+		contrast: $c3sgreen,
 		primary-glass: rgba($c3spurple, 0.7),
 		primary-glass-shine: rgba(
 				color.adjust($c3spurple, $saturation: 10%, $lightness: 10%),

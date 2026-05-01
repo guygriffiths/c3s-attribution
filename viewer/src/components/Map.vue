@@ -22,7 +22,7 @@ import { Map as LeafletMap, LeafletMouseEvent } from 'leaflet'
 import 'leaflet-draw'
 import 'leaflet-draw/dist/leaflet.draw.css'
 import 'leaflet/dist/leaflet.css'
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
@@ -50,12 +50,7 @@ import {
 	onTimeFilterChanged,
 	getTimeFilteredEvents,
 } from '@/lib/eventsDB'
-import {
-	IconZoomIn,
-	IconZoomOut,
-	IconZoomReset,
-	IconX,
-} from '@tabler/icons-vue'
+import { IconZoomIn, IconZoomOut, IconZoomReset } from '@tabler/icons-vue'
 import { useLabels } from '@/lib/labels'
 
 const $l = useLabels()
@@ -133,7 +128,12 @@ const drawControl = computed(
 		new L.Draw.Polygon(map.value, {
 			showArea: true,
 			shapeOptions: {
-				color: scssVars.c3sblue,
+				color:
+					eventStore.eventTypeMode === 'hot'
+						? scssVars.c3sblue
+						: eventStore.eventTypeMode === 'cold'
+							? scssVars.c3sred
+							: scssVars.c3sgreen,
 			},
 		}),
 )
@@ -176,6 +176,7 @@ onTimeFilterChanged(() => {
 
 const eventPointFilter = ref<[number, number] | null>(null)
 const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
+const regionKey = ref(0)
 let regionFilteredEvents = [] as ExtremeEvent[]
 const globalHeatmapEvents = shallowRef([] as ExtremeEvent[])
 
@@ -192,7 +193,7 @@ const keepRegionHovered = () => {
 const scheduleRegionUnhover = () => {
 	regionHoverOutTimer = setTimeout(() => {
 		regionHovered.value = false
-	}, 150)
+	}, 2000)
 }
 
 const regionCentroid = computed<[number, number] | null>(() => {
@@ -212,7 +213,7 @@ const regionCentroid = computed<[number, number] | null>(() => {
 
 const closeRegionIcon = L.divIcon({
 	className: 'close-region-marker',
-	html: `<button class="close-region-btn glassy">${IconX.render ? '' : ''}<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></svg></button>`,
+	html: `<button class="button glassy color"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" size="24" aria-hidden="true" class="tabler-icon tabler-icon-x"><path d="M18 6l-12 12"></path><path d="M6 6l12 12"></path></svg></button>`,
 	iconSize: [32, 32],
 	iconAnchor: [0, 32],
 })
@@ -239,6 +240,8 @@ const drawRegion = () => {
 		eventRegionFilter.value = layer.toGeoJSON() as Feature<
 			Polygon | MultiPolygon
 		>
+		regionKey.value++
+		await nextTick()
 		regionFilteredEvents = setFilterToRegion(eventRegionFilter.value)
 		// @ts-ignore
 		fastRenderer._update()
@@ -499,20 +502,31 @@ const addEventPanes = () => {
 // Manually trigger a heatmap update on the worker.
 // When it returns, blit the bitmap to the heatmap canvas.
 const manualHeatmapUpdate = () => {
-	const canvasEl = (heatmapRenderer as any)._container
-	if (!canvasEl) return
+	if (eventStore.filteringByRegion) {
+		// Don't trigger a heatmap update if we're filtering by region, because the heatmap will be hidden and the update is expensive.
+		// We do need to trigger the fast renderer update though, to show the region filter changes
+		fastRenderer._update()
+		return
+	} else {
+		const canvasEl = (heatmapRenderer as any)._container
+		if (!canvasEl) {
+			console.warn('No canvas element for heatmap renderer')
+			return
+		}
 
-	// Apparently this is enough to precache whatever was slowing it down.
-	const offscreen = new OffscreenCanvas(canvasEl.width, canvasEl.height)
-	heatmapWorker.postMessage(
-		{
-			canvas: offscreen,
-			events: [],
-			mapState: {},
-		},
-		[offscreen],
-	)
+		// Apparently this is enough to precache whatever was slowing it down.
+		const offscreen = new OffscreenCanvas(canvasEl.width, canvasEl.height)
+		heatmapWorker.postMessage(
+			{
+				canvas: offscreen,
+				events: [],
+				mapState: {},
+			},
+			[offscreen],
+		)
+	}
 }
+
 // Takes care of the blitting on the worker's return
 heatmapWorker.onmessage = (e) => {
 	if (e.data.bitmap) {
@@ -521,6 +535,8 @@ heatmapWorker.onmessage = (e) => {
 		if (ctxEl) {
 			ctxEl.clearRect(0, 0, canvasEl.width, canvasEl.height)
 			ctxEl.drawImage(e.data.bitmap, 0, 0)
+		} else {
+			console.warn('No canvas element for heatmap renderer')
 		}
 		// @ts-ignore
 		heatmapRenderer._update()
@@ -681,7 +697,7 @@ const mapClicked = (event: LeafletMouseEvent) => {
 			<!-- The actual selected region -->
 			<LGeoJson
 				v-if="eventRegionFilter"
-				:key="`region-draw`"
+				:key="`region-draw-${regionKey}`"
 				:geojson="eventRegionFilter"
 				:options-style="
 					() => ({
@@ -848,30 +864,15 @@ const mapClicked = (event: LeafletMouseEvent) => {
 	:deep(.close-region-marker) {
 		background: none;
 		border: none;
-	}
 
-	:deep(.close-region-btn) {
-		width: 2rem;
-		height: 2rem;
-		padding: 0.25rem;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: 100%;
-		background: var(--panel-bg);
-		backdrop-filter: $frosty;
-		border: 1px solid var(--border);
-		box-shadow: var(--shadow-md);
-		cursor: pointer;
-		color: var(--text);
-		pointer-events: all;
-		transition:
-			background $transition,
-			box-shadow $transition;
-
-		&:hover {
-			background: var(--panel-bg-alt);
-			box-shadow: var(--shadow-lg);
+		.button {
+			width: $buttonSize * 0.8;
+			height: $buttonSize * 0.8;
+			padding: 0;
+			border-radius: $borderRadius;
+			pointer-events: all;
+			opacity: 0.8;
+			background-color: var(--contrast);
 		}
 	}
 

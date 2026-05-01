@@ -36,7 +36,12 @@ const updatePosition = async () => {
 		middleware: [offset(12), flip(), shift({ padding: 8 })],
 	})
 
-	popupStyle.value = { left: `${x}px`, top: `${y}px` }
+	const rect = popupEl.value.getBoundingClientRect()
+	const vw = window.innerWidth
+	const vh = window.innerHeight
+	const clampedX = Math.max(8, Math.min(vw - rect.width - 8, x))
+	const clampedY = Math.max(8, Math.min(vh - rect.height - 8, y))
+	popupStyle.value = { left: `${clampedX}px`, top: `${clampedY}px` }
 }
 
 watch(
