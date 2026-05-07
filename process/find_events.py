@@ -6,6 +6,7 @@ import math
 import os
 import logging, sys
 import pickle
+import warnings
 from collections import deque, namedtuple
 from typing import List, Tuple, Union, Optional
 
@@ -1021,8 +1022,11 @@ class EventletFactory:
             # Precipitation: (precip - ref) / IQR > 0
             # Only calculate for wet days (>= 1mm)
             iqr = ref_p75 - ref_p25
-            anomaly = (data - ref_data) / iqr
-            self.raw_mask = anomaly > self.threshold
+            # Guard against zero IQR (flat climatology pixel) to avoid
+            # divide-by-zero warnings from dask; those pixels are excluded.
+            safe_iqr = iqr.where(iqr > 0, other=1.0)
+            anomaly = (data - ref_data) / safe_iqr
+            self.raw_mask = (anomaly > self.threshold) & (iqr > 0)
             # No persistence filtering for precipitation
             self.enduring_pixels = self.raw_mask
         else:
@@ -1113,12 +1117,14 @@ class EventletFactory:
         if not self.use_dbscan:
             labels = walk_scan(D, eps=self.radius, min_samples=self.min_samples)
         elif D.getnnz() > 0:
+            from sklearn.neighbors import sort_graph_by_row_values
             db = DBSCAN(
                 eps=self.radius,
                 min_samples=self.min_samples,
                 metric="precomputed",
             )
-            labels = db.fit_predict(D)
+            D_sorted = sort_graph_by_row_values(D.tocsr(), warn_when_not_sorted=False)
+            labels = db.fit_predict(D_sorted)
         else:
             labels = []
 
@@ -1599,6 +1605,13 @@ def process_parameter_set(
     Returns:
         True if processing succeeded, False otherwise
     """
+    # Prefix every log line from this worker with the event type so parallel
+    # output from multiple processes is easy to distinguish.
+    for _h in logger.handlers:
+        _h.setFormatter(logging.Formatter(
+            f'%(asctime)s - {param.event_mode} - %(levelname)s - %(message)s'
+        ))
+
     logger.info(f"Processing {param.event_mode} events with parameters: {param}")
     
     try:
