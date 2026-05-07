@@ -325,7 +325,10 @@ def to_serializable(obj):
     elif isinstance(obj, (np.integer, np.int32, np.int64)):
         return int(obj)
     elif isinstance(obj, (np.floating, np.float32, np.float64)):
-        return float(obj)
+        v = float(obj)
+        return None if math.isnan(v) or math.isinf(v) else v
+    elif isinstance(obj, float):
+        return None if math.isnan(obj) or math.isinf(obj) else obj
     elif isinstance(obj, set):
         return list(obj)
     elif isinstance(obj, (list, tuple)):
@@ -351,7 +354,7 @@ def round_floats(obj, decimals: int = 4):
         Structure with rounded floats
     """
     if isinstance(obj, float):
-        return round(obj, decimals)
+        return None if math.isnan(obj) or math.isinf(obj) else round(obj, decimals)
     elif isinstance(obj, dict):
         return {k: round_floats(v, decimals) for k, v in obj.items()}
     elif isinstance(obj, list):
@@ -749,13 +752,18 @@ class Eventlet:
         
         Args:
             oldest_upstream_time: The oldest time currently being processed
-            time_threshold: How long after last observation before expiry (e.g., "1H")
+            time_threshold: How long after last observation before expiry.
+                            Integers are interpreted as days; strings like "1D"
+                            or "12H" are also accepted.
             
         Returns:
             True if the eventlet has expired
         """
-        time_threshold = pd.Timedelta(time_threshold)  # ensures compatibility
-        return (self.last_time() + time_threshold) < oldest_upstream_time
+        if isinstance(time_threshold, (int, float)):
+            td = pd.Timedelta(days=time_threshold)
+        else:
+            td = pd.Timedelta(time_threshold)
+        return (self.last_time() + td) < oldest_upstream_time
 
     def is_valid(self, min_time_steps, min_mean_pixels):
         """
@@ -1547,29 +1555,29 @@ def get_default_params() -> List[ParamSet]:
     return [
         ParamSet(
             stat="min",
-            perc="1.0",
+            perc="2.0",
             thresh=0,
-            nr=250,
-            ms=30,
-            dbscan=False,
+            nr=500,
+            ms=60,
+            dbscan=True,
             event_mode='cold'
         ),
         ParamSet(
             stat="max",
-            perc="99.0",
+            perc="98.0",
             thresh=28,
-            nr=250,
-            ms=30,
-            dbscan=False,
+            nr=500,
+            ms=60,
+            dbscan=True,
             event_mode='hot'
         ),
         ParamSet(
             stat="tp",
             perc="95.0",
             thresh=0.0,
-            nr=250,
-            ms=30,
-            dbscan=False,
+            nr=500,
+            ms=60,
+            dbscan=True,
             event_mode='wet'
         ),
     ]
@@ -1667,11 +1675,15 @@ def main():
     """
     Main entry point for event detection pipeline.
     
-    Processes all configured parameter sets sequentially. Environment
+    Processes all configured parameter sets in parallel using
+    ProcessPoolExecutor (one process per ParamSet). Environment
     variables can override default paths:
         EVENT_INPUT_DIR: Input data directory (default: /data)
         EVENT_OUTPUT_DIR: Output directory (default: /output)
+        EVENT_MAX_WORKERS: Max parallel workers (default: number of param sets)
     """
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
     logger.info("=" * 60)
     logger.info("ERA5 Extreme Event Detection Pipeline")
     logger.info("=" * 60)
@@ -1685,13 +1697,33 @@ def main():
     
     # Get parameter sets
     params = get_default_params()
-    logger.info(f"Processing {len(params)} parameter set(s)")
     
-    # Process each parameter set
+    # Cap workers at number of param sets (no point spinning up more)
+    max_workers = int(os.environ.get("EVENT_MAX_WORKERS", len(params)))
+    logger.info(
+        f"Processing {len(params)} parameter set(s) "
+        f"with up to {max_workers} parallel worker(s)"
+    )
+    
     results = {}
-    for param in params:
-        success = process_parameter_set(param, input_dir, output_dir)
-        results[param.event_mode] = success
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_param = {
+            executor.submit(process_parameter_set, param, input_dir, output_dir): param
+            for param in params
+        }
+        for future in as_completed(future_to_param):
+            param = future_to_param[future]
+            try:
+                success = future.result()
+            except Exception as e:
+                logger.error(
+                    f"Parameter set {param.event_mode} raised an exception: {e}",
+                    exc_info=True,
+                )
+                success = False
+            results[param.event_mode] = success
+            status = "SUCCESS" if success else "FAILED"
+            logger.info(f"{param.event_mode.capitalize()} events finished: {status}")
     
     # Summary
     logger.info("\n" + "=" * 60)

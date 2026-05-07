@@ -73,8 +73,8 @@ const dayBins = ref<Record<number, any>>({})
 const maxcount = ref(0)
 const minmaxIntensities = computed(() => {
 	return [
-		intensityForValue(selectedEvent.value.min_value, eventType.value === 'hot'),
-		intensityForValue(selectedEvent.value.max_value, eventType.value === 'hot'),
+		intensityForValue(selectedEvent.value.min_value, eventType.value === 'hot' || eventType.value === 'cold' ),
+		intensityForValue(selectedEvent.value.max_value, eventType.value === 'hot' || eventType.value === 'cold' ),
 	]
 })
 const xmax = computed(() => {
@@ -107,7 +107,7 @@ watch(
 				try {
 					data.push(
 						...vs[i].map((v) =>
-							intensityForValue(v, eventType.value === 'hot'),
+							intensityForValue(v, eventType.value === 'hot' || eventType.value === 'cold'),
 						),
 					)
 				} catch {
@@ -132,7 +132,7 @@ watch(
 				peakExtremeVals.value[i] =
 					eventType.value === 'hot'
 						? intensityForValue(newVal.max_values[i], true)
-						: intensityForValue(newVal.min_values[i], false)
+						: intensityForValue(newVal.min_values[i], true)
 			}
 			newBins[day] = bins
 		}
@@ -151,7 +151,7 @@ const meanVal = computed(() => {
 	try {
 		return intensityForValue(
 			selectedEvent.value.mean_values[props.selectedIndex],
-			eventType.value === 'hot',
+			eventType.value === 'hot' || eventType.value === 'cold',
 		)
 	} catch {
 		return 0

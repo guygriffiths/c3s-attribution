@@ -1,5 +1,5 @@
 import FetchAndIndexWorker from '@/lib/worker/fetchAndIndexWorker?worker'
-import { EventStore, useStore as useEventStore } from '@/store/eventStore'
+import { EventStore } from '@/store/eventStore'
 import { useStore as useMainStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { bbox, booleanPointInPolygon, point, polygon } from '@turf/turf'
@@ -89,6 +89,7 @@ export function onSpaceTimeFilterChanged(cb: () => void) {
 let retrievedCount = 0
 let postedCount = 0
 let latestYear = 0
+const loadedYears = new Set<number>()
 
 const fetchAndIndexWorker = new FetchAndIndexWorker()
 fetchAndIndexWorker.onmessage = (
@@ -114,6 +115,7 @@ fetchAndIndexWorker.onmessage = (
 	// console.log(`Main thread received ${events.length} events from worker for year ${year}`)
 
 	_events.push(...events)
+	loadedYears.add(year)
 
 	// Merge pixel index
 	for (const [key, val] of Object.entries(pIndex)) {
@@ -144,10 +146,14 @@ fetchAndIndexWorker.onmessage = (
 		dateIndexReady = true
 	}
 
-	if (year === latestYear || retrievedCount === postedCount) {
+	const recentYearsLoaded =
+		loadedYears.has(latestYear) &&
+		loadedYears.has(latestYear - 1) &&
+		loadedYears.has(latestYear - 2)
+
+	if (recentYearsLoaded || retrievedCount === postedCount) {
 		const mainStore = useMainStore()
-		const eventStore = useEventStore()
-		mainStore.setLoading()
+		// mainStore.setLoading()
 		for (const cb of globalEventsChangedTriggers) {
 			cb()
 		}
@@ -181,9 +187,10 @@ fetchAndIndexWorker.onmessage = (
 			// if(year === latestYear) {
 			// 	mainStore.mainHelpOpen = true
 			// }
-			mainStore.setLoadingDone()
+			// mainStore.setLoadingDone()
 		})
 	}
+
 	// console.log(
 	// 	'Merged indexes, and called back callbacks, retrieved',
 	// 	retrievedCount,
@@ -204,6 +211,7 @@ export async function fetchAndIndexEvents(
 	postedCount = 0
 	retrievedCount = 0
 	latestYear = to
+	loadedYears.clear()
 
 	const years = Array.from(
 		{ length: to - from + 1 },

@@ -33,7 +33,6 @@ import {
 	IconX,
 } from '@tabler/icons-vue'
 import { useEventFilters } from '@/lib/eventFilters'
-import { interpolateCool } from 'd3'
 import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
 import { c3sred, c3sblue, c3sgreen } from '@/assets/styles/scssVars.module.scss'
 

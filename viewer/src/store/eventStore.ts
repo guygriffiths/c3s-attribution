@@ -67,7 +67,7 @@ export const colorForValue = (
 	} else if (type === 'cold') {
 		return interpolateColorCold(scssVars.c3sblue)(scale(v))
 	} else if (type === 'wet') {
-		return interpolateColorWet(scssVars.c3steal)(scale(v))
+		return interpolateColorWet(scssVars.c3sgreen)(scale(v))
 	}
 }
 
@@ -110,7 +110,7 @@ export const useStore = defineStore('events', {
 			sizeUnits: 'km²',
 			heatIntensityRange: [28, 40],
 			heatIntensityUnits: '°C',
-			coldIntensityRange: [-20, 2],
+			coldIntensityRange: [-20, 0],
 			coldIntensityUnits: '°C',
 			wetIntensityRange: [0, 2],
 			wetIntensityUnits: 'precipitation index',
@@ -119,7 +119,7 @@ export const useStore = defineStore('events', {
 			heatIntensityP90: null,
 			coldIntensityP90: null,
 			wetIntensityP90: null,
-			eventTypeMode: 'hot',
+			eventTypeMode: 'cold',
 			eventSetsLoaded: 0,
 			filters: {
 				duration: {
@@ -230,13 +230,18 @@ export const useStore = defineStore('events', {
 		colorForEvent: (state: State) => {
 			// TODO Logic for configurable intensity definition.
 			return (event: ExtremeEvent | ExtremeEventFull) => {
-				const hot = event.event_type === 'hot'
 				return colorForValue(
 					// @ts-ignore - this is a getter
 					state.intensityForEvent(event),
 					event.event_type,
-					// @ts-ignore - these are getters
-					hot ? state.hotScale : state.coldScale,
+					event.event_type === 'hot'
+						? // @ts-ignore - these are getters
+							state.hotScale
+						: event.event_type === 'cold'
+							? // @ts-ignore - these are getters
+								state.coldScale
+							: // @ts-ignore - these are getters
+								state.wetScale,
 				)
 			}
 		},
@@ -252,8 +257,12 @@ export const useStore = defineStore('events', {
 			return (event: ExtremeEvent | ExtremeEventFull | null) => {
 				if (!event) return 0
 				return intensityForValue(
-					event.event_type === 'hot' ? event.max_value : event.mean_value,
-					event.event_type === 'hot',
+					event.event_type === 'hot'
+						? event.max_value
+						: event.event_type === 'cold'
+							? event.min_value
+							: event.mean_value,
+					event.event_type === 'hot' || event.event_type === 'cold',
 				)
 			}
 		},
@@ -267,7 +276,7 @@ export const useStore = defineStore('events', {
 			return (event: ExtremeEvent | ExtremeEventFull | null) => {
 				if (!event || !event.hasOwnProperty('max_values')) return []
 				event = event as ExtremeEventFull
-				if (event.event_type === 'hot') {
+				if (event.event_type === 'hot' || event.event_type === 'cold') {
 					return event.max_values.map((v) => intensityForValue(v, true))
 				} else {
 					return event.mean_values.map((v) => intensityForValue(v, false))
@@ -280,7 +289,7 @@ export const useStore = defineStore('events', {
 				event = event as ExtremeEventFull
 				const idx = event.times.findIndex((t) => t === time.getTime())
 				if (idx === -1 || idx >= event.values.length) return []
-				if (event.event_type === 'hot') {
+				if (event.event_type === 'hot' || event.event_type === 'cold') {
 					return event.values[idx].map((v) => intensityForValue(v, true))
 				} else {
 					return event.values[idx].map((v) => intensityForValue(v, false))

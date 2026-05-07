@@ -1,5 +1,4 @@
-import { c3sblue, c3sred } from '@/assets/styles/colors'
-export { }
+import { c3sblue, c3sgreen, c3sred } from '@/assets/styles/colors'
 
 export const renderToContext = (
 	ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -42,7 +41,13 @@ export const renderToContext = (
 		}
 		ctx.closePath()
 		const alpha = 0.1
-		ctx.fillStyle = (event.event_type === 'hot' ? c3sred : c3sblue)
+		ctx.fillStyle = (
+			event.event_type === 'hot'
+				? c3sred
+				: event.event_type === 'cold'
+					? c3sblue
+					: c3sgreen
+		)
 			.replace(')', `,${alpha})`)
 			.replace('rgb', 'rgba')
 		ctx.fill()
@@ -62,7 +67,7 @@ self.onmessage = async (
 	}>,
 ) => {
 	const { canvas, events, mapState } = e.data
-	if(!canvas) return
+	if (!canvas) return
 
 	const ctx = canvas.getContext('2d') as
 		| CanvasRenderingContext2D

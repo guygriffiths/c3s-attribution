@@ -205,15 +205,6 @@ onSpaceTimeFilterChanged(() => {
 
 const eventPointFilter = ref<[number, number] | null>(null)
 const eventRegionFilter = ref<Feature<Polygon | MultiPolygon> | null>(null)
-const hoverPolygonRef = ref<InstanceType<typeof LPolygon> | null>(null)
-watch(
-	() => eventStore.hoveringEvent,
-	() => {
-		nextTick(() => {
-			hoverPolygonRef.value?.leafletObject?.bringToBack()
-		})
-	},
-)
 const regionKey = ref(0)
 let regionFilteredEvents = [] as ExtremeEvent[]
 const globalHeatmapEvents = shallowRef([] as ExtremeEvent[])
@@ -400,11 +391,11 @@ watch(
 const cScale = computed(() => {
 	const minValIntensity = intensityForValue(
 		eventStore.selectedEvent?.min_value!,
-		eventStore.selectedEvent?.event_type === 'hot',
+		eventStore.selectedEvent?.event_type === 'hot' || eventStore.selectedEvent?.event_type === 'cold',
 	)
 	const maxValIntensity = intensityForValue(
 		eventStore.selectedEvent?.max_value!,
-		eventStore.selectedEvent?.event_type === 'hot',
+		eventStore.selectedEvent?.event_type === 'hot' || eventStore.selectedEvent?.event_type === 'cold',
 	)
 	const minIntensity = Math.min(minValIntensity, maxValIntensity)
 	const maxIntensity = Math.max(minValIntensity, maxValIntensity)
@@ -484,11 +475,16 @@ const addEventPanes = () => {
 		renderToContext(ctxEl, events, mapState)
 	})
 
+	// create a pane for the hover total_region polygon — below overlayPane (400) so daily regions render on top
+	map.value.createPane('hoverPane')
+	map.value.getPane('hoverPane')!.style.zIndex = '395'
+
 	// create a pane just below overlayPane
 	map.value.createPane('fastEventPane')
 	const fastPane = map.value.getPane('fastEventPane')!
 	// set zIndex: just under overlay (z=400)
 	fastPane.style.zIndex = '390'
+
 	fastRenderer.addTo(map.value)
 	fastRenderer.on('update', () => {
 		const ctx = (fastRenderer as any)._ctx as CanvasRenderingContext2D
@@ -655,10 +651,9 @@ const mapClicked = (event: LeafletMouseEvent) => {
 			></LTileLayer> -->
 
 			<!-- Events -->
-			<!-- Hovered event: full total_region shown in both modes, kept behind daily regions via bringToBack() -->
+			<!-- Hovered event: full total_region in hoverPane (z=395), always behind overlayPane daily regions (z=400) -->
 			<LPolygon
 				v-if="eventStore.hoveringEvent"
-				ref="hoverPolygonRef"
 				:key="`ev-${eventStore.hoveringEvent.id}-hover`"
 				:lat-lngs="eventStore.hoveringEvent.total_region"
 				:weight="0"
@@ -666,7 +661,7 @@ const mapClicked = (event: LeafletMouseEvent) => {
 				:fill-opacity="0.8"
 				:color="scssVars.lightbulb"
 				:fill-color="scssVars.lightbulb"
-				:options="{ interactive: false }"
+				:options="{ interactive: false, pane: 'hoverPane' }"
 			>
 			</LPolygon>
 			<!-- Current events as daily-region polygons (timemachine only) -->

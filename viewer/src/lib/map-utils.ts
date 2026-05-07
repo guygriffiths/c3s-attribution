@@ -139,9 +139,9 @@ export const getEventRegion = (event: ExtremeEvent, time: Date) => {
 		.findIndex((t) => t === selected)
 
 	if (idx < 0) {
-		console.warn(
-			`No region found for event ${event.id} at time ${time.toISOString()}`,
-		)
+		// console.warn(
+		// 	`No region found for event ${event.id} at time ${time.toISOString()}`,
+		// )
 		return event.total_region || [] // Fallback to first region if no matching time found
 	}
 	return event.regions[idx] || [] // Fallback to empty array if no region found
