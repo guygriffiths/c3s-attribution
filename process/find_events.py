@@ -1117,14 +1117,18 @@ class EventletFactory:
         if not self.use_dbscan:
             labels = walk_scan(D, eps=self.radius, min_samples=self.min_samples)
         elif D.getnnz() > 0:
-            from sklearn.neighbors import sort_graph_by_row_values
             db = DBSCAN(
                 eps=self.radius,
                 min_samples=self.min_samples,
                 metric="precomputed",
             )
-            D_sorted = sort_graph_by_row_values(D.tocsr(), warn_when_not_sorted=False)
-            labels = db.fit_predict(D_sorted)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="Precomputed sparse input was not sorted",
+                    category=UserWarning,
+                )
+                labels = db.fit_predict(D.tocsr())
         else:
             labels = []
 
