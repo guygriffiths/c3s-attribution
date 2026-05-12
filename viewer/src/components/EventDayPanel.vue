@@ -18,6 +18,7 @@ import {
 	IconTemperatureMinus,
 	IconChevronLeft,
 	IconChevronRight,
+	IconCloudRain,
 } from '@tabler/icons-vue'
 import { niceNumber } from '@/lib/utils'
 import { getBins } from '@/lib/histo-utils'
@@ -73,8 +74,14 @@ const dayBins = ref<Record<number, any>>({})
 const maxcount = ref(0)
 const minmaxIntensities = computed(() => {
 	return [
-		intensityForValue(selectedEvent.value.min_value, eventType.value === 'hot' || eventType.value === 'cold' ),
-		intensityForValue(selectedEvent.value.max_value, eventType.value === 'hot' || eventType.value === 'cold' ),
+		intensityForValue(
+			selectedEvent.value.min_value,
+			eventType.value === 'hot' || eventType.value === 'cold',
+		),
+		intensityForValue(
+			selectedEvent.value.max_value,
+			eventType.value === 'hot' || eventType.value === 'cold',
+		),
 	]
 })
 const xmax = computed(() => {
@@ -107,7 +114,10 @@ watch(
 				try {
 					data.push(
 						...vs[i].map((v) =>
-							intensityForValue(v, eventType.value === 'hot' || eventType.value === 'cold'),
+							intensityForValue(
+								v,
+								eventType.value === 'hot' || eventType.value === 'cold',
+							),
 						),
 					)
 				} catch {
@@ -132,7 +142,9 @@ watch(
 				peakExtremeVals.value[i] =
 					eventType.value === 'hot'
 						? intensityForValue(newVal.max_values[i], true)
-						: intensityForValue(newVal.min_values[i], true)
+						: eventType.value === 'cold'
+							? intensityForValue(newVal.min_values[i], true)
+							: intensityForValue(newVal.max_values[i], false)
 			}
 			newBins[day] = bins
 		}
@@ -192,13 +204,23 @@ const size = computed(() => {
 						:xmax="xmax"
 						:types="histogramData.map(() => eventType)"
 						:yMaxCount="maxcount"
-						:title="$l.pixelDistDaily"
+						:title="
+						selectedEvent?.event_type === 'hot' ||
+						selectedEvent?.event_type === 'cold'
+								? $l.pixelDistDailyTemp
+								: $l.pixelDistDailyWet
+						"
 					/>
 					<div class="axis">
 						<div class="label mono">
 							{{ niceNumber(xmin) }}
 						</div>
-						<span class="unit-icon" v-tooltip="$l.temperature">
+						<span
+							class="unit-icon"
+							v-tooltip="
+								eventType === 'wet' ? $l.wetIntensityLabel : $l.temperature
+							"
+						>
 							<IconTemperaturePlus
 								class="icon"
 								aria-hidden="true"
@@ -206,6 +228,12 @@ const size = computed(() => {
 								v-if="eventType === 'hot'"
 							/>
 							<IconTemperatureMinus
+								class="icon"
+								aria-hidden="true"
+								:class="{ [eventType]: true }"
+								v-else-if="eventType === 'cold'"
+							/>
+							<IconCloudRain
 								class="icon"
 								aria-hidden="true"
 								:class="{ [eventType]: true }"
@@ -231,7 +259,11 @@ const size = computed(() => {
 			</div>
 			<div class="day-info">
 				<div class="info-row header">
-					<button class="glassy flat tight" @click="timeStore.prevDay()" :disabled="props.selectedIndex <= 0">
+					<button
+						class="glassy flat tight"
+						@click="timeStore.prevDay()"
+						:disabled="props.selectedIndex <= 0"
+					>
 						<IconChevronLeft aria-hidden="true" />
 					</button>
 					<CalendarIcon
@@ -242,16 +274,28 @@ const size = computed(() => {
 					/>
 					<span class="mono">
 						{{
-							dateStr(new Date(selectedEvent.times[props.selectedIndex] || 0)).slice(0, -4)
+							dateStr(
+								new Date(selectedEvent.times[props.selectedIndex] || 0),
+							).slice(0, -4)
 						}}
 					</span>
-					<button class="glassy flat tight" @click="timeStore.nextDay()" :disabled="props.selectedIndex >= days.length - 1">
+					<button
+						class="glassy flat tight"
+						@click="timeStore.nextDay()"
+						:disabled="props.selectedIndex >= days.length - 1"
+					>
 						<IconChevronRight aria-hidden="true" />
 					</button>
 				</div>
 				<div
 					class="info-row"
-					v-tooltip="eventType === 'hot' ? $l.maxTempDaily : $l.minTempDaily"
+					v-tooltip="
+						eventType === 'hot'
+							? $l.maxTempDaily
+							: eventType === 'cold'
+								? $l.minTempDaily
+								: $l.maxWetDaily
+					"
 				>
 					<IconTemperaturePlus
 						v-if="eventType === 'hot'"
@@ -260,6 +304,12 @@ const size = computed(() => {
 						aria-hidden="true"
 					/>
 					<IconTemperatureMinus
+						v-else-if="eventType === 'cold'"
+						class="icon"
+						:class="[eventType]"
+						aria-hidden="true"
+					/>
+					<IconCloudRain
 						v-else
 						class="icon"
 						:class="[eventType]"
@@ -269,17 +319,33 @@ const size = computed(() => {
 						>{{ niceNumber(peakExtremeVal || 0) }}&nbsp;{{
 							eventType === 'hot'
 								? eventStore.heatIntensityUnits
-								: eventStore.coldIntensityUnits
+								: eventType === 'cold'
+									? eventStore.coldIntensityUnits
+									: eventStore.wetIntensityUnits
 						}}</span
 					>
 				</div>
-				<div class="info-row" v-tooltip="$l.meanTempDaily">
-					<IconTemperature class="icon" aria-hidden="true" />
+				<div
+					class="info-row"
+					v-tooltip="
+						eventType === 'hot' || eventType === 'cold'
+							? $l.meanTempDaily
+							: $l.meanWetDaily
+					"
+				>
+					<IconTemperature
+						class="icon"
+						aria-hidden="true"
+						v-if="eventType !== 'wet'"
+					/>
+					<IconCloudRain class="icon" aria-hidden="true" v-else />
 					<span class="value mono"
 						>{{ niceNumber(meanVal) }}&nbsp;{{
 							eventType === 'hot'
 								? eventStore.heatIntensityUnits
-								: eventStore.coldIntensityUnits
+								: eventType === 'cold'
+									? eventStore.coldIntensityUnits
+									: eventStore.wetIntensityUnits
 						}}</span
 					>
 				</div>

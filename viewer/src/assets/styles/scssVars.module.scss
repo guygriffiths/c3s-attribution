@@ -3,11 +3,12 @@
 
 // Official colors
 $c3sred: hsl(345, 77%, 33%);
-$c3sorange: hsl(20, 77%, 33%);
-$c3sgreen: hsl(101, 77%, 33%);
 $c3steal: hsl(159, 77%, 33%);
 $c3sblue: hsl(211, 57%, 40%);
 $c3spurple: hsl(281, 28%, 35%);
+$c3sgreen: hsl(120, 100%, 25%);  // complement of c3spurple; hotcold contrast
+$c3sorange: hsl(25, 77%, 33%);   // hotwet: warm arc between red and teal
+$c3saqua: hsl(185, 67%, 36%);    // coldwet: midpoint between teal and blue
 $lightbulb: rgb(247, 205, 81);
 $c3sgrey: hsl(211, 0%, 40%);
 
@@ -47,9 +48,11 @@ $borderRadius: 7px;
 	c3sred: $c3sred;
 	c3sblue: $c3sblue;
 	c3spurple: $c3spurple;
+	c3steal: $c3steal;
+	c3spurple: $c3spurple;
 	c3sgreen: $c3sgreen;
 	c3sorange: $c3sorange;
-	c3spurple: $c3spurple;
+	c3saqua: $c3saqua;
 	c3sgrey: $c3sgrey;
 	lightbulb: $lightbulb;
 	animTime: $animTime;
@@ -62,79 +65,63 @@ $transition: $animTime $animEase;
 $shd-sm: calc(0.25 * $panelMargin);
 $shd-md: calc(0.5 * $panelMargin);
 $shd-lg: calc(0.75 * $panelMargin);
+// Panel backgrounds are centred on the complement hue (primary + 180°):
+//   hot     (345°) → complement 165°  stops: 105 135 165 195 225
+//   cold    (211°) → complement  31°  stops: 331   1  31  61  91
+//   wet     (159°) → complement 339°  stops: 279 309 339   9  39
+//   hotcold (281°) → complement 101°  stops:  41  71 101 131 161
+//   hotwet   (25°) → complement 205°  stops: 145 175 205 235 265
+//   coldwet (185°) → complement   5°  stops: 305 335   5  35  65
 $themes: (
 	hot: (
-		// Panel backgrounds (warm)
-		// panel-bg: rgba(250, 248, 246, 0.8),
 		panel-bg: linear-gradient(
 				123deg,
-				hsla(151, 35%, 96%, 0.88) 0%,
-				hsla(181, 35%, 96%, 0.88) 25%,
-				hsla(211, 35%, 96%, 0.88) 50%,
-				hsla(241, 35%, 96%, 0.88) 75%,
-				hsla(271, 35%, 96%, 0.88) 100%
+				hsla(105, 35%, 96%, 0.88) 0%,
+				hsla(135, 35%, 96%, 0.88) 25%,
+				hsla(165, 35%, 96%, 0.88) 50%,
+				hsla(195, 35%, 96%, 0.88) 75%,
+				hsla(225, 35%, 96%, 0.88) 100%
 			),
-		panel-solid: hsla(211, 29%, 97%, 1),
-		panel-bg-alt: rgba(220, 218, 216, 0.8),
 		panel-bg-dark: linear-gradient(
 				123deg,
-				hsla(151, 4%, 74%, 0.88) 0%,
-				hsla(181, 4%, 74%, 0.88) 25%,
-				hsla(211, 4%, 74%, 0.88) 50%,
-				hsla(241, 4%, 74%, 0.88) 75%,
-				hsla(271, 4%, 74%, 0.88) 100%
+				hsla(105, 4%, 74%, 0.88) 0%,
+				hsla(135, 4%, 74%, 0.88) 25%,
+				hsla(165, 4%, 74%, 0.88) 50%,
+				hsla(195, 4%, 74%, 0.88) 75%,
+				hsla(225, 4%, 74%, 0.88) 100%
 			),
 		panel-bg-night: linear-gradient(
 				123deg,
-				hsla(151, 1%, 17%, 0.25) 0%,
-				hsla(181, 1%, 17%, 0.25) 25%,
-				hsla(211, 1%, 17%, 0.25) 50%,
-				hsla(241, 1%, 17%, 0.25) 75%,
-				hsla(271, 1%, 17%, 0.25) 100%
+				hsla(105, 1%, 17%, 0.25) 0%,
+				hsla(135, 1%, 17%, 0.25) 25%,
+				hsla(165, 1%, 17%, 0.25) 50%,
+				hsla(195, 1%, 17%, 0.25) 75%,
+				hsla(225, 1%, 17%, 0.25) 100%
 			),
-		panel-surface: rgb(254, 254, 252),
-		panel-hint: hsla(341, 50%, 95%, 0.35),
-		panel-hint2: hsla(211, 20%, 80%, 0.2),
-		chart-bg: rgb(245, 245, 243, 0.8),
-		chart-bg-alt: rgba(220, 218, 216, 0.8),
-		border: rgb(229, 224, 219),
-		// Primary interactive elements
+		panel-solid: hsla(165, 20%, 97%, 1),
+		panel-bg-alt: hsla(345, 5%, 85%, 0.8),
+		panel-surface: hsl(345, 15%, 99%),
+		panel-hint: hsla(345, 50%, 95%, 0.35),
+		panel-hint2: hsla(165, 20%, 80%, 0.2),
+		border: hsl(345, 10%, 88%),
 		primary: $c3sred,
 		contrast: $c3sblue,
 		primary-glass: rgba($c3sred, 0.7),
-		primary-glass-shine: rgba(
-				color.adjust($c3sred, $saturation: -10%, $lightness: 10%),
-				0.7
-			),
-		primary-glass-dark: rgba(
-				color.adjust($c3sred, $saturation: -10%, $lightness: -10%),
-				0.7
-			),
+		primary-glass-shine: rgba(color.adjust($c3sred, $saturation: -10%, $lightness: 10%), 0.7),
+		primary-glass-dark: rgba(color.adjust($c3sred, $saturation: -10%, $lightness: -10%), 0.7),
 		primary-hover: color.adjust($c3sred, $lightness: -8%),
 		primary-active: color.adjust($c3sred, $lightness: -12%),
-		primary-muted: color.adjust($c3sred, $lightness: +50%),
 		primary-selected: color.adjust($c3sred, $lightness: 65%),
 		primary-unselected: color.adjust($c3sred, $saturation: -30%),
-		// Text hierarchy
 		text-primary: rgb(17, 17, 19),
 		text-secondary: rgb(100, 100, 105),
 		text-tertiary: rgb(142, 142, 147),
 		text-on-primary: rgb(255, 255, 255),
 		text-on-primary-shadow: 0 0 5px var(--text-on-primary),
-		text-on-primary-filter: drop-shadow(0 0 5px rgb(255, 255, 255)),
-		// Interactive text/links
-		text-interactive: $c3sred,
-		text-interactive-hover: color.adjust($c3sred, $lightness: -10%),
-		// Highlight
 		highlight: $lightbulb,
 		highlight-hover: color.adjust($lightbulb, $lightness: -8%),
-		highlight-bg: color.adjust($lightbulb, $lightness: +45%, $saturation: -20%),
-		// Focus states
-		focus-ring: rgba(220, 38, 38, 0.4),
-		// Neutral interactive states
+		focus-ring: rgba($c3sred, 0.4),
 		hover-bg: rgba(0, 0, 0, 0.04),
-		hover-bg-dark: rgba(0, 0, 0, 0.08),
-		// Dividers
 		divider-subtle: rgba(0, 0, 0, 0.06),
 		divider: rgba(0, 0, 0, 0.1),
 		shadow-sm: $shd-sm $shd-sm $shd-sm rgba(0, 0, 0, 0.5),
@@ -142,58 +129,54 @@ $themes: (
 		shadow-lg: $shd-lg $shd-lg $shd-lg rgba(0, 0, 0, 0.15),
 	),
 	cold: (
-		// Panel backgrounds (cool)
 		panel-bg: linear-gradient(
 				123deg,
-				hsla(305, 35%, 96%, 0.85) 0%,
-				hsla(335, 35%, 96%, 0.85) 25%,
-				hsla(5, 35%, 96%, 0.85) 50%,
-				hsla(35, 35%, 96%, 0.85) 75%,
-				hsla(65, 35%, 96%, 0.85) 100%
+				hsla(331, 35%, 96%, 0.88) 0%,
+				hsla(1, 35%, 96%, 0.88) 25%,
+				hsla(31, 35%, 96%, 0.88) 50%,
+				hsla(61, 35%, 96%, 0.88) 75%,
+				hsla(91, 35%, 96%, 0.88) 100%
 			),
-		panel-solid: rgba(248, 249, 250, 0.9),
-		panel-bg-alt: rgba(218, 219, 220, 0.8),
-		panel-bg-dark: rgba(189, 191, 193, 0.8),
-		panel-surface: rgb(253, 254, 255),
-		panel-hint: rgba(253, 254, 255, 0.1),
-		chart-bg: rgb(243, 245, 247),
-		chart-bg-alt: rgba(248, 249, 250, 0.8),
-		border: rgb(222, 226, 230),
-		// Primary interactive elements
+		panel-bg-dark: linear-gradient(
+				123deg,
+				hsla(331, 4%, 74%, 0.88) 0%,
+				hsla(1, 4%, 74%, 0.88) 25%,
+				hsla(31, 4%, 74%, 0.88) 50%,
+				hsla(61, 4%, 74%, 0.88) 75%,
+				hsla(91, 4%, 74%, 0.88) 100%
+			),
+		panel-bg-night: linear-gradient(
+				123deg,
+				hsla(331, 1%, 17%, 0.25) 0%,
+				hsla(1, 1%, 17%, 0.25) 25%,
+				hsla(31, 1%, 17%, 0.25) 50%,
+				hsla(61, 1%, 17%, 0.25) 75%,
+				hsla(91, 1%, 17%, 0.25) 100%
+			),
+		panel-solid: hsla(31, 15%, 97%, 1),
+		panel-bg-alt: hsla(211, 5%, 85%, 0.8),
+		panel-surface: hsl(211, 15%, 99%),
+		panel-hint: hsla(211, 50%, 95%, 0.35),
+		panel-hint2: hsla(31, 20%, 80%, 0.2),
+		border: hsl(211, 10%, 88%),
 		primary: $c3sblue,
 		contrast: $c3sred,
 		primary-glass: rgba($c3sblue, 0.7),
-		primary-glass-shine: rgba(
-				color.adjust($c3sblue, $saturation: -10%, $lightness: 10%),
-				0.7
-			),
-		primary-glass-dark: rgba(
-				color.adjust($c3sblue, $saturation: -10%, $lightness: -10%),
-				0.7
-			),
+		primary-glass-shine: rgba(color.adjust($c3sblue, $saturation: -10%, $lightness: 10%), 0.7),
+		primary-glass-dark: rgba(color.adjust($c3sblue, $saturation: -10%, $lightness: -10%), 0.7),
 		primary-hover: color.adjust($c3sblue, $lightness: -8%),
 		primary-active: color.adjust($c3sblue, $lightness: -12%),
-		primary-muted: color.adjust($c3sblue, $lightness: +50%),
-		primary-selected: color.adjust($c3sblue, $lightness: +65%),
+		primary-selected: color.adjust($c3sblue, $lightness: 65%),
 		primary-unselected: color.adjust($c3sblue, $saturation: -30%),
-		// Text hierarchy
 		text-primary: rgb(17, 17, 19),
 		text-secondary: rgb(100, 100, 105),
 		text-tertiary: rgb(142, 142, 147),
 		text-on-primary: rgb(255, 255, 255),
-		// Interactive text/links
-		text-interactive: $c3sblue,
-		text-interactive-hover: color.adjust($c3sblue, $lightness: -10%),
-		// Highlight
+		text-on-primary-shadow: 0 0 5px var(--text-on-primary),
 		highlight: $lightbulb,
 		highlight-hover: color.adjust($lightbulb, $lightness: -8%),
-		highlight-bg: color.adjust($lightbulb, $lightness: +45%, $saturation: -20%),
-		// Focus states
-		focus-ring: rgba(30, 58, 138, 0.4),
-		// Neutral interactive states
+		focus-ring: rgba($c3sblue, 0.4),
 		hover-bg: rgba(0, 0, 0, 0.04),
-		hover-bg-dark: rgba(0, 0, 0, 0.08),
-		// Dividers
 		divider-subtle: rgba(0, 0, 0, 0.06),
 		divider: rgba(0, 0, 0, 0.1),
 		shadow-sm: $shd-sm $shd-sm $shd-sm rgba(0, 0, 0, 0.5),
@@ -201,58 +184,54 @@ $themes: (
 		shadow-lg: $shd-lg $shd-lg $shd-lg rgba(0, 0, 0, 0.15),
 	),
 	wet: (
-		// Panel backgrounds (cool)
 		panel-bg: linear-gradient(
 				123deg,
-				hsla(305, 35%, 96%, 0.85) 0%,
-				hsla(335, 35%, 96%, 0.85) 25%,
-				hsla(5, 35%, 96%, 0.85) 50%,
-				hsla(35, 35%, 96%, 0.85) 75%,
-				hsla(65, 35%, 96%, 0.85) 100%
+				hsla(279, 35%, 96%, 0.88) 0%,
+				hsla(309, 35%, 96%, 0.88) 25%,
+				hsla(339, 35%, 96%, 0.88) 50%,
+				hsla(9, 35%, 96%, 0.88) 75%,
+				hsla(39, 35%, 96%, 0.88) 100%
 			),
-		panel-solid: rgba(248, 249, 250, 0.9),
-		panel-bg-alt: rgba(218, 219, 220, 0.8),
-		panel-bg-dark: rgba(189, 191, 193, 0.8),
-		panel-surface: rgb(253, 254, 255),
-		panel-hint: rgba(253, 254, 255, 0.1),
-		chart-bg: rgb(243, 245, 247),
-		chart-bg-alt: rgba(248, 249, 250, 0.8),
-		border: rgb(222, 226, 230),
-		// Primary interactive elements
+		panel-bg-dark: linear-gradient(
+				123deg,
+				hsla(279, 4%, 74%, 0.88) 0%,
+				hsla(309, 4%, 74%, 0.88) 25%,
+				hsla(339, 4%, 74%, 0.88) 50%,
+				hsla(9, 4%, 74%, 0.88) 75%,
+				hsla(39, 4%, 74%, 0.88) 100%
+			),
+		panel-bg-night: linear-gradient(
+				123deg,
+				hsla(279, 1%, 17%, 0.25) 0%,
+				hsla(309, 1%, 17%, 0.25) 25%,
+				hsla(339, 1%, 17%, 0.25) 50%,
+				hsla(9, 1%, 17%, 0.25) 75%,
+				hsla(39, 1%, 17%, 0.25) 100%
+			),
+		panel-solid: hsla(339, 15%, 97%, 1),
+		panel-bg-alt: hsla(159, 5%, 85%, 0.8),
+		panel-surface: hsl(159, 15%, 99%),
+		panel-hint: hsla(159, 50%, 95%, 0.35),
+		panel-hint2: hsla(339, 20%, 80%, 0.2),
+		border: hsl(159, 10%, 88%),
 		primary: $c3steal,
-		constrast: $c3sred,
+		contrast: $c3sorange,
 		primary-glass: rgba($c3steal, 0.7),
-		primary-glass-shine: rgba(
-				color.adjust($c3steal, $saturation: -10%, $lightness: 10%),
-				0.7
-			),
-		primary-glass-dark: rgba(
-				color.adjust($c3steal, $saturation: -10%, $lightness: -10%),
-				0.7
-			),
+		primary-glass-shine: rgba(color.adjust($c3steal, $saturation: -10%, $lightness: 10%), 0.7),
+		primary-glass-dark: rgba(color.adjust($c3steal, $saturation: -10%, $lightness: -10%), 0.7),
 		primary-hover: color.adjust($c3steal, $lightness: -8%),
 		primary-active: color.adjust($c3steal, $lightness: -12%),
-		primary-muted: color.adjust($c3steal, $lightness: +50%),
-		primary-selected: color.adjust($c3steal, $lightness: +65%),
+		primary-selected: color.adjust($c3steal, $lightness: 65%),
 		primary-unselected: color.adjust($c3steal, $saturation: -30%),
-		// Text hierarchy
 		text-primary: rgb(17, 17, 19),
 		text-secondary: rgb(100, 100, 105),
 		text-tertiary: rgb(142, 142, 147),
 		text-on-primary: rgb(255, 255, 255),
-		// Interactive text/links
-		text-interactive: $c3steal,
-		text-interactive-hover: color.adjust($c3steal, $lightness: -10%),
-		// Highlight
+		text-on-primary-shadow: 0 0 5px var(--text-on-primary),
 		highlight: $lightbulb,
 		highlight-hover: color.adjust($lightbulb, $lightness: -8%),
-		highlight-bg: color.adjust($lightbulb, $lightness: +45%, $saturation: -20%),
-		// Focus states
-		focus-ring: rgba(30, 58, 138, 0.4),
-		// Neutral interactive states
+		focus-ring: rgba($c3steal, 0.4),
 		hover-bg: rgba(0, 0, 0, 0.04),
-		hover-bg-dark: rgba(0, 0, 0, 0.08),
-		// Dividers
 		divider-subtle: rgba(0, 0, 0, 0.06),
 		divider: rgba(0, 0, 0, 0.1),
 		shadow-sm: $shd-sm $shd-sm $shd-sm rgba(0, 0, 0, 0.5),
@@ -260,59 +239,164 @@ $themes: (
 		shadow-lg: $shd-lg $shd-lg $shd-lg rgba(0, 0, 0, 0.15),
 	),
 	hotcold: (
-		// Panel backgrounds (neutral - averaged warm/cool)
 		panel-bg: linear-gradient(
 				123deg,
-				hsla(340, 35%, 96%, 0.85) 0%,
-				hsla(70, 35%, 96%, 0.85) 25%,
-				hsla(100, 35%, 96%, 0.85) 50%,
-				hsla(130, 35%, 96%, 0.85) 75%,
-				hsla(160, 35%, 96%, 0.85) 100%
+				hsla(41, 35%, 96%, 0.88) 0%,
+				hsla(71, 35%, 96%, 0.88) 25%,
+				hsla(101, 35%, 96%, 0.88) 50%,
+				hsla(131, 35%, 96%, 0.88) 75%,
+				hsla(161, 35%, 96%, 0.88) 100%
 			),
-		panel-solid: rgba(249, 248, 248, 0.9),
-		panel-bg-alt: rgba(219, 218, 218, 0.8),
-		panel-surface: rgb(253, 254, 253),
-		panel-hint: rgba(253, 254, 253, 0.1),
-		chart-bg: rgb(244, 245, 245),
-		chart-bg-alt: rgba(234, 233, 233, 0.8),
-		border: rgb(225, 225, 224),
-		// Primary interactive elements
+		panel-bg-dark: linear-gradient(
+				123deg,
+				hsla(41, 4%, 74%, 0.88) 0%,
+				hsla(71, 4%, 74%, 0.88) 25%,
+				hsla(101, 4%, 74%, 0.88) 50%,
+				hsla(131, 4%, 74%, 0.88) 75%,
+				hsla(161, 4%, 74%, 0.88) 100%
+			),
+		panel-bg-night: linear-gradient(
+				123deg,
+				hsla(41, 1%, 17%, 0.25) 0%,
+				hsla(71, 1%, 17%, 0.25) 25%,
+				hsla(101, 1%, 17%, 0.25) 50%,
+				hsla(131, 1%, 17%, 0.25) 75%,
+				hsla(161, 1%, 17%, 0.25) 100%
+			),
+		panel-solid: hsla(101, 10%, 97%, 1),
+		panel-bg-alt: hsla(281, 3%, 85%, 0.8),
+		panel-surface: hsl(281, 8%, 99%),
+		panel-hint: hsla(281, 40%, 95%, 0.35),
+		panel-hint2: hsla(101, 20%, 80%, 0.2),
+		border: hsl(281, 5%, 88%),
 		primary: $c3spurple,
 		contrast: $c3sgreen,
 		primary-glass: rgba($c3spurple, 0.7),
-		primary-glass-shine: rgba(
-				color.adjust($c3spurple, $saturation: 10%, $lightness: 10%),
-				0.7
-			),
-		primary-glass-dark: rgba(
-				color.adjust($c3spurple, $saturation: -10%, $lightness: -10%),
-				0.7
-			),
+		primary-glass-shine: rgba(color.adjust($c3spurple, $saturation: 10%, $lightness: 10%), 0.7),
+		primary-glass-dark: rgba(color.adjust($c3spurple, $saturation: -10%, $lightness: -10%), 0.7),
 		primary-hover: color.adjust($c3spurple, $lightness: -8%),
 		primary-active: color.adjust($c3spurple, $lightness: -12%),
-		primary-muted: color.adjust($c3spurple, $lightness: 50%),
 		primary-selected: color.adjust($c3spurple, $lightness: 65%),
 		primary-unselected: color.adjust($c3spurple, $saturation: -30%),
-		// Text hierarchy
 		text-primary: rgb(17, 17, 19),
 		text-secondary: rgb(100, 100, 105),
 		text-tertiary: rgb(142, 142, 147),
 		text-on-primary: rgb(255, 255, 255),
 		text-on-primary-shadow: 0 0 5px var(--text-on-primary),
-		text-on-primary-filter: drop-shadow(0 0 5px rgb(255, 255, 255)),
-		// Interactive text/links
-		text-interactive: $c3spurple,
-		text-interactive-hover: color.adjust($c3spurple, $lightness: -10%),
-		// Highlight
 		highlight: $lightbulb,
 		highlight-hover: color.adjust($lightbulb, $lightness: -8%),
-		highlight-bg: color.adjust($lightbulb, $lightness: +45%, $saturation: -20%),
-		// Focus states
-		focus-ring: rgba(125, 48, 88, 0.4),
-		// Neutral interactive states
+		focus-ring: rgba($c3spurple, 0.4),
 		hover-bg: rgba(0, 0, 0, 0.04),
-		hover-bg-dark: rgba(0, 0, 0, 0.08),
-		// Dividers
+		divider-subtle: rgba(0, 0, 0, 0.06),
+		divider: rgba(0, 0, 0, 0.1),
+		shadow-sm: $shd-sm $shd-sm $shd-sm rgba(0, 0, 0, 0.5),
+		shadow-md: $shd-md $shd-md $shd-md rgba(0, 0, 0, 0.2),
+		shadow-lg: $shd-lg $shd-lg $shd-lg rgba(0, 0, 0, 0.15),
+	),
+	hotwet: (
+		panel-bg: linear-gradient(
+				123deg,
+				hsla(145, 35%, 96%, 0.88) 0%,
+				hsla(175, 35%, 96%, 0.88) 25%,
+				hsla(205, 35%, 96%, 0.88) 50%,
+				hsla(235, 35%, 96%, 0.88) 75%,
+				hsla(265, 35%, 96%, 0.88) 100%
+			),
+		panel-bg-dark: linear-gradient(
+				123deg,
+				hsla(145, 4%, 74%, 0.88) 0%,
+				hsla(175, 4%, 74%, 0.88) 25%,
+				hsla(205, 4%, 74%, 0.88) 50%,
+				hsla(235, 4%, 74%, 0.88) 75%,
+				hsla(265, 4%, 74%, 0.88) 100%
+			),
+		panel-bg-night: linear-gradient(
+				123deg,
+				hsla(145, 1%, 17%, 0.25) 0%,
+				hsla(175, 1%, 17%, 0.25) 25%,
+				hsla(205, 1%, 17%, 0.25) 50%,
+				hsla(235, 1%, 17%, 0.25) 75%,
+				hsla(265, 1%, 17%, 0.25) 100%
+			),
+		panel-solid: hsla(205, 15%, 97%, 1),
+		panel-bg-alt: hsla(25, 5%, 85%, 0.8),
+		panel-surface: hsl(25, 10%, 99%),
+		panel-hint: hsla(25, 60%, 95%, 0.35),
+		panel-hint2: hsla(205, 20%, 80%, 0.2),
+		border: hsl(25, 10%, 88%),
+		primary: $c3sorange,
+		contrast: $c3spurple,
+		primary-glass: rgba($c3sorange, 0.7),
+		primary-glass-shine: rgba(color.adjust($c3sorange, $saturation: -10%, $lightness: 10%), 0.7),
+		primary-glass-dark: rgba(color.adjust($c3sorange, $saturation: -10%, $lightness: -10%), 0.7),
+		primary-hover: color.adjust($c3sorange, $lightness: -8%),
+		primary-active: color.adjust($c3sorange, $lightness: -12%),
+		primary-selected: color.adjust($c3sorange, $lightness: 65%),
+		primary-unselected: color.adjust($c3sorange, $saturation: -30%),
+		text-primary: rgb(17, 17, 19),
+		text-secondary: rgb(100, 100, 105),
+		text-tertiary: rgb(142, 142, 147),
+		text-on-primary: rgb(255, 255, 255),
+		text-on-primary-shadow: 0 0 5px var(--text-on-primary),
+		highlight: $lightbulb,
+		highlight-hover: color.adjust($lightbulb, $lightness: -8%),
+		focus-ring: rgba($c3sorange, 0.4),
+		hover-bg: rgba(0, 0, 0, 0.04),
+		divider-subtle: rgba(0, 0, 0, 0.06),
+		divider: rgba(0, 0, 0, 0.1),
+		shadow-sm: $shd-sm $shd-sm $shd-sm rgba(0, 0, 0, 0.5),
+		shadow-md: $shd-md $shd-md $shd-md rgba(0, 0, 0, 0.2),
+		shadow-lg: $shd-lg $shd-lg $shd-lg rgba(0, 0, 0, 0.15),
+	),
+	coldwet: (
+		panel-bg: linear-gradient(
+				123deg,
+				hsla(305, 35%, 96%, 0.88) 0%,
+				hsla(335, 35%, 96%, 0.88) 25%,
+				hsla(5, 35%, 96%, 0.88) 50%,
+				hsla(35, 35%, 96%, 0.88) 75%,
+				hsla(65, 35%, 96%, 0.88) 100%
+			),
+		panel-bg-dark: linear-gradient(
+				123deg,
+				hsla(305, 4%, 74%, 0.88) 0%,
+				hsla(335, 4%, 74%, 0.88) 25%,
+				hsla(5, 4%, 74%, 0.88) 50%,
+				hsla(35, 4%, 74%, 0.88) 75%,
+				hsla(65, 4%, 74%, 0.88) 100%
+			),
+		panel-bg-night: linear-gradient(
+				123deg,
+				hsla(305, 1%, 17%, 0.25) 0%,
+				hsla(335, 1%, 17%, 0.25) 25%,
+				hsla(5, 1%, 17%, 0.25) 50%,
+				hsla(35, 1%, 17%, 0.25) 75%,
+				hsla(65, 1%, 17%, 0.25) 100%
+			),
+		panel-solid: hsla(5, 10%, 97%, 1),
+		panel-bg-alt: hsla(185, 5%, 85%, 0.8),
+		panel-surface: hsl(185, 10%, 99%),
+		panel-hint: hsla(185, 50%, 95%, 0.35),
+		panel-hint2: hsla(5, 20%, 80%, 0.2),
+		border: hsl(185, 10%, 88%),
+		primary: $c3saqua,
+		contrast: $c3sred,
+		primary-glass: rgba($c3saqua, 0.7),
+		primary-glass-shine: rgba(color.adjust($c3saqua, $saturation: -10%, $lightness: 10%), 0.7),
+		primary-glass-dark: rgba(color.adjust($c3saqua, $saturation: -10%, $lightness: -10%), 0.7),
+		primary-hover: color.adjust($c3saqua, $lightness: -8%),
+		primary-active: color.adjust($c3saqua, $lightness: -12%),
+		primary-selected: color.adjust($c3saqua, $lightness: 65%),
+		primary-unselected: color.adjust($c3saqua, $saturation: -30%),
+		text-primary: rgb(17, 17, 19),
+		text-secondary: rgb(100, 100, 105),
+		text-tertiary: rgb(142, 142, 147),
+		text-on-primary: rgb(255, 255, 255),
+		text-on-primary-shadow: 0 0 5px var(--text-on-primary),
+		highlight: $lightbulb,
+		highlight-hover: color.adjust($lightbulb, $lightness: -8%),
+		focus-ring: rgba($c3saqua, 0.4),
+		hover-bg: rgba(0, 0, 0, 0.04),
 		divider-subtle: rgba(0, 0, 0, 0.06),
 		divider: rgba(0, 0, 0, 0.1),
 		shadow-sm: $shd-sm $shd-sm $shd-sm rgba(0, 0, 0, 0.5),

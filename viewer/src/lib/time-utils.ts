@@ -54,10 +54,9 @@ export function getEventBoxes(
 		color: string
 	}[],
 	year: number,
-	splitHotAndCold: boolean = false,
-
+	eventMode: SelectedEventType,
 ): { events: EventBox[]; maxEvents: number } {
-	// console.log('getEventBoxes', events, year, splitHotAndCold)
+	// console.log('getEventBoxes', events, year, splitByEventType)
 	// Step 1: Filter and slice in one go, reuse timestamps to avoid creating Date objects
 
 	const yearStart = Date.UTC(year, 0, 1)
@@ -82,7 +81,7 @@ export function getEventBoxes(
 	// Step 2: Assign y-positions using a greedy row-packing algorithm
 
 	let maxY = 0
-	if (!splitHotAndCold) {
+	if (eventMode == 'hot' || eventMode == 'cold' || eventMode == 'wet') {
 		const rows: number[] = [] // row[y] = lastEndX
 		eventBars.sort((a, b) => a.startX - b.startX)
 
@@ -96,29 +95,41 @@ export function getEventBoxes(
 			if (y > maxY) maxY = y
 		}
 	} else {
-		const hotRows: number[] = [] // row[y] = lastEndX
-		const coldRows: number[] = [] // row[y] = lastEndX
+		const topRows: number[] = [] // row[y] = lastEndX
+		const btmRows: number[] = [] // row[y] = lastEndX
+		let topVar
+		let btmVar
+		if (eventMode === 'hotwet') {
+			topVar = 'hot'
+			btmVar = 'wet'
+		} else if (eventMode === 'coldwet') {
+			topVar = 'cold'
+			btmVar = 'wet'
+		} else {
+			topVar = 'hot'
+			btmVar = 'cold'
+		}
 
 		for (let e of eventBars
-			.filter((ev) => ev.type === 'hot')
+			.filter((ev) => ev.type === topVar)
 			.sort((a, b) => a.startX - b.startX)) {
 			let y = 0
-			for (; y < hotRows.length; y++) {
-				if (hotRows[y] < e.startX) break
+			for (; y < topRows.length; y++) {
+				if (topRows[y] < e.startX) break
 			}
 			e.y = y
-			hotRows[y] = e.endX
+			topRows[y] = e.endX
 			if (y > maxY) maxY = y
 		}
 		for (let e of eventBars
-			.filter((ev) => ev.type === 'cold')
+			.filter((ev) => ev.type === btmVar)
 			.sort((a, b) => a.startX - b.startX)) {
 			let y = 0
-			for (; y < coldRows.length; y++) {
-				if (coldRows[y] < e.startX) break
+			for (; y < btmRows.length; y++) {
+				if (btmRows[y] < e.startX) break
 			}
 			e.y = y
-			coldRows[y] = e.endX
+			btmRows[y] = e.endX
 			if (y > maxY) maxY = y
 		}
 		maxY *= 2

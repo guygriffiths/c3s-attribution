@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { niceNumber } from '@/lib/utils'
 
 interface Props {
 	colorfunc: (val: number) => string
@@ -13,12 +14,6 @@ const props = defineProps<Props>()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 const height = 20
-
-// Format numbers nicely (remove unnecessary decimals)
-const formatValue = (val: number): string => {
-	if (Number.isInteger(val)) return val.toString()
-	return val.toFixed(1)
-}
 
 // Draw gradient on canvas for smooth color transitions
 const drawGradient = () => {
@@ -75,7 +70,7 @@ watch(() => props.domain, () => {
 <template>
 	<div class="color-scale">
 		<div class="scale-wrapper">
-			<span class="value min">{{ formatValue(props.domain[0]) }}{{ props.units }}</span>
+			<span class="value min">{{ niceNumber(props.domain[0]) }}{{ props.units }}</span>
 			
 			<div class="scale-bar" ref="containerRef">
 				<canvas
@@ -85,7 +80,7 @@ watch(() => props.domain, () => {
 				/>
 			</div>
 			
-			<span class="value max">{{ formatValue(props.domain[1]) }}{{ props.units }}</span>
+			<span class="value max">{{ niceNumber(props.domain[1]) }}{{ props.units }}</span>
 		</div>
 		<div class="scale-label" v-if="props.label">{{ props.label }}</div>
 	</div>

@@ -12,6 +12,7 @@ import {
 	IconTemperatureSnow,
 	IconTemperatureMinus,
 	IconTemperaturePlus,
+	IconCloudRain,
 } from '@tabler/icons-vue'
 import { niceNumber } from '@/lib/utils'
 
@@ -68,7 +69,7 @@ const downloadEvent = () => {
 				class="icon"
 				aria-hidden="true"
 			/>
-			<IconTemperature class="icon" aria-hidden="true" v-else />
+			<IconCloudRain v-else class="icon" aria-hidden="true" />
 			<h2 class="label mono">{{ timeRange }}</h2>
 		</div>
 		<div class="info-row" v-tooltip="$l.duration">
@@ -90,7 +91,7 @@ const downloadEvent = () => {
 		<div
 			class="info-row"
 			v-tooltip="
-				props.selectedEvent.event_type === 'hot' ? $l.maxTemp : $l.minTemp
+				props.selectedEvent.event_type === 'hot' ? $l.maxTemp : props.selectedEvent.event_type === 'cold' ? $l.minTemp : $l.wetIntensityLabel
 			"
 		>
 			<IconTemperaturePlus
@@ -103,12 +104,17 @@ const downloadEvent = () => {
 				class="icon"
 				aria-hidden="true"
 			/>
-			<IconTemperature class="icon" v-else aria-hidden="true" />
+			<IconCloudRain class="icon" v-else aria-hidden="true" />
 			<!-- <span class="label">{{ $l.intensity }}:</span> -->
 			<span class="value mono"
 				>{{ niceNumber(eventStore.intensityForEvent(props.selectedEvent)) }}
-				{{ eventStore.intensityUnits }}</span
-			>
+				{{ selectedEvent.event_type === 'hot'
+					? eventStore.heatIntensityUnits
+					: selectedEvent.event_type === 'cold'
+						? eventStore.coldIntensityUnits
+						: eventStore.wetIntensityUnits
+				}}
+			</span>
 		</div>
 
 		<div class="info-row" v-tooltip="$l.reportId">

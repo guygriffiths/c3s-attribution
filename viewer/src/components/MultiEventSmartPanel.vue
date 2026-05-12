@@ -13,6 +13,7 @@ import {
 	IconArrowsDiagonal,
 	IconZoomScan,
 	IconViewfinder,
+	IconCloudRain,
 } from '@tabler/icons-vue'
 import { ref, watch, computed } from 'vue'
 import { getBins } from '@/lib/histo-utils'
@@ -234,13 +235,17 @@ const getXYScatterTitle = computed(() => {
 			? $l.value.duration
 			: store.focusVariable === 'size'
 				? $l.value.size
-				: $l.value.intensity
+				: eventStore.eventTypeMode === 'wet'
+					? $l.value.wetIndex
+					: $l.value.temperature
 	const yLabel =
 		scatterY.value === 'duration'
 			? $l.value.duration
 			: scatterY.value === 'size'
 				? $l.value.size
-				: $l.value.intensity
+				: eventStore.eventTypeMode === 'wet'
+					? $l.value.wetIndex
+					: $l.value.temperature
 	return `${yLabel} vs ${xLabel}`
 })
 </script>
@@ -280,7 +285,9 @@ const getXYScatterTitle = computed(() => {
 								? $l.durationHisto
 								: store.focusVariable === 'size'
 									? $l.sizeHisto
-									: $l.intensityHisto
+									: eventStore.eventTypeMode === 'wet'
+										? $l.wetHisto
+										: $l.tempHisto
 						"
 					/>
 				</div>
@@ -297,7 +304,9 @@ const getXYScatterTitle = computed(() => {
 									? $l.duration
 									: store.focusVariable === 'size'
 										? $l.size
-										: $l.intensity) +
+										: eventStore.eventTypeMode === 'wet'
+											? $l.wetIndex
+											: $l.temperature) +
 								' (' +
 								$l.cycleSortVariable +
 								')'
@@ -311,7 +320,11 @@ const getXYScatterTitle = computed(() => {
 								v-else-if="store.focusVariable === 'size'"
 								aria-hidden="true"
 							/>
-							<IconTemperature v-else aria-hidden="true" />
+							<IconTemperature
+								v-else-if="eventStore.eventTypeMode !== 'wet'"
+								aria-hidden="true"
+							/>
+							<IconCloudRain v-else aria-hidden="true" />
 						</button>
 						<span v-if="store.focusVariable === 'duration'">{{
 							$l.duration
@@ -319,7 +332,9 @@ const getXYScatterTitle = computed(() => {
 						<span v-else-if="store.focusVariable === 'size'">{{
 							$l.size
 						}}</span>
-						<span v-else>{{ $l.intensity }}</span>
+						<span v-else>{{
+							eventStore.eventTypeMode === 'wet' ? $l.wetIndex : $l.temperature
+						}}</span>
 					</span>
 					<div class="label mono">
 						{{ niceNumber(xmax) }}
@@ -339,7 +354,9 @@ const getXYScatterTitle = computed(() => {
 										? $l.duration
 										: scatterY === 'size'
 											? $l.size
-											: $l.intensity) +
+											: eventStore.eventTypeMode === 'wet'
+												? $l.wetIndex
+												: $l.temperature) +
 									' (' +
 									$l.cycleSortVariable +
 									')'
@@ -353,11 +370,15 @@ const getXYScatterTitle = computed(() => {
 									v-else-if="scatterY === 'size'"
 									aria-hidden="true"
 								/>
-								<IconTemperature v-else aria-hidden="true" />
+								<IconTemperature
+									v-else-if="eventStore.eventTypeMode !== 'wet'"
+									aria-hidden="true"
+								/>
+								<IconCloudRain v-else aria-hidden="true" />
 							</button>
 							<span v-if="scatterY === 'duration'">{{ $l.duration }}</span>
 							<span v-else-if="scatterY === 'size'">{{ $l.size }}</span>
-							<span v-else>{{ $l.intensity }}</span>
+							<span v-else>{{ eventStore.eventTypeMode === 'wet' ? $l.wetIndex : $l.temperature }}</span>
 						</span>
 						<div class="label mono">
 							{{ niceNumber(ymax) }}
@@ -395,7 +416,9 @@ const getXYScatterTitle = computed(() => {
 									? $l.duration
 									: store.focusVariable === 'size'
 										? $l.size
-										: $l.intensity) +
+										: eventStore.eventTypeMode === 'wet'
+											? $l.wetIndex
+											: $l.temperature) +
 								' (' +
 								$l.cycleSortVariable +
 								')'
@@ -409,7 +432,11 @@ const getXYScatterTitle = computed(() => {
 								v-else-if="store.focusVariable === 'size'"
 								aria-hidden="true"
 							/>
-							<IconTemperature v-else aria-hidden="true" />
+							<IconTemperature
+								v-else-if="eventStore.eventTypeMode !== 'wet'"
+								aria-hidden="true"
+							/>
+							<IconCloudRain v-else aria-hidden="true" />
 						</button>
 						<span v-if="store.focusVariable === 'duration'">{{
 							$l.duration
@@ -417,7 +444,7 @@ const getXYScatterTitle = computed(() => {
 						<span v-else-if="store.focusVariable === 'size'">{{
 							$l.size
 						}}</span>
-						<span v-else>{{ $l.intensity }}</span>
+						<span v-else>{{ eventStore.eventTypeMode === 'wet' ? $l.wetIndex : $l.temperature }}</span>
 					</span>
 					<div class="label mono">
 						{{ niceNumber(xmax) }}
@@ -437,7 +464,9 @@ const getXYScatterTitle = computed(() => {
 										? $l.duration
 										: store.focusVariable === 'size'
 											? $l.size
-											: $l.intensity) +
+											: eventStore.eventTypeMode === 'wet'
+												? $l.wetIndex
+												: $l.temperature) +
 									' (' +
 									$l.cycleSortVariable +
 									')'
@@ -451,7 +480,11 @@ const getXYScatterTitle = computed(() => {
 									v-else-if="store.focusVariable === 'size'"
 									aria-hidden="true"
 								/>
-								<IconTemperature v-else aria-hidden="true" />
+								<IconTemperature
+									v-else-if="eventStore.eventTypeMode !== 'wet'"
+									aria-hidden="true"
+								/>
+								<IconCloudRain v-else aria-hidden="true" />
 							</button>
 							<span v-if="store.focusVariable === 'duration'">{{
 								$l.duration
@@ -459,7 +492,7 @@ const getXYScatterTitle = computed(() => {
 							<span v-else-if="store.focusVariable === 'size'">{{
 								$l.size
 							}}</span>
-							<span v-else>{{ $l.intensity }}</span>
+							<span v-else>{{ eventStore.eventTypeMode === 'wet' ? $l.wetIndex : $l.temperature }}</span>
 						</span>
 						<div class="label mono">
 							{{ niceNumber(xmax) }}
@@ -488,7 +521,9 @@ const getXYScatterTitle = computed(() => {
 								? $l.durationTimeSeries
 								: store.focusVariable === 'size'
 									? $l.sizeTimeSeries
-									: $l.intensityTimeSeries
+									: eventStore.eventTypeMode === 'wet'
+										? $l.wetTimeSeries
+										: $l.tempTimeSeries
 						"
 					/>
 				</div>

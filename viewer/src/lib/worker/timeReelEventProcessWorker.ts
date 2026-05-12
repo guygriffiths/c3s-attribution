@@ -9,12 +9,12 @@ self.onmessage = async (
 	e: MessageEvent<{
 		events: {
 			times: number[]
-			event_type: 'hot' | 'cold'
+			event_type: 'hot' | 'cold' | 'wet'
 			id: string
 			color: string
 		}[]
 		years: number[]
-		mixedEvents: boolean
+		mixedEvents: SelectedEventType
 		start: number
 		end: number
 	}>,
@@ -35,8 +35,10 @@ self.onmessage = async (
 	// console.log('totalDays:', totalDays, start, end)
 	const cwCounts = new Array(totalDays).fill(0)
 	const hwCounts = new Array(totalDays).fill(0)
+	const wwCounts = new Array(totalDays).fill(0)
 	let hotEventsActive = false
 	let coldEventsActive = false
+	let wetEventsActive = false
 	events.forEach((event) => {
 		event?.times.forEach((time: number) => {
 			const daysFromStart = Math.floor((time - start) / (1000 * 60 * 60 * 24))
@@ -47,6 +49,9 @@ self.onmessage = async (
 			} else if (event.event_type === 'hot') {
 				hwCounts[daysFromStart] += 1
 				hotEventsActive = true
+			} else if (event.event_type === 'wet') {
+				wwCounts[daysFromStart] += 1
+				wetEventsActive = true
 			}
 		})
 	})
@@ -57,14 +62,35 @@ self.onmessage = async (
 		}
 	}
 
-	const newDs = getAreaString(
-		hwCounts,
-		hotEventsActive,
-		cwCounts,
-		coldEventsActive,
-		years,
-		start,
-	)
+	let newDs: Record<number, string> = {}
+	if(mixedEvents === 'hotcold') {
+		newDs = getAreaString(
+			hwCounts,
+			hotEventsActive,
+			cwCounts,
+			coldEventsActive,
+			years,
+			start,
+		)
+	} else if(mixedEvents === 'hotwet') {
+		newDs = getAreaString(
+			hwCounts,
+			hotEventsActive,
+			wwCounts,
+			wetEventsActive,
+			years,
+			start,
+		)
+	} else if(mixedEvents === 'coldwet') {
+		newDs = getAreaString(
+			cwCounts,
+			coldEventsActive,
+			wwCounts,
+			wetEventsActive,
+			years,
+			start,
+		)
+	}
 	// console.log('Time reel worker posting message back', newDs)
 
 	self.postMessage({

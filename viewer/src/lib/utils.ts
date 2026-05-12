@@ -79,7 +79,7 @@ export const interpolateColorCold = (
 }
 
 export const interpolateColorWet = (
-	baseColor: string = 'rgb(44, 102, 162)',
+	baseColor: string = 'orange',
 ) => {
 	const hcl = d3.lch(baseColor)
 	return (t: number) => {
@@ -171,6 +171,10 @@ export const niceNumber = (n: number) => {
 	if (abs >= 1e9) return fmt(num / 1e9) + 'b'
 	if (abs >= 1e6) return fmt(num / 1e6) + 'm'
 	if (abs >= 1e3) return fmt(num / 1e3) + 'k'
+	if (abs === 0 || abs >= 0.1) return fmt(num)
+	if (abs >= 1e-3) return fmt(num * 1e3) + 'e-3'
+	if (abs >= 1e-6) return fmt(num * 1e6) + 'e-6'
+	if (abs >= 1e-9) return fmt(num * 1e9) + 'e-9'
 
-	return fmt(num) // plain number
+	return fmt(num * 1e12) + 'e-12'
 }

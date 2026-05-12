@@ -60,14 +60,14 @@ export const colorForValue = (
 	v: number,
 	type: EventType,
 	scale: d3.ScaleLinear<number, number>,
-) => {
+): string => {
 	// if (!event || !scale) return (v: number) => 'transparent'
 	if (type === 'hot') {
 		return interpolateColorHot(scssVars.c3sred)(scale(v))
 	} else if (type === 'cold') {
 		return interpolateColorCold(scssVars.c3sblue)(scale(v))
-	} else if (type === 'wet') {
-		return interpolateColorWet(scssVars.c3sgreen)(scale(v))
+	} else {
+		return interpolateColorWet(scssVars.c3steal)(scale(v))
 	}
 }
 
@@ -113,13 +113,13 @@ export const useStore = defineStore('events', {
 			coldIntensityRange: [-20, 0],
 			coldIntensityUnits: '°C',
 			wetIntensityRange: [0, 2],
-			wetIntensityUnits: 'precipitation index',
+			wetIntensityUnits: 'WDI',
 			durationP90: null,
 			sizeP90: null,
 			heatIntensityP90: null,
 			coldIntensityP90: null,
 			wetIntensityP90: null,
-			eventTypeMode: 'cold',
+			eventTypeMode: 'wet',
 			eventSetsLoaded: 0,
 			filters: {
 				duration: {
@@ -134,7 +134,7 @@ export const useStore = defineStore('events', {
 					minimum: true,
 					type: 'max',
 					value: 28,
-					active: true,
+					active: false,
 				},
 				coldIntensity: {
 					minimum: false,
@@ -144,8 +144,8 @@ export const useStore = defineStore('events', {
 				},
 				wetIntensity: {
 					minimum: true,
-					value: 2,
-					active: false,
+					value: 0,
+					active: true,
 				},
 			},
 			firstEventSetLoaded: false,
@@ -162,6 +162,8 @@ export const useStore = defineStore('events', {
 				return state.heatDurationRange
 			} else if (state.eventTypeMode === 'cold') {
 				return state.coldDurationRange
+			} else if (state.eventTypeMode === 'wet') {
+				return state.wetDurationRange
 			} else {
 				return [0, 1]
 			}
@@ -176,6 +178,8 @@ export const useStore = defineStore('events', {
 				return state.heatSizeRange
 			} else if (state.eventTypeMode === 'cold') {
 				return state.coldSizeRange
+			} else if (state.eventTypeMode === 'wet') {
+				return state.wetSizeRange
 			} else {
 				return [0, 1]
 			}
@@ -190,6 +194,8 @@ export const useStore = defineStore('events', {
 				return state.heatIntensityRange
 			} else if (state.eventTypeMode === 'cold') {
 				return state.coldIntensityRange
+			} else if (state.eventTypeMode === 'wet') {
+				return state.wetIntensityRange
 			} else {
 				return [0, 1]
 			}
@@ -199,6 +205,8 @@ export const useStore = defineStore('events', {
 				return state.heatIntensityUnits
 			} else if (state.eventTypeMode === 'cold') {
 				return state.coldIntensityUnits
+			} else if (state.eventTypeMode === 'wet') {
+				return state.wetIntensityUnits
 			} else {
 				return '°C'
 			}
@@ -365,7 +373,10 @@ export const useStore = defineStore('events', {
 			const mainStore = useMainStore()
 			await mainStore.setLoading('Changing event type...')
 			this.eventTypeMode = mode || 'hot'
-			setTheme(mode === 'hot' ? 'hot' : mode === 'cold' ? 'cold' : 'hotcold')
+			setTheme(mode || 'hot')
+			this.filters.heatIntensity.active = mode === 'hot'     || mode === 'hotcold' || mode === 'hotwet'
+			this.filters.coldIntensity.active = mode === 'cold'    || mode === 'hotcold' || mode === 'coldwet'
+			this.filters.wetIntensity.active  = mode === 'wet'     || mode === 'hotwet'  || mode === 'coldwet'
 			mainStore.setLoadingDone()
 		},
 		cycleEventType() {
@@ -393,6 +404,7 @@ export const useStore = defineStore('events', {
 			this.firstEventSetLoaded = false
 			const mainStore = useMainStore()
 			mainStore.setLoading()
+			setTheme(this.eventTypeMode === 'hot' ? 'hot' : this.eventTypeMode === 'cold' ? 'cold' : this.eventTypeMode === 'wet' ? 'wet' : 'hotcold')
 			watch(() => [this.filters], this.runFilters, {
 				deep: true,
 				immediate: false,
@@ -451,7 +463,6 @@ export const useStore = defineStore('events', {
 
 				let localHeatMin = Infinity
 				let localColdMin = Infinity
-				let localWetMin = Infinity
 				let localHeatMax = -Infinity
 				let localColdMax = -Infinity
 				let localWetMax = -Infinity
@@ -512,9 +523,6 @@ export const useStore = defineStore('events', {
 						if (size > this.wetSizeRange[1]) {
 							this.wetSizeRange[1] = size
 						}
-						if (intensity < localWetMin) {
-							localWetMin = intensity
-						}
 						if (intensity > localWetMax) {
 							localWetMax = intensity
 						}
@@ -542,8 +550,9 @@ export const useStore = defineStore('events', {
 					localColdMin === Infinity ? 0 : localColdMin,
 					localColdMax === -Infinity ? 0 : localColdMax,
 				]
+				// It's an index - always start at 0
 				this.wetIntensityRange = [
-					localWetMin === Infinity ? 0 : localWetMin,
+					0,
 					localWetMax === -Infinity ? 0 : localWetMax,
 				]
 			})

@@ -659,8 +659,10 @@ const endNeedleOffsetPx = computed(() => {
 
 const eventBoxesForYear = ref<Record<number, EventBox[]>>({})
 const positionY = (y: number, eventType: EventType) => {
-	if (props.eventType === 'hotcold') {
+	if (props.eventType === 'hotcold' || props.eventType === 'hotwet') {
 		return (0.5 + y) * eventHeight.value * (eventType === 'hot' ? -1 : 1)
+	} else if (props.eventType === 'coldwet') {
+		return (0.5 + y) * eventHeight.value * (eventType === 'cold' ? -1 : 1)
 	} else {
 		if (y % 2 !== 0) {
 			return 0.5 * y * eventHeight.value
@@ -672,7 +674,13 @@ const positionY = (y: number, eventType: EventType) => {
 
 onMounted(() => {
 	for (let year of years.value) {
-		const res = getEventBoxes(props.events, year, props.eventType === 'hotcold')
+		const res = getEventBoxes(
+			props.events,
+			year,
+			props.eventType === 'hotcold' ||
+				props.eventType === 'hotwet' ||
+				props.eventType === 'coldwet',
+		)
 		eventBoxesForYear.value[year] = res.events
 	}
 	const handleKey = (e: KeyboardEvent) => {
@@ -847,7 +855,7 @@ watch(
 				color: props.colorForEvent(e),
 			})),
 			years: years.value,
-			mixedEvents: props.eventType === 'hotcold',
+			mixedEvents: props.eventType,
 			start: props.start.getTime(),
 			end: props.end.getTime(),
 		})
@@ -1128,11 +1136,23 @@ const dateTranslate = computed(() => {
 						preserveAspectRatio="none"
 					>
 						<defs>
-							<linearGradient id="heatColdGradient" x1="0" y1="0" x2="0" y2="1">
+							<linearGradient id="hotColdGradient" x1="0" y1="0" x2="0" y2="1">
 								<stop offset="0%" :stop-color="scssVars.c3sred" />
 								<stop offset="49%" :stop-color="scssVars.c3sred" />
 								<stop offset="51%" :stop-color="scssVars.c3sblue" />
 								<stop offset="100%" :stop-color="scssVars.c3sblue" />
+							</linearGradient>
+							<linearGradient id="hotWetGradient" x1="0" y1="0" x2="0" y2="1">
+								<stop offset="0%" :stop-color="scssVars.c3sred" />
+								<stop offset="49%" :stop-color="scssVars.c3sred" />
+								<stop offset="51%" :stop-color="scssVars.c3steal" />
+								<stop offset="100%" :stop-color="scssVars.c3steal" />
+							</linearGradient>
+							<linearGradient id="coldWetGradient" x1="0" y1="0" x2="0" y2="1">
+								<stop offset="0%" :stop-color="scssVars.c3sblue" />
+								<stop offset="49%" :stop-color="scssVars.c3sblue" />
+								<stop offset="51%" :stop-color="scssVars.c3steal" />
+								<stop offset="100%" :stop-color="scssVars.c3steal" />
 							</linearGradient>
 							<filter
 								id="blur"
@@ -1250,10 +1270,16 @@ const dateTranslate = computed(() => {
 									:class="{
 										hot:
 											props.eventType === 'hot' ||
-											props.eventType === 'hotcold',
+											props.eventType === 'hotcold' ||
+											props.eventType === 'hotwet',
 										cold:
 											props.eventType === 'cold' ||
-											props.eventType === 'hotcold',
+											props.eventType === 'hotcold' ||
+											props.eventType === 'coldwet',
+										wet:
+											props.eventType === 'wet' ||
+											props.eventType === 'hotwet' ||
+											props.eventType === 'coldwet',
 									}"
 									d=""
 									vector-effect="non-scaling-stroke"
@@ -1381,9 +1407,8 @@ const dateTranslate = computed(() => {
 					v-if="isDefault || isZoom || selectedEvent"
 					:style="`transform: translateX(calc(${needleOffsetPx - 6}px));`"
 					@mousedown="startDrag"
-					
 				>
-					<div class="line"  />
+					<div class="line" />
 				</div>
 				<div
 					class="needle range off"
@@ -1701,9 +1726,21 @@ const dateTranslate = computed(() => {
 			stroke: $c3sblue;
 			fill: $c3sblue;
 		}
+		&.wet {
+			stroke: $c3steal;
+			fill: $c3steal;
+		}
 		&.hot.cold {
-			stroke: url(#heatColdGradient);
-			fill: url(#heatColdGradient);
+			stroke: url(#hotColdGradient);
+			fill: url(#hotColdGradient);
+		}
+		&.hot.wet {
+			stroke: url(#hotWetGradient);
+			fill: url(#hotWetGradient);
+		}
+		&.cold.wet {
+			stroke: url(#coldWetGradient);
+			fill: url(#coldWetGradient);
 		}
 	}
 

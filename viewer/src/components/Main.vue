@@ -34,7 +34,7 @@ import {
 } from '@tabler/icons-vue'
 import { useEventFilters } from '@/lib/eventFilters'
 import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
-import { c3sred, c3sblue, c3sgreen } from '@/assets/styles/scssVars.module.scss'
+import { c3sred, c3sblue, c3steal } from '@/assets/styles/scssVars.module.scss'
 
 // Stores
 const $l = useLabels()
@@ -205,9 +205,9 @@ const getStackedC3sBlue = (value: number): string => {
 	return multiplyStackedColor(c3sblue, value)
 }
 
-const getStackedC3sGreen = (value: number): string => {
+const getStackedC3steal = (value: number): string => {
 	// C3S green is not in HSL format, so we hardcode an approximation here
-	return multiplyStackedColor(c3sgreen, value)
+	return multiplyStackedColor(c3steal, value)
 }
 </script>
 
@@ -250,8 +250,8 @@ const getStackedC3sGreen = (value: number): string => {
 					(val: number) => colorForValue(val, 'wet', eventStore.wetScale)
 				"
 				:domain="eventStore.wetScale.domain()"
-				label="scale"
-				unit="degC"
+				:label="$l.wetIntensityLabel"
+				units=""
 				v-if="wetScaleOn"
 			/>
 			<ColorScale
@@ -267,7 +267,7 @@ const getStackedC3sGreen = (value: number): string => {
 				v-if="coldHeatmapOn"
 			/>
 			<ColorScale
-				:colorfunc="getStackedC3sGreen"
+				:colorfunc="getStackedC3steal"
 				:domain="[0, 30]"
 				label="events"
 				v-if="wetHeatmapOn"

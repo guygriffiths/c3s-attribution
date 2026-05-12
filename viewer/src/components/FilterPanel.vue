@@ -11,6 +11,7 @@ import {
 	IconTemperaturePlus,
 	IconTemperatureMinus,
 	IconRefreshAlert,
+	IconCloudRain,
 } from '@tabler/icons-vue'
 import NumberSelect from './util/NumberSelect.vue'
 import { useStore } from '@/store/store'
@@ -68,6 +69,12 @@ const resetColdIntensity = async () => {
 	model.value.coldIntensity.minimum = false
 	store.setLoadingDone()
 }
+const resetWetIntensity = async () => {
+	await store.setLoading('Resetting wet intensity filter...')
+	model.value.wetIntensity.value = 0
+	model.value.wetIntensity.minimum = true
+	store.setLoadingDone()
+}
 const toggleDurationLtGt = async () => {
 	await store.setLoading('Updating duration filter...')
 	model.value.duration.minimum = !model.value.duration.minimum
@@ -86,6 +93,11 @@ const toggleHeatLtGt = async () => {
 const toggleColdLtGt = async () => {
 	await store.setLoading('Updating cold intensity filter...')
 	model.value.coldIntensity.minimum = !model.value.coldIntensity.minimum
+	store.setLoadingDone()
+}
+const toggleWetLtGt = async () => {
+	await store.setLoading('Updating wet intensity filter...')
+	model.value.wetIntensity.minimum = !model.value.wetIntensity.minimum
 	store.setLoadingDone()
 }
 
@@ -278,6 +290,49 @@ const sizeGetter = computed({
 					:disabled="
 						model.coldIntensity.value === 2 &&
 						model.coldIntensity.minimum === false
+					"
+				>
+					<IconRefreshAlert aria-hidden="true" />
+				</button>
+			</div>
+			<div class="filter-row" v-if="model.wetIntensity.active">
+				<IconCloudRain
+					aria-hidden="true"
+					v-tooltip.bottom="$l.wetIntensityLabel"
+				/>
+				<button
+					@click="toggleWetLtGt"
+					class="ltgt-button"
+					v-tooltip.bottom="
+						model.wetIntensity.minimum
+							? $l.switchTo + ' ' + $l.lessThan
+							: $l.switchTo + ' ' + $l.greaterThan
+					"
+				>
+					<IconMathEqualGreater
+						v-if="model.wetIntensity.minimum"
+						aria-hidden="true"
+					/>
+					<IconMathEqualLower v-else aria-hidden="true" />
+				</button>
+				<NumberSelect
+					v-model="model.wetIntensity.value"
+					:min="0"
+					:max="10"
+					:step="0.1"
+					class="number-input"
+					@loading-start="store.setLoading('Updating wet intensity filter...')"
+					@loading-end="store.setLoadingDone()"
+					v-tooltip.bottom="$l.wetIntensityLabel"
+				/>
+				<span class="units"> </span>
+				<button
+					@click="resetWetIntensity"
+					class="reset-button"
+					v-tooltip.bottom="$l.resetFilter"
+					:disabled="
+						model.wetIntensity.value === 0 &&
+						model.wetIntensity.minimum === true
 					"
 				>
 					<IconRefreshAlert aria-hidden="true" />

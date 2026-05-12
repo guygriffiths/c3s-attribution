@@ -214,7 +214,9 @@ watch(
 							? scssVars.c3sred
 							: p.type === 'cold'
 								? scssVars.c3sblue
-								: scssVars.c3spurple,
+								: p.type === 'wet'
+									? scssVars.c3steal
+									: scssVars.c3spurple,
 				})
 			} else {
 				const st = pointStates.get(key)!
@@ -410,7 +412,6 @@ onMounted(() => loop())
 	width: 100%;
 	height: 100%;
 	position: relative;
-
 
 	.tabler-icon {
 		width: min(35%, 2.5rem);

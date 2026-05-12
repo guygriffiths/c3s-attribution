@@ -303,6 +303,12 @@ const buildParameterFilterResults = (): ExtremeEvent[] => {
 				if (!cIntenF.minimum && _coldIntensityGetter(event) > cIntenF.value)
 					return false
 			}
+			const wIntenF = _parameterFilters!.wetIntensity
+			if (wIntenF.active && event.event_type === 'wet') {
+				const wetVal = event.mean_value
+				if (wIntenF.minimum && wetVal < wIntenF.value) return false
+				if (!wIntenF.minimum && wetVal > wIntenF.value) return false
+			}
 			const sizeF = _parameterFilters!.size
 			if (sizeF.minimum && _sizeGetter(event) < sizeF.value) return false
 			if (!sizeF.minimum && _sizeGetter(event) > sizeF.value) return false

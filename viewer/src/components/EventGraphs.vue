@@ -5,7 +5,7 @@ import * as d3 from 'd3'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useTimeStore } from '@/store/timeStore'
-import { IconDimensions, IconTemperatureMinus, IconTemperaturePlus } from '@tabler/icons-vue'
+import { IconDimensions, IconTemperatureMinus, IconTemperaturePlus, IconCloudRain } from '@tabler/icons-vue'
 import { niceNumber } from '@/lib/utils'
 import { dateStr } from '@/lib/time-utils'
 import { useLabels } from '@/lib/labels'
@@ -114,7 +114,7 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 		</div>
 		<div class="chart">
 			<h1 class="chart-title">
-				{{ $l.eventIntensityTS }}
+				{{ selectedEvent?.event_type === 'hot' || selectedEvent?.event_type === 'cold' ? $l.eventTempTS : $l.eventWetTS }}
 			</h1>
 			<div class="axis">
 				<div class="label mono">
@@ -123,12 +123,15 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 				<span class="unit-icon"
 					>
 					<IconTemperaturePlus v-if="selectedEvent?.event_type === 'hot'" class="icon" :class="{ [eventType]: true }" />
-					<IconTemperatureMinus v-else class="icon" :class="{ [eventType]: true }" />
+					<IconTemperatureMinus v-else-if="selectedEvent?.event_type === 'cold'" class="icon" :class="{ [eventType]: true }" />
+					<IconCloudRain v-else class="icon" :class="{ [eventType]: true }" />
 					
 					{{
 						selectedEvent?.event_type === 'hot'
 							? eventStore.heatIntensityUnits
-							: eventStore.coldIntensityUnits
+							: selectedEvent?.event_type === 'cold'
+								? eventStore.coldIntensityUnits
+								: eventStore.wetIntensityUnits
 					}}
 					</span
 				>
@@ -186,7 +189,7 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 							class="line-point"
 							@click="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
 							@keydown.space.prevent="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
-							v-tooltip="dateStr(new Date(props.selectedEvent?.times[i] || 0)) + ': ' + niceNumber(value) + ' ' + (selectedEvent?.event_type === 'hot' ? eventStore.heatIntensityUnits : eventStore.coldIntensityUnits)"	/>
+							v-tooltip="dateStr(new Date(props.selectedEvent?.times[i] || 0)) + ': ' + niceNumber(value) + ' ' + (selectedEvent?.event_type === 'hot' ? eventStore.heatIntensityUnits : selectedEvent?.event_type === 'cold' ? eventStore.coldIntensityUnits : eventStore.wetIntensityUnits)"	/>
 					</template>
 				</g>
 			</svg>
@@ -314,6 +317,15 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 			align-items: center;
 			font-size: 0.85rem;
 
+			.unit-icon {
+				display: flex;
+				align-items: center;
+				gap: 0.25rem;
+				color: var(--text-secondary);
+				flex-direction: column;
+				text-align: center;
+			}
+
 			.label {
 				user-select: none;
 				color: var(--text-secondary);
@@ -335,6 +347,9 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 				}
 				&.cold {
 					color: var(--theme-cold-primary);
+				}
+				&.wet {
+					color: var(--primary);
 				}
 			}
 		}
@@ -366,6 +381,9 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 		}
 		&.cold {
 			fill: var(--theme-cold-primary);
+		}
+		&.wet {
+			fill: var(--primary);
 		}
 		&.selected {
 			fill: var(--primary-glass-shine);
@@ -402,6 +420,9 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 		}
 		&.cold {
 			stroke: var(--theme-cold-primary);
+		}
+		&.wet {
+			stroke: var(--primary);
 		}
 	}
 

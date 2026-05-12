@@ -15,7 +15,9 @@ declare module '*.module.scss' {
   export const c3sblue: string
   export const c3spurple: string
   export const c3sgreen: string
+  export const c3steal: string
   export const c3sorange: string
+  export const c3saqua: string
   export const c3sgrey: string
   export const lightbulb: string
   export const animTime: string

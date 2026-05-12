@@ -414,7 +414,7 @@ const renderTile = (props: any) => {
 		(v: number) =>
 			colorForValue(
 				v,
-				eventStore.selectedEvent?.event_type,
+				eventStore.selectedEvent?.event_type ?? 'hot',
 				cScale.value,
 			),
 		(v: number) =>

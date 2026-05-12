@@ -1,4 +1,4 @@
-import { c3sblue, c3sgreen, c3sred } from '@/assets/styles/colors'
+import { c3sblue, c3sred, c3steal } from '@/assets/styles/colors'
 
 export const renderToContext = (
 	ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -46,7 +46,7 @@ export const renderToContext = (
 				? c3sred
 				: event.event_type === 'cold'
 					? c3sblue
-					: c3sgreen
+					: c3steal
 		)
 			.replace(')', `,${alpha})`)
 			.replace('rgb', 'rgba')
