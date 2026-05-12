@@ -1154,10 +1154,12 @@ class EventletFactory:
 
         # For wet events use the anomaly (IQR-normalised) as intensity;
         # for temperature events use the raw data value.
+        # Either way, load into memory now so per-pixel lookups below don't
+        # each trigger a separate dask graph evaluation.
         if self.eventtype == 'wet':
-            value_slice = self.anomaly.isel(valid_time=t)
+            value_slice = self.anomaly.isel(valid_time=t).load()
         else:
-            value_slice = data_slice
+            value_slice = data_slice  # already .load()ed above
 
         # Match blobs to existing active events
         used_blobs = set()
