@@ -1347,26 +1347,31 @@ class EventletFactory:
         event_id = get_id(self.eventtype, ev)
 
         # Compute statistics across time slices
-        max_values = to_serializable([
+        # NOTE: compute raw numpy aggregates BEFORE to_serializable, which converts
+        # np.nan → None. Passing a list of Nones to np.nanmax raises TypeError.
+        _raw_max_values = [
             np.nanmax(ev.values[i]) if len(ev.values[i]) > 0 else np.nan
             for i in range(len(ev.slices))
-        ])
-        max_value = to_serializable(np.nanmax(max_values)) if max_values else np.nan
-        
-        mean_values = to_serializable([
+        ]
+        max_values = to_serializable(_raw_max_values)
+        max_value = to_serializable(np.nanmax(_raw_max_values)) if _raw_max_values else np.nan
+
+        _raw_mean_values = [
             np.nanmean(ev.values[i]) if len(ev.values[i]) > 0 else np.nan
             for i in range(len(ev.slices))
-        ])
+        ]
+        mean_values = to_serializable(_raw_mean_values)
         mean_value = (
             to_serializable(np.mean(np.concatenate(ev.values)))
-            if mean_values else np.nan
+            if _raw_mean_values else np.nan
         )
-        
-        min_values = to_serializable([
+
+        _raw_min_values = [
             np.nanmin(ev.values[i]) if len(ev.values[i]) > 0 else np.nan
             for i in range(len(ev.slices))
-        ])
-        min_value = to_serializable(np.nanmin(min_values)) if min_values else np.nan
+        ]
+        min_values = to_serializable(_raw_min_values)
+        min_value = to_serializable(np.nanmin(_raw_min_values)) if _raw_min_values else np.nan
 
         # Determine if event is ocean-only
         ocean_only = False
