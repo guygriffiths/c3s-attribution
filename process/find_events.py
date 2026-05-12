@@ -398,9 +398,12 @@ def get_id(eventtype: str, event: 'Eventlet') -> str:
         
     Notes:
         - Coordinates are snapped to 0.001° precision (grid resolution)
-        - Temperature is converted to Celsius × 10 (e.g., 40.0°C → 400)
-        - Negative temperatures encoded as (1000 + abs(temp)) (e.g., -10°C → 1100)
+        - Temperature events: value encoded as Celsius × 10 (e.g., 40.0°C → 400)
+          Negative temperatures encoded as (1000 + abs(val)) (e.g., -10°C → 1100)
+        - Wet events: value encoded as IQR anomaly × 100 (e.g., 2.50 IQRs → 250)
+          This is dimensionless and always positive, so no negative handling needed
         - Location coordinates shifted to positive range for consistent formatting
+        - Value code clamped to 4 digits (max 9999) in all cases
         
     Peak pixel selection:
         1. Find pixel with extreme value (max for hot/wet, min for cold/dry)
@@ -474,19 +477,25 @@ def get_id(eventtype: str, event: 'Eventlet') -> str:
     lat_code = int(round((lat + 90) * 1000))   # Range: 0 to 180000
     lon_code = int(round((lon + 180) * 1000))  # Range: 0 to 360000
     
-    # Convert temperature from Kelvin to Celsius × 10
-    temp_celsius = peak_value - 273.15
-    temp_code = int(round(temp_celsius * 10))
+    # Encode peak value in a type-appropriate way
+    if eventtype.lower() == 'wet':
+        # Anomaly is dimensionless (IQR multiples); encode as anomaly × 100
+        # e.g. 1.50 IQRs → 150, 3.25 IQRs → 325
+        value_code = int(round(abs(float(peak_value)) * 100))
+    else:
+        # Temperature: convert from Kelvin to Celsius × 10
+        # e.g. 40.0°C → 400; negative temps encoded above 1000 (e.g. -10°C → 1100)
+        temp_celsius = float(peak_value) - 273.15
+        value_code = int(round(temp_celsius * 10))
+        if value_code < 0:
+            value_code = 1000 + abs(value_code)
+    value_code = min(value_code, 9999)
     
-    # Handle negative temperatures (encode above 1000)
-    if temp_code < 0:
-        temp_code = 1000 + abs(temp_code)
-    
-    # Format: TYPE + DATE(8) + TEMP(4) + LAT(6) + LON(6)
+    # Format: TYPE + DATE(8) + VALUE(4) + LAT(6) + LON(6)
     # Total: variable prefix + 24 fixed digits
     return (
         f"{eventtype}{pd.Timestamp(peak_time).strftime('%Y%m%d')}"
-        f"{temp_code:04d}{lat_code:06d}{lon_code:06d}"
+        f"{value_code:04d}{lat_code:06d}{lon_code:06d}"
     )
 # ============================================================================
 # Data Loading and Transformation
@@ -1026,7 +1035,10 @@ class EventletFactory:
             # divide-by-zero warnings from dask; those pixels are excluded.
             safe_iqr = iqr.where(iqr > 0, other=1.0)
             anomaly = (data - ref_data) / safe_iqr
-            self.raw_mask = (anomaly > self.threshold) & (iqr > 0)
+            # Only count genuine wet days (>= 1mm) to avoid noise from trace precip
+            self.raw_mask = (anomaly > self.threshold) & (iqr > 0) & (data >= WET_DAY_THRESHOLD)
+            # Store the anomaly DataArray so we can record it as event intensity
+            self.anomaly = anomaly
             # No persistence filtering for precipitation
             self.enduring_pixels = self.raw_mask
         else:
@@ -1140,6 +1152,13 @@ class EventletFactory:
             points = [m for i, m in enumerate(metadata) if labels[i] == label]
             blobs.append(points)
 
+        # For wet events use the anomaly (IQR-normalised) as intensity;
+        # for temperature events use the raw data value.
+        if self.eventtype == 'wet':
+            value_slice = self.anomaly.isel(valid_time=t)
+        else:
+            value_slice = data_slice
+
         # Match blobs to existing active events
         used_blobs = set()
         for i, blob in enumerate(blobs):
@@ -1147,7 +1166,7 @@ class EventletFactory:
                 if ev.overlaps(blob, time):
                     # Extract values for these coordinates
                     values = [
-                        data_slice.sel(latitude=lat, longitude=lon).values.item()
+                        value_slice.sel(latitude=lat, longitude=lon).values.item()
                         for lat, lon in blob
                     ]
                     ev.extend(time, blob, values)
@@ -1160,7 +1179,7 @@ class EventletFactory:
                 continue
             
             values = [
-                data_slice.sel(latitude=lat, longitude=lon).values.item()
+                value_slice.sel(latitude=lat, longitude=lon).values.item()
                 for lat, lon in blob
             ]
             new_ev = Eventlet(time, blob, values)
@@ -1326,7 +1345,7 @@ class EventletFactory:
         elif self.ocean_only:
             ev.remove_land(self.land_sea_mask)
             if not ev.is_valid(self.min_length, self.min_samples):
-                logger.info(f"Discarding event at {all_times[0]} for being too small over ocean")
+                logger.info(f"Discarding event at {ev.times[0]} for being too small over ocean")
                 return
 
         all_times = sorted([pd.Timestamp(t) for t in ev.times])
