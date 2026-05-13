@@ -56,14 +56,19 @@ self.onmessage = async (
 		})
 	})
 
-	for(let i = 0; i < hwCounts.length; i++) {
-		if(isNaN(hwCounts[i])) {
-			console.warn('NaN in hwCounts at index', i, hwCounts[i], addDays(new Date(start), i))
+	for (let i = 0; i < hwCounts.length; i++) {
+		if (isNaN(hwCounts[i])) {
+			console.warn(
+				'NaN in hwCounts at index',
+				i,
+				hwCounts[i],
+				addDays(new Date(start), i),
+			)
 		}
 	}
 
 	let newDs: Record<number, string> = {}
-	if(mixedEvents === 'hotcold') {
+	if (mixedEvents === 'hotcold') {
 		newDs = getAreaString(
 			hwCounts,
 			hotEventsActive,
@@ -72,7 +77,7 @@ self.onmessage = async (
 			years,
 			start,
 		)
-	} else if(mixedEvents === 'hotwet') {
+	} else if (mixedEvents === 'hotwet') {
 		newDs = getAreaString(
 			hwCounts,
 			hotEventsActive,
@@ -81,17 +86,33 @@ self.onmessage = async (
 			years,
 			start,
 		)
-	} else if(mixedEvents === 'coldwet') {
+	} else if (mixedEvents === 'coldwet') {
 		newDs = getAreaString(
 			cwCounts,
 			coldEventsActive,
 			wwCounts,
 			wetEventsActive,
+			years,
+			start,
+		)
+	} else {
+		newDs = getAreaString(
+			mixedEvents === 'hot'
+				? hwCounts
+				: mixedEvents === 'cold'
+					? cwCounts
+					: wwCounts,
+			mixedEvents === 'hot'
+				? hotEventsActive
+				: mixedEvents === 'cold'
+					? coldEventsActive
+					: wetEventsActive,
+			[],
+			false,
 			years,
 			start,
 		)
 	}
-	// console.log('Time reel worker posting message back', newDs)
 
 	self.postMessage({
 		newDs,
@@ -131,7 +152,6 @@ const getAreaString = (
 						y1: d,
 					}))
 
-	
 	// console.log('WTF data:', data.map(d => d.y0).concat(data.map(d => d.y1)), Math.max(...data.map((d) => d.y0).concat(data.map((d) => d.y1))))
 	const yScale = d3
 		.scaleLinear()
@@ -168,10 +188,15 @@ const getAreaString = (
 		ret[year] =
 			areaStr(data.slice(startIdx, endIdx)) + ` M0,${-2} l0,0 M0,${2} l0,0` ||
 			''
-		// if(ret[year].indexOf('NaN') !== -1) {
-		// 	console.warn('NaN in area string for year', year)
-		// 	console.log('data slice:', data.slice(startIdx, endIdx), yScale.domain(), Math.max(...data.map((d) => d.y0)))
-		// }
+		if (ret[year].indexOf('NaN') !== -1) {
+			console.warn('NaN in area string for year', year)
+			console.log(
+				'data slice:',
+				data.slice(startIdx, endIdx),
+				yScale.domain(),
+				Math.max(...data.map((d) => d.y0)),
+			)
+		}
 	}
 	// console.timeEnd('getAreaString')
 	return ret

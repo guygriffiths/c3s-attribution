@@ -640,6 +640,7 @@ const getStackedC3steal = (value: number): string => {
 		transition: all $transition;
 
 		bottom: calc($panelMargin + $smallTimePanelHeight + $panelMargin);
+		left: $panelMargin;
 
 		&.timemachine {
 			display: flex;

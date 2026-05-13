@@ -374,9 +374,12 @@ export const useStore = defineStore('events', {
 			await mainStore.setLoading('Changing event type...')
 			this.eventTypeMode = mode || 'hot'
 			setTheme(mode || 'hot')
-			this.filters.heatIntensity.active = mode === 'hot'     || mode === 'hotcold' || mode === 'hotwet'
-			this.filters.coldIntensity.active = mode === 'cold'    || mode === 'hotcold' || mode === 'coldwet'
-			this.filters.wetIntensity.active  = mode === 'wet'     || mode === 'hotwet'  || mode === 'coldwet'
+			this.filters.heatIntensity.active =
+				mode === 'hot' || mode === 'hotcold' || mode === 'hotwet'
+			this.filters.coldIntensity.active =
+				mode === 'cold' || mode === 'hotcold' || mode === 'coldwet'
+			this.filters.wetIntensity.active =
+				mode === 'wet' || mode === 'hotwet' || mode === 'coldwet'
 			mainStore.setLoadingDone()
 		},
 		cycleEventType() {
@@ -404,7 +407,15 @@ export const useStore = defineStore('events', {
 			this.firstEventSetLoaded = false
 			const mainStore = useMainStore()
 			mainStore.setLoading()
-			setTheme(this.eventTypeMode === 'hot' ? 'hot' : this.eventTypeMode === 'cold' ? 'cold' : this.eventTypeMode === 'wet' ? 'wet' : 'hotcold')
+			setTheme(
+				this.eventTypeMode === 'hot'
+					? 'hot'
+					: this.eventTypeMode === 'cold'
+						? 'cold'
+						: this.eventTypeMode === 'wet'
+							? 'wet'
+							: 'hotcold',
+			)
 			watch(() => [this.filters], this.runFilters, {
 				deep: true,
 				immediate: false,
@@ -465,6 +476,7 @@ export const useStore = defineStore('events', {
 				let localColdMin = Infinity
 				let localHeatMax = -Infinity
 				let localColdMax = -Infinity
+				let localWetMin = Infinity
 				let localWetMax = -Infinity
 				events.forEach((e) => {
 					const duration = this.durationForEvent(e)
@@ -523,6 +535,9 @@ export const useStore = defineStore('events', {
 						if (size > this.wetSizeRange[1]) {
 							this.wetSizeRange[1] = size
 						}
+						if (intensity < localWetMin) {
+							localWetMin = intensity
+						}
 						if (intensity > localWetMax) {
 							localWetMax = intensity
 						}
@@ -552,7 +567,7 @@ export const useStore = defineStore('events', {
 				]
 				// It's an index - always start at 0
 				this.wetIntensityRange = [
-					0,
+					localWetMin === Infinity ? 0 : localWetMin,
 					localWetMax === -Infinity ? 0 : localWetMax,
 				]
 			})
