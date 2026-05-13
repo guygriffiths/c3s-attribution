@@ -1161,17 +1161,25 @@ class EventletFactory:
         else:
             value_slice = data_slice  # already .load()ed above
 
+        # Pre-extract values for every blob using vectorized numpy indexing.
+        # Doing .sel(lat, lon).item() in a Python loop costs O(N log N) per blob
+        # (binary search per point); this approach is O(N) after one coordinate
+        # lookup to build integer index arrays.
+        lat_index = {v: i for i, v in enumerate(value_slice.latitude.values)}
+        lon_index = {v: i for i, v in enumerate(value_slice.longitude.values)}
+        vs_np = value_slice.values  # 2-D numpy array (lat, lon)
+
+        def blob_values(blob):
+            i_lats = np.fromiter((lat_index[lat] for lat, lon in blob), dtype=np.intp, count=len(blob))
+            i_lons = np.fromiter((lon_index[lon] for lat, lon in blob), dtype=np.intp, count=len(blob))
+            return vs_np[i_lats, i_lons]
+
         # Match blobs to existing active events
         used_blobs = set()
         for i, blob in enumerate(blobs):
             for ev in self.active:
                 if ev.overlaps(blob, time):
-                    # Extract values for these coordinates
-                    values = [
-                        value_slice.sel(latitude=lat, longitude=lon).values.item()
-                        for lat, lon in blob
-                    ]
-                    ev.extend(time, blob, values)
+                    ev.extend(time, blob, blob_values(blob))
                     used_blobs.add(i)
                     break
 
@@ -1179,12 +1187,7 @@ class EventletFactory:
         for i, blob in enumerate(blobs):
             if i in used_blobs:
                 continue
-            
-            values = [
-                value_slice.sel(latitude=lat, longitude=lon).values.item()
-                for lat, lon in blob
-            ]
-            new_ev = Eventlet(time, blob, values)
+            new_ev = Eventlet(time, blob, blob_values(blob))
             self.active.append(new_ev)
 
         # Expire old events
