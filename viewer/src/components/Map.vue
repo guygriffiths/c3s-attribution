@@ -593,7 +593,7 @@ const resetZoom = () => {
 	)
 }
 const mapClicked = (event: LeafletMouseEvent) => {
-	if (store.viewMode === 'heatmap' && store.filteringByPoint) {
+	if (store.filteringByPoint) {
 		// Move the point selector to the clicked location
 		store.lastPoint = [event.latlng.lat, event.latlng.lng]
 	}
@@ -900,9 +900,9 @@ const mapClicked = (event: LeafletMouseEvent) => {
 	.zoom-control {
 		transition: transform $transition;
 		margin: $panelMargin;
-		transform: translate(calc(0rem - 2 * $buttonSize - 3 * $panelMargin), 0);
+		transform: translate(calc(0rem - 3 * $buttonSize - 4 * $panelMargin), 0);
 		&.hidden {
-			transform: translate(0rem - 2 * $buttonSize - 3 * $panelMargin, -200%);
+			transform: translate(0rem - 3 * $buttonSize - 4 * $panelMargin, -200%);
 		}
 		.zoom-buttons {
 			display: flex;

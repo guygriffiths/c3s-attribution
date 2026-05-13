@@ -33,6 +33,7 @@ interface State {
 	showAnalytics: boolean // Whether to show the analytics view in the ME panel
 
 	hamburgerMenuOpen: boolean // Whether the side hamburger menu is open
+	achievementsOpen: boolean // Whether the achievements panel is open
 
 	mainHelpOpen: boolean // Whether the main help dialog is open
 
@@ -85,6 +86,7 @@ export const useStore = defineStore('main', {
 			showAnalytics: false,
 
 			hamburgerMenuOpen: false,
+			achievementsOpen: false,
 
 			focusVariable: 'duration',
 			sortDesc: true,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { differenceInDays } from 'date-fns'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
@@ -21,6 +21,7 @@ import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
 import EventDayPanel from './EventDayPanel.vue'
 import HelpButton from './util/HelpButton.vue'
 import ColorScale from './ColorScale.vue'
+import Achievements from './Achievements.vue'
 import {
 	IconCalendarWeek,
 	IconChartBar,
@@ -30,17 +31,79 @@ import {
 	IconMenu2,
 	IconWindowMaximize,
 	IconWindowMinimize,
+	IconTrophy,
 	IconX,
 } from '@tabler/icons-vue'
 import { useEventFilters } from '@/lib/eventFilters'
 import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
 import { c3sred, c3sblue, c3steal } from '@/assets/styles/scssVars.module.scss'
 
+import { usePersistentStore } from '@/store/persistentStore'
+
 // Stores
 const $l = useLabels()
 const store = useStore()
 const timeStore = useTimeStore()
 const eventStore = useEventStore()
+const persistentStore = usePersistentStore()
+
+// Achievements
+const achievementPulse = ref(false)
+const achievementNew = ref(false)
+let pulseTimeout: ReturnType<typeof setTimeout> | null = null
+
+watch(
+	() => persistentStore.lastUnlocked,
+	(id) => {
+		if (!id) return
+		if (pulseTimeout) clearTimeout(pulseTimeout)
+		achievementPulse.value = true
+		achievementNew.value = true
+		pulseTimeout = setTimeout(() => {
+			achievementPulse.value = false
+			persistentStore.lastUnlocked = null
+		}, 2000)
+	},
+)
+
+onMounted(() => {
+	persistentStore.incrementVisitCount()
+	persistentStore.unlockAchievement('firstVisit')
+})
+
+watch(
+	() => timeStore.isPlaying,
+	(playing) => { if (playing) persistentStore.unlockAchievement('timeTraveler') },
+)
+watch(
+	() => store.filteringByPoint,
+	(v) => { if (v) persistentStore.unlockAchievement('pointExplorer') },
+)
+watch(
+	() => store.regionFilterReady,
+	(v) => { if (v) persistentStore.unlockAchievement('regionScout') },
+)
+watch(
+	() => eventStore.eventTypeMode,
+	(mode) => {
+		if (`${mode}`.includes('hot')) persistentStore.unlockAchievement('heatwaveWatcher')
+		if (`${mode}`.includes('cold')) persistentStore.unlockAchievement('coldFrontChaser')
+		if (`${mode}`.includes('wet')) persistentStore.unlockAchievement('rainChaser')
+	},
+	{ immediate: true },
+)
+watch(
+	() => eventStore.selectedEventId,
+	(id) => { if (id) persistentStore.unlockAchievement('eventInspector') },
+)
+watch(
+	() => store.viewMode,
+	(mode) => { if (mode === 'heatmap') persistentStore.unlockAchievement('bigPicture') },
+)
+watch(
+	() => timeStore.timePanelExpanded,
+	(v) => { if (v) persistentStore.unlockAchievement('timelineExplorer') },
+)
 
 // UI state handlers
 const toggleTimePanelExpanded = () => {
@@ -304,6 +367,36 @@ const getStackedC3steal = (value: number): string => {
 			/>
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
+
+		<!-- Achievements button -->
+		<button
+			id="achievements-button"
+			class="glassy color"
+			:class="{
+				hidden: store.isFocused || timeStore.timePanelExpanded,
+				close: store.achievementsOpen,
+				pulse: achievementPulse && !store.achievementsOpen,
+				selected: achievementNew && !store.achievementsOpen,
+			}"
+			:inert="
+				store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined
+			"
+			@click="store.achievementsOpen = !store.achievementsOpen; achievementNew = false"
+			v-tooltip="store.achievementsOpen ? $l.close : 'Achievements'"
+		>
+			<IconTrophy size="24" aria-hidden="true" v-if="!store.achievementsOpen" />
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+
+		<!-- Achievements panel -->
+		<div
+			id="achievements-menu"
+			class="panel top"
+			:class="{ active: store.achievementsOpen && !store.isFocused }"
+			:inert="!store.achievementsOpen ? 'true' : undefined"
+		>
+			<Achievements />
+		</div>
 
 		<!-- Hamburger menu button -->
 		<button
@@ -701,7 +794,7 @@ const getStackedC3steal = (value: number): string => {
 	#help-button {
 		position: absolute;
 		top: $panelMargin;
-		right: 2 * $panelMargin + $buttonSize;
+		right: 3 * $panelMargin + 2 * $buttonSize;
 		border-radius: 100%;
 		width: 2.5rem;
 		height: 2.5rem;
@@ -712,6 +805,54 @@ const getStackedC3steal = (value: number): string => {
 		&.hidden {
 			transform: translateY(-200%);
 		}
+	}
+
+	#achievements-button {
+		position: absolute;
+		top: $panelMargin;
+		right: 2 * $panelMargin + $buttonSize;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 350;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+
+		&.hidden {
+			transform: translateY(-200%);
+		}
+
+		&.pulse {
+			animation: trophy-pulse 2s ease-out;
+		}
+
+	}
+
+	@keyframes trophy-pulse {
+		0% {
+			box-shadow: var(--shadow-sm), var(--shadow-md), 1px 1px 0 0 var(--contrast);
+		}
+		40% {
+			box-shadow: var(--shadow-sm), var(--shadow-md), 1px 1px 0 10px rgba(247, 205, 81, 0.3);
+		}
+		80% {
+			box-shadow: var(--shadow-sm), var(--shadow-md), 1px 1px 0 18px rgba(247, 205, 81, 0);
+		}
+		100% {
+			box-shadow: var(--shadow-sm), var(--shadow-md), 1px 1px 0 0 rgba(247, 205, 81, 0);
+		}
+	}
+
+	#achievements-menu {
+		background: var(--panel-bg);
+		backdrop-filter: $frosty;
+		top: $panelMargin;
+		right: 2 * $panelMargin + $buttonSize;
+		padding: $panelMargin * 0.5;
+		z-index: 340;
+		border-radius: 8px;
+		overflow-y: auto;
+		max-height: calc(100vh - 6rem);
 	}
 
 	#hamburger-button {

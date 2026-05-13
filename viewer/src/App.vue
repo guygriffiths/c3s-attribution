@@ -6,11 +6,13 @@ import HelpOverlay from '@/components/util/HelpOverlay.vue'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
+import { usePersistentStore } from '@/store/persistentStore'
 import { helpMe } from '@/lib/help'
 
 const l = useLabels()
 const store = useStore()
 const eventStore = useEventStore()
+const persistentStore = usePersistentStore()
 
 onMounted(() => {
 	// Set page title from labels
@@ -29,8 +31,10 @@ onMounted(() => {
 		}, 500)
 	})
 	
-	// Show initial help overlay
-	helpMe('aboutInfo')
+	// Show initial help overlay (skip after 5+ visits)
+	if (persistentStore.visitCount <= 5) {
+		helpMe('aboutInfo')
+	}
 })
 </script>
 
