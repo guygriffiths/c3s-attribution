@@ -10,6 +10,9 @@ const getLabelForEventType = (type: SelectedEventType) => {
 	if (type === 'hot') return $l.value.hotTitle
 	if (type === 'cold') return $l.value.coldTitle
 	if (type === 'wet') return $l.value.wetTitle
+	if (type === 'hotcold') return $l.value.hotcoldTitle
+	if (type === 'hotwet') return $l.value.hotwetTitle
+	if (type === 'coldwet') return $l.value.coldwetTitle
 	return type
 }
 </script>
@@ -24,16 +27,9 @@ const getLabelForEventType = (type: SelectedEventType) => {
 		<div class="title-wrapper" :class="{ square: store.mainHelpOpen }">
 			<img src="@/assets/img/c3s-logo.png" alt="C3S Logo" aria-hidden="true" />
 			<h1 aria-hidden="true">
-				{{$l.title}} - 
-				<span
-					class="eventtype"
-					@click="eventStore.cycleEventType()"
-					role="button"
-					tabindex="-1"
-				>
-					{{
-						getLabelForEventType(eventStore.eventTypeMode)
-					}}
+				{{ $l.title }} -
+				<span class="eventtype" role="button" tabindex="-1">
+					{{ getLabelForEventType(eventStore.eventTypeMode) }}
 				</span>
 			</h1>
 		</div>

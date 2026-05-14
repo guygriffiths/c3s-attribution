@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { usePersistentStore, ACHIEVEMENTS } from '@/store/persistentStore'
-import { useStore as useMainStore } from '@/store/store'
+import { computed, ref } from 'vue'
+import {
+	usePersistentStore,
+	BASIC_ACHIEVEMENTS,
+	HARD_ACHIEVEMENT_SECTIONS,
+	HARD_ACHIEVEMENTS,
+	RAINBOW_ACHIEVEMENT,
+} from '@/store/persistentStore'
 import {
 	IconWorld,
 	IconPlayerPlay,
@@ -9,18 +14,47 @@ import {
 	IconLassoPolygon,
 	IconFlame,
 	IconSnowflake,
-	IconDroplet,
 	IconZoomIn,
 	IconLayoutDashboard,
-	IconCalendarStats,
+	IconCalendarWeek,
 	IconTrophy,
 	IconLock,
+	// Hard mode icons
+	IconAdjustments,
+	IconCloudRain,
+	IconCloudSnow,
+	IconMaximize,
+	IconCalendarSearch,
+	IconClock,
+	IconHourglass,
+	IconCalendarEvent,
+	IconSun,
+	IconMoon,
+	IconCloudStorm,
+	IconTimeline,
+	IconPlayerSkipForward,
+	IconChartBarOff,
+	IconArrowsHorizontal,
+	IconListDetails,
+	IconArrowsSort,
+	IconChartLine,
+	IconReportAnalytics,
+	IconPointer,
+	IconInfoCircle,
+	IconInfoSquare,
+	IconCalendarTime,
+	IconMenu2,
+	IconSettings,
+	IconFilter,
+	IconGauge,
+    IconEye,
+	// Rainbow
+	IconRainbow,
 } from '@tabler/icons-vue'
 
 import Cookies from 'js-cookie'
 
 const persistentStore = usePersistentStore()
-const mainStore = useMainStore()
 
 const isDev = import.meta.env.DEV
 
@@ -28,8 +62,22 @@ const resetAchievements = () => {
 	persistentStore.achievements = {}
 	persistentStore.visitCount = 0
 	persistentStore.lastUnlocked = null
+	persistentStore.hardModeSeen = false
+	persistentStore.rainbowMode = false
 	Cookies.remove('c3s_achievements')
 	Cookies.remove('c3s_visits')
+	Cookies.remove('c3s_hardmode_seen')
+	Cookies.remove('c3s_rainbow')
+}
+
+const resetPreRainbow = () => {
+	const updated = { ...persistentStore.achievements }
+	delete updated['rainbowMode']
+	delete updated['hardEventInfoPanel']
+	persistentStore.achievements = updated
+	persistentStore.rainbowMode = false
+	Cookies.set('c3s_achievements', JSON.stringify(updated), { expires: 365 })
+	Cookies.remove('c3s_rainbow')
 }
 
 const iconComponents: Record<string, unknown> = {
@@ -39,18 +87,57 @@ const iconComponents: Record<string, unknown> = {
 	IconLassoPolygon,
 	IconFlame,
 	IconSnowflake,
-	IconDroplet,
+	IconCloudRain,
 	IconZoomIn,
 	IconLayoutDashboard,
-	IconCalendarStats,
+	IconCalendarWeek,
+	// Hard mode icons
+	IconAdjustments,
+	IconCloudRain,
+	IconCloudSnow,
+	IconMaximize,
+	IconCalendarSearch,
+	IconClock,
+	IconHourglass,
+	IconCalendarEvent,
+	IconSun,
+	IconMoon,
+	IconCloudStorm,
+	IconTimeline,
+	IconPlayerSkipForward,
+	IconChartBarOff,
+	IconArrowsHorizontal,
+	IconListDetails,
+	IconArrowsSort,
+	IconChartLine,
+	IconReportAnalytics,
+	IconPointer,
+	IconInfoCircle,
+	IconInfoSquare,
+	IconCalendarTime,
+	IconMenu2,
+	IconSettings,
+	IconFilter,
+	IconGauge,
+    IconEye,
+	// Rainbow
+	IconRainbow,
 }
 
-const sortedAchievements = computed(() => {
-	const completed = ACHIEVEMENTS.filter(
-		(a) => persistentStore.achievements[a.id],
-	)
-	const pending = ACHIEVEMENTS.filter((a) => !persistentStore.achievements[a.id])
+const basicCollapsed = ref(true)
+const hardCollapsed = ref(false)
+
+const sortedBasic = computed(() => {
+	const completed = BASIC_ACHIEVEMENTS.filter((a) => persistentStore.achievements[a.id])
+	const pending = BASIC_ACHIEVEMENTS.filter((a) => !persistentStore.achievements[a.id])
 	return [...completed, ...pending]
+})
+
+const totalCount = computed(() => {
+	const base = BASIC_ACHIEVEMENTS.length
+	const hard = persistentStore.hardModeUnlocked ? HARD_ACHIEVEMENTS.length : 0
+	const rainbow = persistentStore.allHardComplete ? 1 : 0
+	return base + hard + rainbow
 })
 </script>
 
@@ -59,29 +146,33 @@ const sortedAchievements = computed(() => {
 		<div class="achievements-header">
 			<IconTrophy size="20" aria-hidden="true" />
 			<h2>Achievements</h2>
-			<span class="count">{{ persistentStore.completedCount }} / {{ ACHIEVEMENTS.length }}</span>
+			<span class="count">{{ persistentStore.nBasicComplete }} / {{ totalCount }}</span>
 		</div>
 
-		<p class="visit-count">Visits: {{ persistentStore.visitCount }}</p>
-
-		<ul class="achievements-list">
+		<!-- Basic achievements (shown at top until hard mode; collapses to bottom once unlocked) -->
+		<button v-if="persistentStore.hardModeUnlocked" class="hard-mode-header" @click="basicCollapsed = !basicCollapsed">
+			<IconTrophy size="16" class="hard-mode-icon" aria-hidden="true" />
+			<span>Basics ({{ BASIC_ACHIEVEMENTS.length }}/{{ BASIC_ACHIEVEMENTS.length }})</span>
+			<span class="collapse-chevron" :class="{ open: !basicCollapsed }">▸</span>
+		</button>
+		<ul
+			v-if="!persistentStore.hardModeUnlocked || !basicCollapsed"
+			class="achievements-list"
+			:class="{ 'basics-collapsed': persistentStore.hardModeUnlocked }"
+		>
 			<li
-				v-for="achievement in sortedAchievements"
+				v-for="achievement in sortedBasic"
 				:key="achievement.id"
 				class="achievement-item"
-				:class="{ completed: persistentStore.achievements[achievement.id] }"
+				:class="{ completed: persistentStore.achievements[achievement.id] || persistentStore.hardModeUnlocked }"
 			>
 				<div
 					class="achievement-icon"
-					:style="
-						persistentStore.achievements[achievement.id]
-							? { color: achievement.color }
-							: {}
-					"
+					:style="(persistentStore.achievements[achievement.id] || persistentStore.hardModeUnlocked) ? { color: achievement.color } : {}"
 				>
 					<component
 						:is="iconComponents[achievement.icon]"
-						v-if="persistentStore.achievements[achievement.id]"
+						v-if="persistentStore.achievements[achievement.id] || persistentStore.hardModeUnlocked"
 						size="22"
 						aria-hidden="true"
 					/>
@@ -94,7 +185,81 @@ const sortedAchievements = computed(() => {
 			</li>
 		</ul>
 
+		<!-- Hard mode sections (revealed when basic achievements complete) -->
+		<template v-if="persistentStore.hardModeUnlocked">
+			<button class="hard-mode-header" @click="hardCollapsed = !hardCollapsed">
+				<IconTrophy size="16" class="hard-mode-icon" aria-hidden="true" />
+				<span>Hard Mode</span>
+				<span class="collapse-chevron" :class="{ open: !hardCollapsed }">▸</span>
+			</button>
+
+			<template v-if="!hardCollapsed" v-for="section in HARD_ACHIEVEMENT_SECTIONS" :key="section.id">
+				<div class="section-header">
+					<component :is="iconComponents[section.sectionIcon]" size="14" aria-hidden="true" />
+					<span>{{ section.title }}</span>
+				</div>
+				<ul class="achievements-list">
+					<li
+						v-for="achievement in section.achievements"
+						:key="achievement.id"
+						class="achievement-item"
+						:class="{ completed: persistentStore.achievements[achievement.id] }"
+					>
+						<div
+							class="achievement-icon"
+							:style="persistentStore.achievements[achievement.id] ? { color: achievement.color } : {}"
+						>
+							<component
+								:is="iconComponents[achievement.icon]"
+								v-if="persistentStore.achievements[achievement.id]"
+								size="22"
+								aria-hidden="true"
+							/>
+							<IconLock v-else size="22" aria-hidden="true" />
+						</div>
+						<div class="achievement-text">
+							<span class="achievement-title">{{ achievement.title }}</span>
+							<span class="achievement-desc">{{ achievement.description }}</span>
+						</div>
+					</li>
+				</ul>
+			</template>
+		</template>
+
+		<!-- Rainbow achievement (revealed when all hard mode achievements complete) -->
+		<template v-if="persistentStore.allHardComplete">
+			<div class="hard-mode-header rainbow">
+				<IconRainbow size="16" class="rainbow-icon" aria-hidden="true" />
+				<span>Final Challenge</span>
+			</div>
+			<ul class="achievements-list">
+				<li
+					class="achievement-item"
+					:class="{ completed: persistentStore.achievements[RAINBOW_ACHIEVEMENT.id] }"
+				>
+					<div
+						class="achievement-icon"
+						:style="persistentStore.achievements[RAINBOW_ACHIEVEMENT.id] ? { color: RAINBOW_ACHIEVEMENT.color } : {}"
+					>
+						<IconRainbow
+							v-if="persistentStore.achievements[RAINBOW_ACHIEVEMENT.id]"
+							size="22"
+							aria-hidden="true"
+						/>
+						<IconLock v-else size="22" aria-hidden="true" />
+					</div>
+					<div class="achievement-text">
+						<span class="achievement-title">{{ RAINBOW_ACHIEVEMENT.title }}</span>
+						<span class="achievement-desc">{{ RAINBOW_ACHIEVEMENT.description }}</span>
+					</div>
+				</li>
+			</ul>
+		</template>
+
 		<button v-if="isDev" class="reset-button" @click="resetAchievements">Reset achievements</button>
+		<button v-if="isDev" class="reset-button" @click="resetPreRainbow">Reset pre-rainbow</button>
+
+
 	</div>
 </template>
 
@@ -107,9 +272,19 @@ const sortedAchievements = computed(() => {
 	gap: 0.5rem;
 	min-width: 260px;
 	max-width: 320px;
+    height: 100%;
+    max-height: 100%;
+    flex: 0 0 100%;
+    overflow-y: hidden;
 }
 
 .achievements-header {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--panel-bg);
+	padding-bottom: 0.25rem;
+	margin-bottom: -0.25rem;
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
@@ -124,18 +299,71 @@ const sortedAchievements = computed(() => {
 		font-size: 0.8rem;
 		opacity: 0.6;
 		font-variant-numeric: tabular-nums;
-        margin-right: 2*$panelMargin;
+		margin-right: 2 * $panelMargin;
 	}
 }
 
-.visit-count {
-	font-size: 0.75rem;
+.hard-mode-header {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	margin-top: 0.5rem;
+	padding: 0.375rem 0 0.125rem 0;
+	border-top: 1px solid var(--divider);
+	font-size: 0.8rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	opacity: 0.8;
+
+	&:is(button) {
+		width: 100%;
+		border: none;
+		border-top: 1px solid var(--divider);
+		background: none;
+		cursor: pointer;
+		color: inherit;
+		text-align: left;
+		transition: opacity $animTime $animEase;
+
+		&:hover {
+			opacity: 1;
+		}
+	}
+
+	.hard-mode-icon {
+		color: $lightbulb;
+	}
+
+	&.rainbow .rainbow-icon {
+		color: hsl(300, 70%, 50%);
+	}
+
+	.collapse-chevron {
+		margin-left: auto;
+		transition: transform $animTime $animEase;
+		transform: rotate(0deg);
+
+		&.open {
+			transform: rotate(90deg);
+		}
+	}
+}
+
+.section-header {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	margin-top: 0.375rem;
+	font-size: 0.7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
 	opacity: 0.5;
-	margin: 0;
 }
 
 .achievements-list {
-	list-style: none;
+    list-style: none;
 	padding: 0;
 	margin: 0;
 	display: flex;
@@ -197,5 +425,48 @@ const sortedAchievements = computed(() => {
 	&:hover {
 		opacity: 0.8;
 	}
+}
+
+.collapse-header {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	width: 100%;
+	margin-top: 0.5rem;
+	padding: 0.375rem 0 0.125rem 0;
+	border: none;
+	border-top: 1px solid var(--divider);
+	background: none;
+	cursor: pointer;
+	font-size: 0.7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: inherit;
+	opacity: 0.5;
+	text-align: left;
+	transition: opacity $animTime $animEase;
+
+	&:hover {
+		opacity: 0.8;
+	}
+
+	span {
+		flex: 1;
+	}
+
+	.collapse-chevron {
+		flex: 0;
+		transition: transform $animTime $animEase;
+		transform: rotate(0deg);
+
+		&.open {
+			transform: rotate(90deg);
+		}
+	}
+}
+
+.basics-collapsed {
+	opacity: 0.7;
 }
 </style>

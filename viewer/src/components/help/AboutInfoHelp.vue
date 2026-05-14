@@ -8,7 +8,7 @@ import {
 	IconChartHistogram,
 	IconCalendarTime,
 	IconEyePin,
-	IconInfoOctagon,
+	IconInfoCircle,
 	IconHelp,
 } from '@tabler/icons-vue'
 import { useStore } from '@/store/store'
@@ -127,7 +127,7 @@ const getIconComponent = (iconName: string) => {
 					</div>
 				</div>
 				<p>
-					Check <div class="button glassy color decoration"><IconInfoOctagon size="20" v-tooltip="$l.aboutInfo" /></div> at any time for
+					Check <div class="button glassy color decoration"><IconInfoCircle size="20" v-tooltip="$l.aboutInfo" /></div> at any time for
 					more detailed information. The <div class="button glassy color decoration"><IconHelp size="20"v-tooltip="$l.help" /></div> icon
 					will provide guidance for how to use or interpret specific features.
 				</p>

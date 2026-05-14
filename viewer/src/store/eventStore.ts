@@ -6,15 +6,16 @@ import {
 	setParameterFilters,
 } from '@/lib/eventsDB'
 import {
+	applyTheme,
 	DATA_ROOT,
 	interpolateColorCold,
 	interpolateColorHot,
 	interpolateColorWet,
-	setTheme,
 } from '@/lib/utils'
 import * as d3 from 'd3'
 import { defineStore } from 'pinia'
 import { markRaw, watch } from 'vue'
+import { usePersistentStore } from './persistentStore'
 import { useStore as useMainStore } from './store'
 import { useStore as useTimeStore } from './timeStore'
 
@@ -373,7 +374,8 @@ export const useStore = defineStore('events', {
 			const mainStore = useMainStore()
 			await mainStore.setLoading('Changing event type...')
 			this.eventTypeMode = mode || 'hot'
-			setTheme(mode || 'hot')
+			const rainbow = usePersistentStore().rainbowMode
+			applyTheme(rainbow ? `${mode || 'hot'}-sparkle` : (mode || 'hot'))
 			this.filters.heatIntensity.active =
 				mode === 'hot' || mode === 'hotcold' || mode === 'hotwet'
 			this.filters.coldIntensity.active =
@@ -407,15 +409,8 @@ export const useStore = defineStore('events', {
 			this.firstEventSetLoaded = false
 			const mainStore = useMainStore()
 			mainStore.setLoading()
-			setTheme(
-				this.eventTypeMode === 'hot'
-					? 'hot'
-					: this.eventTypeMode === 'cold'
-						? 'cold'
-						: this.eventTypeMode === 'wet'
-							? 'wet'
-							: 'hotcold',
-			)
+			const rainbow = usePersistentStore().rainbowMode
+			applyTheme(rainbow ? `${this.eventTypeMode}-sparkle` : this.eventTypeMode)
 			watch(() => [this.filters], this.runFilters, {
 				deep: true,
 				immediate: false,

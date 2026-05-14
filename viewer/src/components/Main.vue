@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { differenceInDays } from 'date-fns'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
@@ -9,12 +9,11 @@ import { helpMe } from '@/lib/help'
 import MapComponent from './Map.vue'
 import AppLogo from './AppLogo.vue'
 import FooterLogos from './FooterLogos.vue'
-import EventTypeToggle from './util/EventTypeToggle.vue'
+import HamburgerMenu from './HamburgerMenu.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
 import EventInfoPanel from './EventInfoPanel.vue'
 import SelectedEventInfoPanel from './SelectedEventInfoPanel.vue'
-import FilterPanel from './FilterPanel.vue'
 import FocusFrame from './util/FocusFrame.vue'
 import ModeToggle from './util/ModeToggle.vue'
 import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
@@ -28,14 +27,15 @@ import {
 	IconChartHistogram,
 	IconReport,
 	IconInfoCircle,
-	IconMenu2,
 	IconWindowMaximize,
 	IconWindowMinimize,
 	IconTrophy,
+	IconDice,
 	IconX,
 } from '@tabler/icons-vue'
 import { useEventFilters } from '@/lib/eventFilters'
-import { interpolateColorCold, interpolateColorHot } from '@/lib/utils'
+import { getCurrentEvents } from '@/lib/eventsDB'
+import { interpolateColorCold, interpolateColorHot, applyTheme } from '@/lib/utils'
 import { c3sred, c3sblue, c3steal } from '@/assets/styles/scssVars.module.scss'
 
 import { usePersistentStore } from '@/store/persistentStore'
@@ -69,6 +69,11 @@ watch(
 onMounted(() => {
 	persistentStore.incrementVisitCount()
 	persistentStore.unlockAchievement('firstVisit')
+	// Show hard mode notification if already unlocked but not yet seen
+	if (persistentStore.basicComplete && !persistentStore.hardModeSeen) {
+		persistentStore.setHardModeSeen()
+		nextTick(() => helpMe('hardModeUnlocked'))
+	}
 })
 
 watch(
@@ -105,7 +110,158 @@ watch(
 	(v) => { if (v) persistentStore.unlockAchievement('timelineExplorer') },
 )
 
-// UI state handlers
+// Hard mode unlock notification
+watch(
+	() => persistentStore.basicComplete,
+	(complete) => {
+		if (complete && !persistentStore.hardModeSeen) {
+			persistentStore.setHardModeSeen()
+			helpMe('hardModeUnlocked')
+		}
+	},
+)
+
+// All complete notification
+watch(
+	() => persistentStore.allComplete,
+	(complete) => {
+		if (complete && !persistentStore.allCompleteSeen) {
+			persistentStore.setAllCompleteSeen()
+			helpMe('allComplete')
+		}
+	},
+)
+
+const randomiseEvent = () => {
+	const pool = getCurrentEvents(null, true)
+	if (!pool.length) return
+	const event = pool[Math.floor(Math.random() * pool.length)]
+	eventStore.selectEvent(event)
+}
+
+// Rainbow mode
+watch(
+	() => persistentStore.rainbowMode,
+	(rainbow) => {
+		if (rainbow) {
+			applyTheme(`${eventStore.eventTypeMode}-sparkle`)
+		} else {
+			applyTheme(eventStore.eventTypeMode)
+		}
+	},
+	{ immediate: true },
+)
+watch(
+	() => eventStore.eventTypeMode,
+	(mode) => {
+		if (persistentStore.rainbowMode) {
+			applyTheme(`${mode}-sparkle`)
+		}
+	},
+)
+
+// Hard mode achievement watchers
+
+// Overview section
+watch(
+	() => eventStore.eventTypeMode,
+	(mode) => {
+		if (mode === 'hotcold') persistentStore.unlockAchievement('hardOverviewHotcold')
+		if (mode === 'hotwet') persistentStore.unlockAchievement('hardOverviewHotwet')
+		if (mode === 'coldwet') persistentStore.unlockAchievement('hardOverviewColdwet')
+	},
+	{ immediate: true },
+)
+watch(
+	() => store.maximizeMultiPanel,
+	(v) => { if (v) persistentStore.unlockAchievement('hardOverviewMaximize') },
+)
+watch(
+	[() => timeStore.startTimeFilter, () => timeStore.endTimeFilter],
+	([start, end]) => {
+		if (
+			start.getTime() > timeStore.startTime.getTime() ||
+			end.getTime() < timeStore.endTime.getTime()
+		) {
+			persistentStore.unlockAchievement('hardOverviewTimeFilter')
+		}
+	},
+)
+
+// Time Machine section
+watch(
+	() => timeStore.selectedTime,
+	(t) => {
+		if (t < new Date(1985, 0, 1)) persistentStore.unlockAchievement('hardTimemachineEarly')
+		if (t >= new Date(2022, 0, 1)) persistentStore.unlockAchievement('hardTimemachineRecent')
+	},
+)
+
+// Moved to individual components for specific types:
+// Hot on the map
+// Cold on the ranker
+// Wet from the timeline
+// watch(
+// 	() => eventStore.selectedEvent,
+// )
+
+// Time Reel section
+watch(
+	() => timeStore.speedFactor,
+	(s) => { if (s > 1) persistentStore.unlockAchievement('hardTimeReelFaster') },
+)
+watch(
+	() => timeStore.showBars,
+	(v) => { if (!v) persistentStore.unlockAchievement('hardTimeReelBarsOff') },
+)
+watch(() => [timeStore.startTimeFilter, timeStore.endTimeFilter], ([start, end]) => {
+	if (
+		start.getTime() > timeStore.startTime.getTime() ||
+		end.getTime() < timeStore.endTime.getTime()
+	) {
+		persistentStore.unlockAchievement('hardTimeReelWindow')
+	}
+})
+
+
+// Multi-Event Panel section
+watch(
+	() => store.focusVariable,
+	(v) => {
+		if (v === 'size') persistentStore.unlockAchievement('hardMultiSortSize')
+		if (v === 'intensity') persistentStore.unlockAchievement('hardMultiSortIntensity')
+	},
+)
+watch(
+	() => store.showAnalytics,
+	(v) => { if (v) persistentStore.unlockAchievement('hardMultiAnalytics') },
+)
+
+// Moved to event ranker
+// watch(
+// 	() => eventStore.hoveringEvent,
+// 	(v) => { if (v) persistentStore.unlockAchievement('hardMultiHover') },
+// )
+
+// Event Info section
+watch(
+	() => store.showInfoPanel,
+	(v) => { if (!v) persistentStore.unlockAchievement('hardEventInfoPanel') },
+)
+
+// Settings Menu section
+watch(
+	() => store.hamburgerMenuOpen,
+	(v) => { if (v) persistentStore.unlockAchievement('hardHamburgerOpen') },
+)
+watch(
+	() => eventStore.filters.duration.value,
+	(v) => { if (v !== 3) persistentStore.unlockAchievement('hardHamburgerDurationFilter') },
+)
+watch(
+	() => eventStore.filters.heatIntensity.minimum || eventStore.filters.coldIntensity.minimum || eventStore.filters.wetIntensity.minimum,
+	(v) => { persistentStore.unlockAchievement('hardHamburgerIntensityFilter') },
+)
 const toggleTimePanelExpanded = () => {
 	timeStore.timePanelExpanded = !timeStore.timePanelExpanded
 }
@@ -143,6 +299,11 @@ const selectedDayIdx = computed((): number | null => {
 
 	if (selectedDay < 0 || selectedDay >= totalDays) return null
 	return selectedDay
+})
+
+// Day browse achievement: user has navigated to a non-first day within an event
+watch(selectedDayIdx, (idx) => {
+	if (idx !== null && idx > 0) persistentStore.unlockAchievement('hardEventDayBrowse')
 })
 
 const hotScaleOn = computed(() => {
@@ -368,6 +529,19 @@ const getStackedC3steal = (value: number): string => {
 			<IconX size="24" aria-hidden="true" v-else />
 		</button>
 
+		<!-- Randomise event button (unlocked when all achievements complete) -->
+		<button
+			v-if="persistentStore.allComplete"
+			id="randomise-button"
+			class="glassy color"
+			:class="{ hidden: store.isFocused || timeStore.timePanelExpanded }"
+			:inert="store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined"
+			@click="randomiseEvent"
+			v-tooltip="'Surprise me!'"
+		>
+			<IconDice size="24" aria-hidden="true" />
+		</button>
+
 		<!-- Achievements button -->
 		<button
 			id="achievements-button"
@@ -398,43 +572,8 @@ const getStackedC3steal = (value: number): string => {
 			<Achievements />
 		</div>
 
-		<!-- Hamburger menu button -->
-		<button
-			id="hamburger-button"
-			class="glassy color"
-			:class="{
-				hidden: store.isFocused || timeStore.timePanelExpanded,
-				close: store.hamburgerMenuOpen,
-			}"
-			:inert="
-				store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined
-			"
-			@click="store.hamburgerMenuOpen = !store.hamburgerMenuOpen"
-			v-tooltip="store.hamburgerMenuOpen ? $l.close : $l.hamburger"
-		>
-			<IconMenu2 size="24" aria-hidden="true" v-if="!store.hamburgerMenuOpen" />
-			<IconX size="24" aria-hidden="true" v-else />
-		</button>
-
-		<!-- Hamburger menu panel -->
-		<div
-			id="hamburger-menu"
-			class="panel top"
-			:class="{ active: store.hamburgerMenuOpen && !store.isFocused }"
-			:inert="!store.hamburgerMenuOpen ? 'true' : undefined"
-		>
-			<div class="menu-section">
-				<h2>{{ $l.chooseEventType }}</h2>
-				<EventTypeToggle
-					:model-value="eventStore.eventTypeMode"
-					@update:model-value="eventStore.setEventTypeMode"
-				/>
-			</div>
-			<div class="menu-section">
-				<h2>{{ $l.chooseFilters }}</h2>
-				<FilterPanel v-model="eventStore.filters" />
-			</div>
-		</div>
+		<!-- Hamburger menu -->
+		<HamburgerMenu />
 
 		<!-- Event day panel (time machine mode, left side) -->
 		<EventDayPanel
@@ -807,6 +946,22 @@ const getStackedC3steal = (value: number): string => {
 		}
 	}
 
+	#randomise-button {
+		position: absolute;
+		top: $panelMargin;
+		right: 4 * $panelMargin + 3 * $buttonSize;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 300;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+
+		&.hidden {
+			transform: translateY(-200%);
+		}
+	}
+
 	#achievements-button {
 		position: absolute;
 		top: $panelMargin;
@@ -853,56 +1008,6 @@ const getStackedC3steal = (value: number): string => {
 		border-radius: 8px;
 		overflow-y: auto;
 		max-height: calc(100vh - 6rem);
-	}
-
-	#hamburger-button {
-		position: absolute;
-		top: $panelMargin;
-		right: $panelMargin;
-		border-radius: 100%;
-		width: 2.5rem;
-		height: 2.5rem;
-		padding: 0.5rem;
-		z-index: 400;
-		box-shadow: var(--shadow-sm), var(--shadow-md);
-
-		&.hidden {
-			transform: translateY(-200%);
-		}
-	}
-
-	#hamburger-menu {
-		background: var(--panel-bg);
-		backdrop-filter: $frosty;
-		top: $panelMargin;
-		right: $panelMargin;
-		padding: $panelMargin * 0.5;
-		display: flex;
-		flex-direction: column;
-		justify-content: stretch;
-		align-items: stretch;
-		gap: $panelMargin * 0.5;
-		z-index: 350;
-
-		.about-button {
-			margin-top: auto;
-			display: flex;
-			align-items: center !important;
-			justify-content: center;
-			gap: 0.5rem;
-		}
-
-		.menu-section {
-			display: flex;
-			flex-direction: column;
-			gap: 0.5rem;
-			padding: 0;
-
-			h2 {
-				font-size: 1rem;
-				margin: 0.25rem 0 0 0;
-			}
-		}
 	}
 
 	$eventGap: calc(

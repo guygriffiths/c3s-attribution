@@ -5,8 +5,10 @@ import scssVars from '@/assets/styles/scssVars.module.scss'
 import * as d3 from 'd3'
 import { useLabels } from '@/lib/labels'
 import { niceNumber } from '@/lib/utils'
+import { usePersistentStore } from '@/store/persistentStore'
 
 const $l = useLabels()
+const persistentStore = usePersistentStore()
 
 const eventStore = useEventStore()
 
@@ -70,12 +72,15 @@ watch(
 const hoverIndex = ref(-1)
 const setHover = (idx: number) => {
 	hoverIndex.value = idx
+	persistentStore.unlockAchievement('hardMultiHover')
 	eventStore.setHoveringEvent(rankedEvents.value[idx] || null)
 }
 
 const selectEvent = (event: ExtremeEvent | null) => {
 	if (event) {
 		eventStore.selectEvent(event, true)
+		if (event.event_type === 'cold')
+			persistentStore.unlockAchievement('hardTimemachineCold')
 	}
 }
 

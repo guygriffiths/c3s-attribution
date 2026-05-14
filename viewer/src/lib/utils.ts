@@ -105,23 +105,22 @@ export const colorMixer = (
 	return mix
 }
 
-// Switch to a specific theme
-export const setTheme = (themeName: SelectedEventType) => {
-	console.time(`Setting theme to ${themeName}`)
+// Apply an arbitrary theme by name (works with both base themes and sparkle variants)
+export const applyTheme = (name: string) => {
 	const root = document.documentElement
-	const themePrefix = `--theme-${themeName}-`
-
+	const themePrefix = `--theme-${name}-`
 	const styles: any = getComputedStyle(root)
-
-	// Loop over all computed properties instead
 	for (const prop of styles) {
 		if (prop.startsWith(themePrefix)) {
 			const token = prop.replace(themePrefix, '')
-			const value = styles.getPropertyValue(prop)
-			root.style.setProperty(`--${token}`, value)
+			root.style.setProperty(`--${token}`, styles.getPropertyValue(prop))
 		}
 	}
-	console.timeEnd(`Setting theme to ${themeName}`)
+}
+
+// Switch to a specific theme
+export const setTheme = (themeName: SelectedEventType) => {
+	applyTheme(themeName)
 }
 
 export const fetchDataForYear = async (year: number) => {

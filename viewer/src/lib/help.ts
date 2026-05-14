@@ -1,5 +1,5 @@
 // lib/help.ts
-import { IconInfoOctagon } from '@tabler/icons-vue'
+import { IconInfoCircle, IconRainbow, IconTrophy } from '@tabler/icons-vue'
 import { Component, defineAsyncComponent, shallowRef } from 'vue'
 
 export type HelpTextEntry = {
@@ -85,7 +85,21 @@ export const helpText = {
 		component: defineAsyncComponent(
 			() => import('@/components/help/AboutInfoHelp.vue'),
 		),
-		icon: IconInfoOctagon,
+		icon: IconInfoCircle,
+	},
+	hardModeUnlocked: {
+		title: 'Hard Mode Unlocked!',
+		component: defineAsyncComponent(
+			() => import('@/components/help/HardModeUnlockedHelp.vue'),
+		),
+		icon: IconTrophy,
+	},
+	allComplete: {
+		title: 'Master Explorer!',
+		component: defineAsyncComponent(
+			() => import('@/components/help/AllCompleteHelp.vue'),
+		),
+		icon: IconRainbow,
 	},
 	regionControl: {
 		title: 'Region Selection',

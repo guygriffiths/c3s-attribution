@@ -297,7 +297,7 @@ svg.bar-icon {
 .panel {
 	display: flex;
 	flex-direction: column;
-	justify-content: center;
+	justify-content: flex-start;
 	align-items: center;
 	border-radius: $borderRadius;
 	background: var(--panel-bg);

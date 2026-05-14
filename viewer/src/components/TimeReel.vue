@@ -223,8 +223,9 @@ const prevYear = () => {
 const playing = ref(false)
 const frameInterval = computed(() => {
 	let FPS = 15
-	if (isZoom.value) FPS = 2.5 * props.speedFactor
-	if (isTimeline.value) FPS = 60
+	if (isZoom.value) FPS = 2.5
+	if (isTimeline.value) FPS = 5
+	FPS = FPS * props.speedFactor
 	return 1000 / FPS
 })
 
@@ -579,7 +580,9 @@ const handleDrag = (event: MouseEvent) => {
 }
 
 const eventClicked = (box: EventBox) => {
-	emits('eventSelected', props.events.find((e) => e.id === box.eventId) || null)
+	const ev = props.events.find((e) => e.id === box.eventId)
+	emits('eventSelected', ev || null)
+	if (ev && ev.event_type === 'wet') persistentStore.unlockAchievement('hardTimemachineWet')
 }
 const eventHovered = (box: EventBox | null) => {
 	if (box === null) {

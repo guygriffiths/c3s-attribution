@@ -37,6 +37,7 @@ import { Feature, MultiPolygon, Polygon } from 'geojson'
 import RegionControl from './util/RegionControl.vue'
 import HelpButton from './util/HelpButton.vue'
 import { useStore as useTimeStore } from '@/store/timeStore'
+import { usePersistentStore } from '@/store/persistentStore'
 import * as d3 from 'd3'
 import L from 'leaflet'
 import {
@@ -60,6 +61,7 @@ const $l = useLabels()
 const store = useStore()
 const timeStore = useTimeStore()
 const eventStore = useEventStore()
+const persistentStore = usePersistentStore()
 const heatmapWorker = new HeatmapWorker()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
 const map = computed(() => mapRef.value?.leafletObject as LeafletMap)
@@ -343,10 +345,7 @@ watch(
 // When the time or spatial filter changes, update the list of current events to draw on the map
 // They will only be drawn in timemachine mode, but get updated in heatmap ready for the switch back
 watch(
-	() => [
-		timeStore.selectedTime,
-		store.regionFilterReady,
-	],
+	() => [timeStore.selectedTime, store.regionFilterReady],
 	([time]) => {
 		currentEvents.value = getCurrentEvents(time as Date, true)
 		// if (wmtsUrl.value) {
@@ -391,11 +390,13 @@ watch(
 const cScale = computed(() => {
 	const minValIntensity = intensityForValue(
 		eventStore.selectedEvent?.min_value!,
-		eventStore.selectedEvent?.event_type === 'hot' || eventStore.selectedEvent?.event_type === 'cold',
+		eventStore.selectedEvent?.event_type === 'hot' ||
+			eventStore.selectedEvent?.event_type === 'cold',
 	)
 	const maxValIntensity = intensityForValue(
 		eventStore.selectedEvent?.max_value!,
-		eventStore.selectedEvent?.event_type === 'hot' || eventStore.selectedEvent?.event_type === 'cold',
+		eventStore.selectedEvent?.event_type === 'hot' ||
+			eventStore.selectedEvent?.event_type === 'cold',
 	)
 	const minIntensity = Math.min(minValIntensity, maxValIntensity)
 	const maxIntensity = Math.max(minValIntensity, maxValIntensity)
@@ -598,6 +599,12 @@ const mapClicked = (event: LeafletMouseEvent) => {
 		store.lastPoint = [event.latlng.lat, event.latlng.lng]
 	}
 }
+
+const selectEvent = (event: ExtremeEvent) => {
+	eventStore.selectEvent(event)
+	if (event.event_type === 'hot')
+		persistentStore.unlockAchievement('hardTimemachineHot')
+}
 </script>
 
 <template>
@@ -695,7 +702,7 @@ const mapClicked = (event: LeafletMouseEvent) => {
 							: scssVars.c3sgreen
 				"
 				:fill-color="eventStore.colorForEvent(event)"
-				@click="eventStore.selectEvent(event)"
+				@click="selectEvent(event)"
 				@mouseover="eventStore.setHoveringEvent(event)"
 				@mouseout="eventStore.setHoveringEvent(null)"
 			>
@@ -769,7 +776,10 @@ const mapClicked = (event: LeafletMouseEvent) => {
 			<LControl
 				position="topright"
 				class="zoom-control"
-				:class="{ hidden: eventStore.selectedEvent !== null }"
+				:class="{
+					hidden: eventStore.selectedEvent !== null,
+					promode: persistentStore.allComplete,
+				}"
 				:inert="eventStore.selectedEvent !== null ? 'true' : undefined"
 			>
 				<div class="zoom-buttons">
@@ -903,6 +913,16 @@ const mapClicked = (event: LeafletMouseEvent) => {
 		transform: translate(calc(0rem - 3 * $buttonSize - 4 * $panelMargin), 0);
 		&.hidden {
 			transform: translate(0rem - 3 * $buttonSize - 4 * $panelMargin, -200%);
+		}
+		&.promode {
+			transform: translate(calc(0rem - 4 * $buttonSize - 5 * $panelMargin), 0);
+
+			&.hidden {
+				transform: translate(
+					calc(0rem - 4 * $buttonSize - 5 * $panelMargin),
+					-200%
+				);
+			}
 		}
 		.zoom-buttons {
 			display: flex;
