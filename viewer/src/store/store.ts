@@ -25,6 +25,7 @@ interface State {
 	regionFilterReady: boolean // Whether we are currently drawing a region on the map
 
 	filteringByPoint: boolean // Whether we are currently filtering by a point
+	filteringByUserRegion: boolean // Whether a saved user region is active
 	draggingFilter: boolean
 
 	showInfoPanel: boolean // Whether to show the current event rankings
@@ -79,6 +80,7 @@ export const useStore = defineStore('main', {
 			filteringByRegion: false,
 			regionFilterReady: false, // Whether we are currently drawing a region on the map
 			filteringByPoint: false, // Whether we are currently filtering by a point
+			filteringByUserRegion: false,
 
 			showInfoPanel: false,
 			showMultiPanel: true,
@@ -100,7 +102,7 @@ export const useStore = defineStore('main', {
 	},
 	getters: {
 		exploreGlobal: (state) => {
-			return !state.filteringByPoint && !state.regionFilterReady
+			return !state.filteringByPoint && !state.regionFilterReady && !state.filteringByUserRegion
 		},
 		isFocused: (state) => {
 			const eventStore = useEventStore()

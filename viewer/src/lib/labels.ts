@@ -161,6 +161,21 @@ const labelsEn = {
 	errorTitle: 'Error',
 	error:
 		'A problem has occurred.  If this keeps happening, please contact the system administrator.',
+	yourRegions: 'Your regions',
+	uploadRegion: 'Upload region',
+	uploadRegionTooltip: 'Upload a GeoJSON file containing polygon regions',
+	userRegionButton: 'Explore events in uploaded region',
+	selectUserRegionFeature: 'Click a region outline to select it',
+	deleteRegion: 'Remove region',
+	regionLimitReached: 'Region limit reached (3/3). Merge into an existing region?',
+	mergeIntoRegion: 'Merge into',
+	mergeConfirm: 'Merge',
+	mergeCancel: 'Cancel',
+	uploadErrorInvalidJson: 'Invalid JSON — the file could not be parsed.',
+	uploadErrorNotGeoJson: 'File does not contain a GeoJSON Feature or FeatureCollection.',
+	uploadErrorNoPolygons: 'No polygon or multipolygon features found in the file.',
+	uploadErrorTooLarge:
+		'This region is too large to save in your browser. Try simplifying the geometry (fewer points) and upload again.',
 }
 
 type Labels = typeof labelsEn

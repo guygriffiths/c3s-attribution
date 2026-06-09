@@ -645,7 +645,7 @@ const getStackedC3steal = (value: number): string => {
 			id="multi-event-panel"
 			:events-of-interest="summaryEvents"
 			:background-events="
-				store.filteringByPoint || store.filteringByRegion
+				store.filteringByPoint || store.filteringByRegion || store.filteringByUserRegion
 					? globalFilteredEvents
 					: []
 			"

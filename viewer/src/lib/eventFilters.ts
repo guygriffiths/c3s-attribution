@@ -46,7 +46,7 @@ export const useEventFilters = () => {
 		if (store.viewMode === 'timemachine') {
 			summaryEvents.value = getCurrentEvents(timeStore.selectedTime, true)
 		} else {
-			if(!store.filteringByPoint && !store.filteringByRegion) {
+			if(!store.filteringByPoint && !store.filteringByRegion && !store.filteringByUserRegion) {
 				summaryEvents.value = getTimeFilteredEvents()
 			} else {
 				summaryEvents.value = getSpaceTimeFilteredEvents()

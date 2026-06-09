@@ -1,9 +1,19 @@
 // Globally-available types should go here
 
+import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson'
+
 declare global {
 	const $l: ReturnType<typeof useLabels>
 
 	type Language = 'en'
+
+	interface UserRegion {
+		id: string
+		name: string
+		geojson:
+			| Feature<Polygon | MultiPolygon>
+			| FeatureCollection<Polygon | MultiPolygon>
+	}
 
 	type ViewMode = 'timemachine' | 'heatmap'
 

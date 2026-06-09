@@ -7,12 +7,14 @@ import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { usePersistentStore } from '@/store/persistentStore'
+import { useUserRegionsStore } from '@/store/userRegionsStore'
 import { helpMe } from '@/lib/help'
 
 const l = useLabels()
 const store = useStore()
 const eventStore = useEventStore()
 const persistentStore = usePersistentStore()
+const userRegionsStore = useUserRegionsStore()
 
 onMounted(() => {
 	// Set page title from labels
@@ -20,6 +22,9 @@ onMounted(() => {
 	
 	// Initialize event store
 	eventStore.init()
+
+	// Load user-uploaded regions from localStorage
+	userRegionsStore.loadFromStorage()
 	
 	// Disable transitions during resize to prevent janky animations
 	let resizeTimer: number

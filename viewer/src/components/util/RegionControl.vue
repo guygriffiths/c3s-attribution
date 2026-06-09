@@ -1,9 +1,14 @@
 <script lang="ts" setup>
 import { useStore } from '@/store/store'
+import { useUserRegionsStore } from '@/store/userRegionsStore'
 import {
+	IconCircleNumber1,
+	IconCircleNumber2,
+	IconCircleNumber3,
 	IconLayersSelected,
 	IconMapPin,
 	IconPolygon,
+	IconUser,
 	IconWorld,
 } from '@tabler/icons-vue'
 import { ref } from 'vue'
@@ -12,18 +17,27 @@ import { useLabels } from '@/lib/labels'
 const $l = useLabels()
 
 const store = useStore()
+const userRegionsStore = useUserRegionsStore()
+
+const numberIcons = [IconCircleNumber1, IconCircleNumber2, IconCircleNumber3]
 
 const setSelectingPoint = () => {
 	if (store.filteringByPoint) {
 		// Turn off point filtering and go back to global
 		store.filteringByPoint = false
 		store.regionFilterReady = false
+			// Deactivate any user region
+	userRegionsStore.deactivate()
 		store.filteringByRegion = false
+		store.filteringByUserRegion = false
 		return
 	}
 	store.filteringByPoint = true
 	store.regionFilterReady = false
 	store.filteringByRegion = false
+	// Deactivate any user region
+	userRegionsStore.deactivate()
+	store.filteringByUserRegion = false
 }
 
 const setDrawingRegion = () => {
@@ -32,11 +46,13 @@ const setDrawingRegion = () => {
 		store.filteringByRegion = false
 		store.regionFilterReady = false
 		store.filteringByPoint = false
-		// Set back to global
 	} else {
 		store.filteringByRegion = true
 		store.regionFilterReady = false
 		store.filteringByPoint = false
+		// Deactivate any user region
+		userRegionsStore.deactivate()
+		store.filteringByUserRegion = false
 	}
 }
 
@@ -45,12 +61,28 @@ const setExploreGlobal = () => {
 	store.filteringByPoint = false
 	store.regionFilterReady = false
 	store.filteringByRegion = false
+	userRegionsStore.deactivate()
+	store.filteringByUserRegion = false
+}
+
+const toggleUserRegion = (id: string) => {
+	if (userRegionsStore.activeRegionId === id) {
+		// Toggle off
+		userRegionsStore.deactivate()
+		store.filteringByUserRegion = false
+		store.regionFilterReady = false
+	} else {
+		// Deactivate drawn / point modes
+		store.filteringByRegion = false
+		store.filteringByPoint = false
+		store.regionFilterReady = false
+		// Activate this user region
+		userRegionsStore.setActive(id)
+		store.filteringByUserRegion = true
+	}
 }
 
 const ready = ref(true)
-// onFilterBuilt(() => {
-// 	ready.value = true
-// })
 </script>
 
 <template>
@@ -96,6 +128,30 @@ const ready = ref(true)
 				v-tooltip="$l.selectByPoint"
 			>
 				<IconMapPin class="icon" aria-hidden="true" />
+			</button>
+			<button
+				v-for="(region, idx) in userRegionsStore.regions"
+				:key="region.id"
+				class="glassy user-region-btn"
+				:class="{
+					selected: userRegionsStore.activeRegionId === region.id,
+				}"
+				:aria-pressed="userRegionsStore.activeRegionId === region.id"
+				:disabled="!ready"
+				@click="toggleUserRegion(region.id)"
+				v-tooltip="region.name"
+			>
+				<IconPolygon class="icon" aria-hidden="true" />
+				<span class="user-icon-overlay" aria-hidden="true">
+					<IconUser :size="14" />
+				</span>
+				<span
+					v-if="userRegionsStore.regions.length > 1"
+					class="number-overlay"
+					aria-hidden="true"
+				>
+					<component :is="numberIcons[idx]" :size="14" />
+				</span>
 			</button>
 		</div>
 		<slot />
@@ -145,6 +201,38 @@ const ready = ref(true)
 		&:last-child {
 			border-top-right-radius: $borderRadius;
 			border-bottom-right-radius: $borderRadius;
+		}
+	}
+
+	.user-region-btn {
+		position: relative;
+
+		.user-icon-overlay {
+			position: absolute;
+			bottom: 2px;
+			right: 2px;
+			width: 16px;
+			height: 16px;
+			background: var(--panel-bg);
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			line-height: 1;
+		}
+
+		.number-overlay {
+			position: absolute;
+			top: 2px;
+			right: 2px;
+			width: 16px;
+			height: 16px;
+			background: var(--panel-bg);
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			line-height: 1;
 		}
 	}
 

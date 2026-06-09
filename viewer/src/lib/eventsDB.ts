@@ -2,7 +2,7 @@ import FetchAndIndexWorker from '@/lib/worker/fetchAndIndexWorker?worker'
 import { EventStore } from '@/store/eventStore'
 import { useStore as useMainStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
-import { bbox, booleanPointInPolygon, point, polygon } from '@turf/turf'
+import { bbox, booleanPointInPolygon, point } from '@turf/turf'
 import type { MultiPolygon, Polygon } from 'geojson'
 import { nextTick } from 'vue'
 import { packPixelToInt } from './utils'
@@ -374,10 +374,9 @@ const buildSpatialFilterResults = (): ExtremeEvent[] => {
 	} else if (_regionFilter) {
 		// Gather pixels overlappin region → union their event IDs
 		const evIdxs = new Set<number>()
-		const geom = _regionFilter.geometry
-		// TODO This assumes Polygon, need to handle MultiPolygon
-		const poly = polygon(geom.coordinates as number[][][])
-		const bounds = bbox(poly) as [number, number, number, number]
+		// Use the feature directly so both Polygon and MultiPolygon are supported.
+		const region = _regionFilter
+		const bounds = bbox(region) as [number, number, number, number]
 
 		for (
 			let lat = Math.floor(bounds[1] * 4) / 4;
@@ -390,7 +389,7 @@ const buildSpatialFilterResults = (): ExtremeEvent[] => {
 				lon += 0.25
 			) {
 				const p = point([lon, lat])
-				if (booleanPointInPolygon(p, poly)) {
+				if (booleanPointInPolygon(p, region)) {
 					const packed = packPixelToInt(lat, lon)
 					const evIds = pixelIndex[packed]
 					if (evIds) {

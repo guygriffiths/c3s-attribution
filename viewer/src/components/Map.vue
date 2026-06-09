@@ -38,6 +38,7 @@ import RegionControl from './util/RegionControl.vue'
 import HelpButton from './util/HelpButton.vue'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { usePersistentStore } from '@/store/persistentStore'
+import { useUserRegionsStore } from '@/store/userRegionsStore'
 import * as d3 from 'd3'
 import L from 'leaflet'
 import {
@@ -62,6 +63,7 @@ const store = useStore()
 const timeStore = useTimeStore()
 const eventStore = useEventStore()
 const persistentStore = usePersistentStore()
+const userRegionsStore = useUserRegionsStore()
 const heatmapWorker = new HeatmapWorker()
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
 const map = computed(() => mapRef.value?.leafletObject as LeafletMap)
@@ -131,6 +133,52 @@ watch(
 	(newVal) => {
 		if (!newVal) {
 			clearSpatialFilter()
+			currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
+		}
+	},
+)
+
+// When a user-uploaded region's active feature changes, apply or clear the spatial filter
+watch(
+	() => userRegionsStore.activeFeature,
+	async (feature) => {
+		if (feature) {
+			await store.setLoading('Applying region filter...')
+			eventRegionFilter.value = feature
+			regionKey.value++
+			await nextTick()
+			regionFilteredEvents = setFilterToRegion(feature)
+			// @ts-ignore
+			fastRenderer._update()
+			store.regionFilterReady = true
+			store.setLoadingDone()
+		} else {
+			// Either switched to multi-display (activeRegionId still set) or fully deactivated
+			eventRegionFilter.value = null
+			clearSpatialFilter()
+			try {
+				// @ts-ignore
+				fastRenderer._update()
+			} catch {}
+			store.regionFilterReady = false
+			currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
+		}
+	},
+)
+
+// When user region is toggled off from outside (e.g. clicking Global), clean up
+watch(
+	() => store.filteringByUserRegion,
+	(newVal) => {
+		if (!newVal) {
+			userRegionsStore.deactivate()
+			eventRegionFilter.value = null
+			clearSpatialFilter()
+			try {
+				// @ts-ignore
+				fastRenderer._update()
+			} catch {}
+			store.regionFilterReady = false
 			currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
 		}
 	},
@@ -250,8 +298,25 @@ const closeRegionIcon = L.divIcon({
 })
 
 const clearRegionFilter = () => {
-	store.filteringByRegion = false
-	store.regionFilterReady = false
+	if (userRegionsStore.activeRegionId !== null) {
+		// User region is active
+		if (userRegionsStore.featureCount > 1 && userRegionsStore.selectedFeatureIndex !== null) {
+			// Was in a specific feature of a multi-region — go back to multi-display
+			userRegionsStore.clearFeatureSelection()
+			// The activeFeature watch fires with null → clears filter → stays on multi-display
+		} else {
+			// Single region (or top-level of a multi-region) — fully deactivate
+			userRegionsStore.deactivate()
+			store.filteringByUserRegion = false
+			store.regionFilterReady = false
+			eventRegionFilter.value = null
+			clearSpatialFilter()
+		}
+	} else {
+		// Drawn polygon close — original behaviour
+		store.filteringByRegion = false
+		store.regionFilterReady = false
+	}
 }
 
 const drawRegion = () => {
@@ -614,7 +679,8 @@ const selectEvent = (event: ExtremeEvent) => {
 			'have-regional':
 				store.viewMode === 'heatmap' &&
 				(store.filteringByPoint ||
-					(store.regionFilterReady && store.filteringByRegion)),
+					(store.regionFilterReady && store.filteringByRegion) ||
+					store.filteringByUserRegion),
 			dragging: store.draggingFilter,
 			focussed: store.isFocused,
 			heatmap: store.viewMode === 'heatmap',
@@ -726,7 +792,18 @@ const selectEvent = (event: ExtremeEvent) => {
 			</LGridLayer>
 
 			<!-- Selectable elements etc -->
-			<!-- The actual selected region -->
+			<!-- Multi-feature user region outlines (shown when in multi-display mode, before a feature is selected) -->
+			<template v-if="userRegionsStore.isMultiMode && userRegionsStore.activeRegion">
+				<LGeoJson
+					v-for="(feature, idx) in (userRegionsStore.activeRegion.geojson as any).features"
+					:key="`user-region-multi-${userRegionsStore.activeRegionId}-${idx}`"
+					:geojson="feature"
+					:options-style="() => ({ className: 'user-region-multi' })"
+					@click="userRegionsStore.selectFeature(idx)"
+				/>
+			</template>
+
+			<!-- The actual selected region (drawn polygon or activated user region feature) -->
 			<LGeoJson
 				v-if="eventRegionFilter"
 				:key="`region-draw-${regionKey}`"
@@ -890,6 +967,24 @@ const selectEvent = (event: ExtremeEvent) => {
 		fill: $c3sgrey;
 		fill-opacity: 0.08;
 		cursor: default;
+	}
+
+	:deep(.user-region-multi) {
+		stroke: var(--contrast);
+		stroke-width: 1.5;
+		stroke-dasharray: 4 3;
+		fill: $c3sgrey;
+		fill-opacity: 0.04;
+		cursor: pointer;
+		transition: fill-opacity 0.15s, stroke-width 0.15s, stroke 0.15s;
+
+		&:hover {
+			stroke: $lightbulb;
+			stroke-width: 3;
+			stroke-dasharray: none;
+			fill: $lightbulb;
+			fill-opacity: 0.12;
+		}
 	}
 
 	:deep(.close-region-marker) {
