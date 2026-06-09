@@ -460,7 +460,7 @@ const buildSpaceTimeFilterResults = (): ExtremeEvent[] => {
 }
 
 export function getCurrentEvents(
-	time: Date,
+	time: Date | null,
 	spatiallyFiltered: boolean,
 ): ExtremeEvent[] {
 	if (!time) {

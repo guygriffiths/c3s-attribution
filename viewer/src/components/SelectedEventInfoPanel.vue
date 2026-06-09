@@ -142,25 +142,28 @@ const downloadEvent = () => {
 	.panel-title {
 		align-self: flex-end;
 		margin-right: 0;
+		margin-left: 1rem;
 	}
 }
 
 .download-button {
 	position: absolute;
-	bottom: 0;
+	top: 0;
 	left: 0;
 	padding: 0.25rem 0 0.25rem 0.25rem;
-	border-top-left-radius: 0;
-	border-bottom-right-radius: 0;
+	border-bottom-left-radius: 0;
+	border-top-right-radius: 0;
 	display: flex;
 	justify-content: center;
 	align-items: center;
 	z-index: 10;
 	box-shadow: none !important;
+	width: 1.6rem;
+	height: 1.6rem;
 
 	.icon {
-		width: 1.5rem;
-		height: 1.5rem;
+		width: 1.4rem;
+		height: 1.4rem;
 		color: var(--text-on-primary);
 	}
 }

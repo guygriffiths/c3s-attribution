@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import * as d3 from 'd3'
+import { IconDownload } from '@tabler/icons-vue'
 
 type Props = {
 	xdata: number[]
@@ -391,11 +392,37 @@ function loop() {
 	}
 }
 onMounted(() => loop())
+
+function downloadCSV() {
+	const headers = ['id', 'x', 'y', 'type']
+	const allPoints = [
+		...xyData.value.map((p) => [p.id ?? '', p.x, p.y, p.type]),
+		...bgData.value.map((p) => [p.id ?? '', p.x, p.y, p.type]),
+	]
+	const csv = [headers, ...allPoints].map((r) => r.join(',')).join('\n')
+	const blob = new Blob([csv], { type: 'text/csv' })
+	const url = URL.createObjectURL(blob)
+	const a = document.createElement('a')
+	a.href = url
+	a.download = (props.title ?? 'scatter') + '.csv'
+	a.click()
+	URL.revokeObjectURL(url)
+}
+
+defineExpose({ downloadCSV })
 </script>
 
 <template>
 	<div ref="containerRef" class="scatter-root chart">
 		<h1 class="chart-title" v-if="props.title">{{ props.title }}</h1>
+		<button
+			class="download-btn"
+			@click="downloadCSV"
+			v-tooltip="'Download data as CSV'"
+			aria-label="Download CSV"
+		>
+			<IconDownload :size="14" />
+		</button>
 		<canvas
 			ref="canvasRef"
 			class="scatter-canvas"
@@ -412,6 +439,35 @@ onMounted(() => loop())
 	width: 100%;
 	height: 100%;
 	position: relative;
+
+	.download-btn {
+		position: absolute;
+		top: 0px;
+		left: 0px;
+		z-index: 10;
+		background: var(--panel-bg-night);
+		border: 1px solid var(--divider);
+		border-radius: 0;
+		border-bottom-right-radius: 4px;
+		padding: 2px 4px;
+		cursor: pointer;
+		opacity: 0.5;
+		color: var(--text-secondary);
+		display: flex;
+		align-items: center;
+		transition: opacity 0.15s;
+		&:hover {
+			opacity: 1;
+		}
+		svg {
+			position: static;
+			opacity: 1;
+			pointer-events: none;
+			width: 14px;
+			height: 14px;
+			color: inherit;
+		}
+	}
 
 	.tabler-icon {
 		width: min(35%, 2.5rem);

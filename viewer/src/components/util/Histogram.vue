@@ -15,6 +15,7 @@ import { colorMixer } from '@/lib/utils'
 import { getBins } from '@/lib/histo-utils'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import { niceNumber } from '@/lib/utils'
+import { IconDownload } from '@tabler/icons-vue'
 
 type Props = {
 	data: number[]
@@ -203,11 +204,39 @@ const tooltipForBin = (b: any) => {
 		html: true,
 	}
 }
+
+function downloadCSV() {
+	const headers = ['bin_start', 'bin_end', 'count', 'percentage']
+	const rows = bars.value.map((b) => [
+		b.bin0,
+		b.endless ? '' : b.bin1,
+		b.count,
+		b.pct.toFixed(2),
+	])
+	const csv = [headers, ...rows].map((r) => r.join(',')).join('\n')
+	const blob = new Blob([csv], { type: 'text/csv' })
+	const url = URL.createObjectURL(blob)
+	const a = document.createElement('a')
+	a.href = url
+	a.download = (props.title ?? 'histogram') + '.csv'
+	a.click()
+	URL.revokeObjectURL(url)
+}
+
+defineExpose({ downloadCSV })
 </script>
 
 <template>
 	<div ref="containerRef" class="histogram-root">
 		<h1 class="chart-title" v-if="props.title">{{ props.title }}</h1>
+		<button
+			class="download-btn"
+			@click="downloadCSV"
+			v-tooltip="'Download data as CSV'"
+			aria-label="Download CSV"
+		>
+			<IconDownload :size="14" />
+		</button>
 		<svg class="histogram-svg" role="img">
 			<filter id="histoBarShadow" height="130%">
 				<feDropShadow
@@ -256,6 +285,35 @@ const tooltipForBin = (b: any) => {
 	width: 100%;
 	height: 100%;
 	position: relative;
+
+	.download-btn {
+		position: absolute;
+		top: 0px;
+		left: 0px;
+		z-index: 10;
+		background: var(--panel-bg-night);
+		border: 1px solid var(--divider);
+		border-radius: 0;
+		border-bottom-right-radius: 4px;
+		padding: 2px 4px;
+		cursor: pointer;
+		opacity: 0.5;
+		color: var(--text-secondary);
+		display: flex;
+		align-items: center;
+		transition: opacity 0.15s;
+		svg {
+			position: static;
+			opacity: 1;
+			pointer-events: none;
+			width: 14px;
+			height: 14px;
+			color: inherit;
+		}
+		&:hover {
+			opacity: 1;
+		}
+	}
 
 	.tabler-icon {
 		width: min(50%, 3rem);

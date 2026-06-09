@@ -40,8 +40,10 @@ import {
 	IconPlayerPlay,
 	IconPlayerPause,
 } from '@tabler/icons-vue'
+import { usePersistentStore } from '@/store/persistentStore'
 
 const $l = useLabels()
+const persistentStore = usePersistentStore()
 
 const props = defineProps<{
 	start: Date
@@ -680,9 +682,7 @@ onMounted(() => {
 		const res = getEventBoxes(
 			props.events,
 			year,
-			props.eventType === 'hotcold' ||
-				props.eventType === 'hotwet' ||
-				props.eventType === 'coldwet',
+			props.eventType
 		)
 		eventBoxesForYear.value[year] = res.events
 	}

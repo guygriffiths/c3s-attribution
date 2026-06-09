@@ -5,7 +5,7 @@ import * as d3 from 'd3'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useTimeStore } from '@/store/timeStore'
-import { IconDimensions, IconTemperatureMinus, IconTemperaturePlus, IconCloudRain } from '@tabler/icons-vue'
+import { IconDimensions, IconTemperatureMinus, IconTemperaturePlus, IconCloudRain, IconDownload } from '@tabler/icons-vue'
 import { niceNumber } from '@/lib/utils'
 import { dateStr } from '@/lib/time-utils'
 import { useLabels } from '@/lib/labels'
@@ -102,6 +102,33 @@ watch(
 )
 
 const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
+
+function downloadCSV() {
+	const intensityUnits =
+		props.selectedEvent?.event_type === 'hot'
+			? eventStore.heatIntensityUnits
+			: props.selectedEvent?.event_type === 'cold'
+				? eventStore.coldIntensityUnits
+				: eventStore.wetIntensityUnits
+	const headers = [
+		'date',
+		`intensity_${intensityUnits.replace(/[^a-zA-Z0-9]/g, '_')}`,
+		`size_${eventStore.sizeUnits.replace(/[^a-zA-Z0-9]/g, '_')}`,
+	]
+	const rows = days.value.map((t, i) => [
+		new Date(t).toISOString().slice(0, 10),
+		intensityData.value[i] ?? '',
+		areaData.value[i] ?? '',
+	])
+	const csv = [headers, ...rows].map((r) => r.join(',')).join('\n')
+	const blob = new Blob([csv], { type: 'text/csv' })
+	const url = URL.createObjectURL(blob)
+	const a = document.createElement('a')
+	a.href = url
+	a.download = (props.selectedEvent?.id ?? 'event') + '-timeseries.csv'
+	a.click()
+	URL.revokeObjectURL(url)
+}
 </script>
 
 <template>
@@ -250,6 +277,15 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 				</g>
 			</svg>
 		</div>
+		<button
+			class="download-btn glassy"
+			@click="downloadCSV"
+			v-tooltip="'Download timeseries data as CSV'"
+			aria-label="Download CSV"
+			:disabled="!days.length"
+		>
+			<IconDownload :size="14" />
+		</button>
 		<slot></slot>
 	</div>
 </template>
@@ -265,6 +301,33 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 	justify-content: center;
 	gap: 0.5rem;
 	padding: 0.5rem;
+
+	.download-btn {
+		position:absolute;
+		top:0;
+		left: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.25rem;
+		font-size: 0.75rem;
+		cursor: pointer;
+		color: var(--text-secondary);
+		background: var(--panel-bg-night);
+		border: 1px solid var(--divider);
+		border-radius: 0;
+		border-bottom-right-radius: 4px;
+		opacity: 0.5;
+		transition: opacity 0.15s;
+		align-self: flex-end;
+		&:hover:not(:disabled) {
+			opacity: 1;
+		}
+		&:disabled {
+			cursor: default;
+			opacity: 0.3;
+		}
+	}
 
 	.loading {
 		position: absolute;
@@ -322,7 +385,6 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 				align-items: center;
 				gap: 0.25rem;
 				color: var(--text-secondary);
-				flex-direction: column;
 				text-align: center;
 			}
 
@@ -330,6 +392,7 @@ const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
 				user-select: none;
 				color: var(--text-secondary);
 				flex: 0 0 auto;
+				flex-direction: row;
 			}
 
 			.icon {

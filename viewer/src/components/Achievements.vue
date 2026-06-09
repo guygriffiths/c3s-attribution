@@ -93,7 +93,6 @@ const iconComponents: Record<string, unknown> = {
 	IconCalendarWeek,
 	// Hard mode icons
 	IconAdjustments,
-	IconCloudRain,
 	IconCloudSnow,
 	IconMaximize,
 	IconCalendarSearch,
