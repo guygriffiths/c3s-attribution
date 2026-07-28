@@ -26,6 +26,7 @@ COPY ../environments/actions.env.${environment} .env
 # Its value is read from APP_PATH in the copied .env file.
 RUN export X_PUBLIC_PATH=$(grep '^APP_PATH=' .env | cut -d'=' -f2-) && \
     X_PUBLIC_PATH=${X_PUBLIC_PATH:-/} && \
+    X_PUBLIC_PATH="${X_PUBLIC_PATH%/}/" && \
     yarn build
 
 # -------- Production stage --------
