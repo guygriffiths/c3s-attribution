@@ -21,7 +21,7 @@ COPY src/ src/
 # X_PUBLIC_PATH is baked into the bundle at build time (Vite `base`),
 # so it must be set here rather than at runtime.
 ARG X_PUBLIC_PATH="/"
-ENV X_PUBLIC_PATH=${X_PUBLIC_PATH}
+ENV X_PUBLIC_PATH=${APP_PATH}
 
 RUN yarn build
 
