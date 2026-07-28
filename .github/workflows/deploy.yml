@@ -1,0 +1,62 @@
+name: Deploy & publish website
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        required: true
+        description: "Docker image tag to deploy"
+        default: latest
+      ref_to_deploy:
+        required: true
+        default: "main"
+        description: "Branch or tag to deploy"
+      environment:
+        required: true
+        default: "dev"
+        description: "Environment to deploy to (dev/prod/etc)"
+
+jobs:
+  deployment:
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.ref_to_deploy }}
+
+    - name: Set deployment environment
+      run: |
+        echo "DEPLOYMENT_ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+        echo "IMAGE_TAG=${{ github.event.inputs.image_tag || github.sha }}" >> $GITHUB_ENV
+
+    - name: Set deployment environment variables
+      run: |
+        cat environments/actions.env.common >> $GITHUB_ENV
+        echo "" >> $GITHUB_ENV  # Add a newline to prevent line merging
+        cat environments/actions.env.$DEPLOYMENT_ENVIRONMENT >> $GITHUB_ENV
+        cat $GITHUB_ENV
+
+    - name: Populate values.yaml
+      run: |
+        echo "Populating alues.yaml with deployment values"
+        sed -i "s?DUMMY_IMAGE_TAG?${IMAGE_TAG}?g" values.yaml;
+        sed -i "s?DUMMY_APP_NAME?${APP_NAME}?g" values.yaml;
+        sed -i "s?DUMMY_APP_PATH?${APP_PATH}?g" values.yaml;
+        sed -i "s?DUMMY_HOSTNAME?${APP_HOSTNAME}?g" values.yaml;
+        sed -i "s?DUMMY_ENVIRONMENT?${DEPLOYMENT_ENVIRONMENT}?g" values.yaml;
+        sed -i "s?DUMMY_SECRET_NAME?${SECRET_NAME}?g" values.yaml;
+        echo "Upgrading/Installing app with following values";
+        cat values.yaml;
+
+    - name: "Update Helm Chart"
+      run: |
+        echo "EXCUTING: helm upgrade --install -n $APP_NAMESPACE $APP_NAME $HELM_CHART --version ${HELM_CHART_VERSION} --values values.yaml"
+        helm upgrade --install -n $APP_NAMESPACE $APP_NAME $HELM_CHART --version ${HELM_CHART_VERSION} --values values.yaml
+      env:
+        KUBECONFIG: kubeconfig.yaml
+    - name: "Force update of pods"
+      run: |
+        echo kubectl delete pods -n $APP_NAMESPACE -l app=$APP_NAME
+        kubectl delete pods -n $APP_NAMESPACE -l app=$APP_NAME
+      env:
+        KUBECONFIG: kubeconfig.yaml   
