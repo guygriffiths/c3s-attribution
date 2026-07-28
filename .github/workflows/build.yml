@@ -21,7 +21,7 @@ jobs:
     with:
       ref: ${{ github.event.inputs.ref_to_deploy }}
       registry: eccr.ecmwf.int
-      image_repository: eddy/c3s-notebook-mcp-server
+      image_repository: c3s-applications/c3s-extreme-events-app
       image_tag: ${{ github.event.inputs.image_tag }}
       build_args: |
         environment=${{ github.event.inputs.environment }}
