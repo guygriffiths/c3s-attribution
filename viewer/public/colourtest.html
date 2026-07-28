@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>Color Scale Demo</title>
+		<script src="https://d3js.org/d3.v7.min.js"></script>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+			}
+			.section {
+				height: 20%;
+				width: 100%;
+				display: flex;
+				border: 10px solid rgb(151, 24, 65);
+			}
+			.gradient {
+				flex: 1;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="div1" class="section"></div>
+		<div id="div2" class="section"></div>
+		<div id="div3" class="section"></div>
+		<div id="div4" class="section"></div>
+		<div id="div5" class="section"></div>
+
+		<script>
+			const steps = 10 // t from 0 to 1 in 0.1 steps
+
+			function interpolateColorRev(baseColor = 'rgb(151, 24, 65)') {
+				const hcl = d3.lch(baseColor)
+				const retfunc = (t) => {
+					const tadj = t - 0.05
+					const H = hcl.h + 27 * Math.pow(Math.max(0, 2 * t - 1), 2)
+					const C = hcl.c + 106 * (Math.pow(t, 1.5) - 0.5)
+					const L = hcl.l - 8 + 148 * tadj * tadj - 30 * tadj
+
+					return d3.lch(L, C, H % 360).formatRgb()
+				}
+				return retfunc
+			}
+
+			function interpolateColorRev1(baseColor = 'rgb(151, 24, 65)') {
+				const hcl = d3.lch(baseColor)
+				console.log(hcl)
+				return (t) => {
+					const H = hcl.h + Math.pow(t, 2) * 30
+					const C = Math.pow(t, 2) * 75
+					const L = 80 - t * 60
+					return d3.lch(L, C, H).formatRgb()
+				}
+			}
+
+			function interpolateColorRev2(baseColor = 'rgb(151, 24, 65)') {
+				const hcl = d3.lch(baseColor)
+				return (t) => {
+					const H = hcl.h + t * 10
+					const C = Math.pow(t, 1.2) * 70
+					const L = 90 - t * 65
+					return d3.lch(L, C, H).formatRgb()
+				}
+			}
+
+			function interpolateColorRev3(baseColor = 'rgb(151, 24, 65)') {
+				const hcl = d3.lch(baseColor)
+				const retfunc = (t) => {
+					const tadj = t - 0.05
+					const H = hcl.h + 27 * Math.pow(Math.max(0, 2 * t - 1), 2)
+					const C = 200 * t
+					const L = hcl.l - 8 + 148 * tadj * tadj - 30 * tadj
+
+					return d3.lch(L, C, H % 360).formatRgb()
+				}
+				return retfunc
+			}
+
+			function interpolateColorRev4(baseColor = 'rgb(151, 24, 65)') {
+				const hcl = d3.lch(baseColor)
+				const retfunc = (t) => {
+					const H = hcl.h - (((t - 1) * 10) % 360)
+					const C = hcl.c + (Math.pow(t, 1.4) - 0.5) * 100
+					const L = hcl.l + (0.15 + 0.85 * (t - 0.5)) * 90
+					return d3.lch(L, C, H).formatRgb()
+				}
+				return retfunc
+			}
+
+			// Helper to create CSS gradient
+			function makeGradient(fn) {
+				const stops = []
+				for (let i = 0; i <= steps; i++) {
+					const t = i / steps
+					stops.push(`${fn(t)} ${t * 100}%`)
+				}
+				return `linear-gradient(to right, ${stops.join(', ')})`
+			}
+
+			// Apply gradients
+			document.getElementById('div1').style.background = makeGradient(
+				interpolateColorRev('rgb(44,102,162)'),
+			)
+			document.getElementById('div2').style.background = makeGradient(
+				interpolateColorRev1('rgb(44,102,162)'),
+			)
+			document.getElementById('div3').style.background = makeGradient(
+				interpolateColorRev2('rgb(44,102,162)'),
+			)
+			document.getElementById('div4').style.background = makeGradient(
+				interpolateColorRev3('rgb(44,102,162)'),
+			)
+			document.getElementById('div5').style.background = makeGradient(
+				interpolateColorRev4('rgb(44,102,162)'),
+			)
+		</script>
+	</body>
+</html>

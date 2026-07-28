@@ -1,0 +1,26 @@
+services:
+  pipeline:
+    network_mode: "host"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    image: c3s-pyenv:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.python
+    env_file:
+      - ../docker/.env
+    volumes:
+      - ./:/app:ro  # Mount process scripts into container
+      - /private/shared/era5-t2m:/data:rw
+      - /homes/web/.cdsapirc:/root/.cdsapirc:ro
+      - /private/wp1/test-output:/output:rw
+    working_dir: /app
+    environment:
+      - EVENT_INPUT_DIR=/data
+    command: ["/bin/bash", "-c", "\
+        micromamba run -n c3s-pyenv python3 make_percentiles.py && \
+        micromamba run -n c3s-pyenv python3 find_events.py \
+    "]

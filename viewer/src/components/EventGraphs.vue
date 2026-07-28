@@ -1,49 +1,41 @@
 <script setup lang="ts">
-import { computed, ComputedRef, ref } from 'vue'
+import { computed, watch, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as d3 from 'd3'
 
+import { useStore } from '@/store/store'
+import { useStore as useEventStore } from '@/store/eventStore'
+import { useStore as useTimeStore } from '@/store/timeStore'
+import { IconDimensions, IconTemperatureMinus, IconTemperaturePlus, IconCloudRain, IconDownload } from '@tabler/icons-vue'
+import { niceNumber } from '@/lib/utils'
+import { dateStr } from '@/lib/time-utils'
+import { useLabels } from '@/lib/labels'
+import { circle } from 'leaflet'
+
+const $l = useLabels()
+const store = useStore()
+const eventStore = useEventStore()
+const timeStore = useTimeStore()
 const props = defineProps<{ selectedEvent: ExtremeEventFull | null }>()
 const emits = defineEmits<{
-	(event: 'dateSelected', date: Date): void
+	(event: 'dateSelected', date: number): void
 }>()
 
 const days = computed(() => props.selectedEvent?.times || [])
-const areaData = computed(
-	() => props.selectedEvent?.slices.map((s) => s.length) || [],
-)
-const maxData = computed(() => props.selectedEvent?.max_values || [])
-const meanData = computed(() => props.selectedEvent?.mean_values || [])
-const minData = computed(() => props.selectedEvent?.min_values || [])
-
-const distData = computed(() => {
-	const centroids = props.selectedEvent?.centroids || []
-	if (centroids.length < 2) return []
-    // @ts-ignore
-	const [startX, startY] = centroids[0]
-	return centroids.map(([x, y]) =>
-		Math.sqrt((x - startX) ** 2 + (y - startY) ** 2),
-	)
+const areaData = computed(() => eventStore.sizesForEvent(props.selectedEvent))
+const intensityData = computed(() => {
+	// console.log(
+	// 	'Intensity data for event',
+	// 	props.selectedEvent,
+	// 	eventStore.intensitiesForEvent(props.selectedEvent),
+	// )
+	return eventStore.intensitiesForEvent(props.selectedEvent)
 })
 
-const chartTopMargin = 20
+const chartTopMargin = 0
 
 const svgRef = ref<SVGSVGElement | null>(null)
-const width = computed(() => {
-	const container = svgRef.value
-	if (container) {
-		const rect = container.getBoundingClientRect()
-		return rect.width || 800
-	}
-	return 800
-})
-const height = computed(() => {
-	const container = svgRef.value
-	if (container) {
-		const rect = container.getBoundingClientRect()
-		return rect.height / 3 || 400
-	}
-	return 400
-})
+const width = ref(100)
+const height = ref(200)
 
 // Scales
 const xScale = computed(() => {
@@ -55,149 +47,451 @@ const xScale = computed(() => {
 		.padding(0)
 })
 
-const areaScale = computed(() =>
+const sizeScale = computed(() => {
+	// console.log('Area data for sizeScale:', areaData.value)
+	return d3
+		.scaleLinear()
+		.domain([0, d3.max(areaData ? areaData.value : []) || 1])
+		.range([height.value - 3, chartTopMargin + 3])
+})
+const intensityScale = computed(() =>
 	d3
 		.scaleLinear()
-		.domain([0, d3.max(areaData.value) || 1])
-		.range([height.value, chartTopMargin]),
-)
-const valueScale = computed(() =>
-	d3
-		.scaleLinear()
-		.domain([303.15, d3.max(maxData.value) || 1])
-		.range([height.value, chartTopMargin]),
-)
-const latScale = computed(() =>
-	d3
-		.scaleLinear()
-		.domain([d3.min(distData.value) || 0, d3.max(distData.value) || 1])
-		.range([height.value, chartTopMargin]),
+		.domain([
+			d3.min(intensityData.value) || 0,
+			d3.max(intensityData.value) || 1,
+		])
+		.range([height.value - 5, chartTopMargin + 5]),
 )
 
+const selectedIndex = computed(() => {
+	if (!props.selectedEvent) return -1
+	const selectedTime = timeStore.selectedTime
+	return props.selectedEvent.times.findIndex(
+		(d) => d === selectedTime.getTime(),
+	)
+})
+
+onMounted(() => {
+	const observer = new ResizeObserver((entries) => {
+		for (const entry of entries) {
+			width.value = entry.contentRect.width
+			height.value = entry.contentRect.height
+		}
+		// console.log('SVG resized:', entries, width.value, height.value)
+	})
+	if (!svgRef.value) return
+	observer.observe(svgRef.value)
+
+	onBeforeUnmount(() => observer.disconnect())
+})
+
+watch(
+	() => [
+		props.selectedEvent,
+		areaData.value,
+		intensityData.value,
+		svgRef.value,
+	],
+	() => {
+		// console.log('EventGraphs: event or areaData changed')
+		// Reset scales when event changes
+		width.value = svgRef.value?.clientWidth || 100
+		height.value = svgRef.value?.clientHeight || 100
+	},
+)
+
+const eventType = computed(() => props.selectedEvent?.event_type || 'unknown')
+
+function downloadCSV() {
+	const intensityUnits =
+		props.selectedEvent?.event_type === 'hot'
+			? eventStore.heatIntensityUnits
+			: props.selectedEvent?.event_type === 'cold'
+				? eventStore.coldIntensityUnits
+				: eventStore.wetIntensityUnits
+	const headers = [
+		'date',
+		`intensity_${intensityUnits.replace(/[^a-zA-Z0-9]/g, '_')}`,
+		`size_${eventStore.sizeUnits.replace(/[^a-zA-Z0-9]/g, '_')}`,
+	]
+	const rows = days.value.map((t, i) => [
+		new Date(t).toISOString().slice(0, 10),
+		intensityData.value[i] ?? '',
+		areaData.value[i] ?? '',
+	])
+	const csv = [headers, ...rows].map((r) => r.join(',')).join('\n')
+	const blob = new Blob([csv], { type: 'text/csv' })
+	const url = URL.createObjectURL(blob)
+	const a = document.createElement('a')
+	a.href = url
+	a.download = (props.selectedEvent?.id ?? 'event') + '-timeseries.csv'
+	a.click()
+	URL.revokeObjectURL(url)
+}
 </script>
 
 <template>
-	<svg class="graph-container" ref="svgRef">
-		<transition-group
-			name="graph-bg-transition"
-			tag="g"
-			:style="{ transform: 'scaleY(-1) translateY(-100%)' }"
-		>
-			<template v-for="(day, i) in days" :key="day">
+	<div class="event-graphs-root">
+		<div class="loading" v-if="store.eventSoftLoadingCount > 0">
+			<div class="spinner-container">
+				<div class="spinner-ring"></div>
+				<div class="spinner-ring-inner"></div>
+			</div>
+		</div>
+		<div class="chart">
+			<h1 class="chart-title">
+				{{ selectedEvent?.event_type === 'hot' || selectedEvent?.event_type === 'cold' ? $l.eventTempTS : $l.eventWetTS }}
+			</h1>
+			<div class="axis">
+				<div class="label mono">
+					{{ niceNumber(intensityScale.domain()[0]) }}
+				</div>
+				<span class="unit-icon"
+					>
+					<IconTemperaturePlus v-if="selectedEvent?.event_type === 'hot'" class="icon" :class="{ [eventType]: true }" />
+					<IconTemperatureMinus v-else-if="selectedEvent?.event_type === 'cold'" class="icon" :class="{ [eventType]: true }" />
+					<IconCloudRain v-else class="icon" :class="{ [eventType]: true }" />
+					
+					{{
+						selectedEvent?.event_type === 'hot'
+							? eventStore.heatIntensityUnits
+							: selectedEvent?.event_type === 'cold'
+								? eventStore.coldIntensityUnits
+								: eventStore.wetIntensityUnits
+					}}
+					</span
+				>
+				<div class="label mono">
+					{{ niceNumber(intensityScale.domain()[1]) }}
+				</div>
+			</div>
+			<svg class="intensity-chart" ref="svgRef" id="event-graph-width-el">
+				<defs>
+					<filter id="egBarShadow" height="130%">
+						<feDropShadow
+							dx="1"
+							dy="1"
+							stdDeviation="1"
+							flood-color="rgba(0, 0, 0, 0.1)"
+						/>
+					</filter>
+				</defs>
 				<rect
-					:x="xScale(i.toString())"
+					v-if="selectedIndex >= 0"
+					:x="xScale(selectedIndex.toString())"
 					:y="0"
 					:width="xScale.bandwidth()"
 					:height="height * 3"
-					:opacity="i % 2 === 0 ? 0.075 : 0.05"
-					:fill="props.selectedEvent?.color || '#f0f0f0'"
-					@click="emits('dateSelected', day)"
+					class="graph-bg selected"
 				/>
-			</template>
-		</transition-group>
-
-		<g :transform="`translate(0, ${height * 2})`">
-			<text x="10" y="15">Area</text>
-			<template v-for="(value, i) in areaData" :key="i">
+				<g>
+					<template v-if="intensityData.length">
+						<polyline
+							class="intensity-line"
+							:class="{ [eventType]: true }"
+							fill="none"
+							stroke-width="2"
+							:points="
+								intensityData
+									.map(
+										(value, i) =>
+											`${xScale(i.toString())! + xScale.bandwidth() / 2},${intensityScale(
+												value,
+											)}`,
+									)
+									.join(' ')
+							"
+						/>
+						<circle 
+							v-for="(value, i) in intensityData" 
+							:key="i"
+							:cx="xScale(i.toString())! + xScale.bandwidth() / 2"
+							:cy="intensityScale(value)"
+							r="5"
+							:class="{
+								selected: i === selectedIndex,
+								[eventType]: true,
+							}"
+							class="line-point"
+							@click="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
+							@keydown.space.prevent="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
+							v-tooltip="dateStr(new Date(props.selectedEvent?.times[i] || 0)) + ': ' + niceNumber(value) + ' ' + (selectedEvent?.event_type === 'hot' ? eventStore.heatIntensityUnits : selectedEvent?.event_type === 'cold' ? eventStore.coldIntensityUnits : eventStore.wetIntensityUnits)"	/>
+					</template>
+				</g>
+			</svg>
+		</div>
+		<div class="spacer"></div>
+		<div class="chart">
+			<h1 class="chart-title">
+				{{ $l.eventSizeTS }}
+			</h1>
+			<div class="axis">
+				<div class="label mono">{{ niceNumber(sizeScale.domain()[0]) }}</div>
+				<span class="unit-icon"
+					><IconDimensions class="icon" :class="{ [eventType]: true }" />{{
+						eventStore.sizeUnits
+					}}</span
+				>
+				<div class="label mono">{{ niceNumber(sizeScale.domain()[1]) }}</div>
+			</div>
+			<svg class="size-chart">
+				<defs>
+					<filter id="egBarShadow" height="130%">
+						<feDropShadow
+							dx="1"
+							dy="1"
+							stdDeviation="1"
+							flood-color="rgba(0, 0, 0, 0.1)"
+						/>
+					</filter>
+				</defs>
 				<rect
-					:x="xScale(i.toString())"
-					:y="areaScale(value)"
+					v-if="selectedIndex >= 0"
+					:x="xScale(selectedIndex.toString())"
+					:y="0"
 					:width="xScale.bandwidth()"
-					:height="height - areaScale(value)"
-					:fill="props.selectedEvent?.color || '#f0f0f0'"
-					stroke="white"
-					:stroke-width="2"
-					vector-effect="non-scaling-stroke"
+					:height="height * 3"
+					class="graph-bg selected"
 				/>
-			</template>
-		</g>
 
-		<!-- Peak and Mean Value Line Chart -->
-		<g :transform="`translate(0, ${height})`">
-			<text x="10" y="15">Peak & Mean</text>
-			<template v-if="maxData.length">
-				<polyline
-				<polyline
-					fill="none"
-					stroke="#e15759"
-					stroke-width="2"
-					:points="
-						maxData
-							.map(
-								(v, i) =>
-									`${xScale(i.toString())! + xScale.bandwidth() / 2},${valueScale(v)}`,
-							)
-							.join(' ')
-					"
-				/>
-			</template>
-			<template v-if="meanData.length">
-				<polyline
-					fill="none"
-					stroke="#f28e2b"
-					stroke-width="2"
-					stroke-dasharray="4"
-					:points="
-						meanData
-							.map(
-								(v, i) =>
-									`${xScale(i.toString())! + xScale.bandwidth() / 2},${valueScale(v)}`,
-							)
-							.join(' ')
-					"
-				/>
-			</template>
-		</g>
-
-		<!-- dist Chart -->
-		<g :transform="`translate(0, ${0})`">
-			<text x="10" y="15">dist from start</text>
-			<template v-if="distData.length">
-				<polyline
-					fill="none"
-					stroke="#76b7b2"
-					stroke-width="2"
-					:points="
-						distData
-							.map(
-								(v, i) =>
-									`${xScale(i.toString())! + xScale.bandwidth() / 2},${latScale(v)}`,
-							)
-							.join(' ')
-					"
-				/>
-			</template>
-		</g>
-	</svg>
+				<g>
+					<template v-for="(value, i) in areaData" :key="i">
+						<rect
+							:x="xScale(i.toString())"
+							:y="sizeScale(value)"
+							:width="xScale.bandwidth() - 0.5"
+							:height="height - sizeScale(value)"
+							:class="{
+								selected: i === selectedIndex,
+								[eventType]: true,
+							}"
+							vector-effect="non-scaling-stroke"
+							class="area-bar"
+							filter="url(#egBarShadow)"
+							@click="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
+							@keydown.space.prevent="emits('dateSelected', props.selectedEvent?.times[i] || 0)"
+							v-tooltip="dateStr(new Date(props.selectedEvent?.times[i] || 0)) + ': ' + niceNumber(value) + ' ' + eventStore.sizeUnits"
+						</rect>
+					</template>
+				</g>
+			</svg>
+		</div>
+		<button
+			class="download-btn glassy"
+			@click="downloadCSV"
+			v-tooltip="'Download timeseries data as CSV'"
+			aria-label="Download CSV"
+			:disabled="!days.length"
+		>
+			<IconDownload :size="14" />
+		</button>
+		<slot></slot>
+	</div>
 </template>
 
 <style scoped lang="scss">
 @use '@/assets/styles/scssVars.module.scss' as *;
 
-svg {
+.event-graphs-root {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 0.5rem;
+
+	.download-btn {
+		position:absolute;
+		top:0;
+		left: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.25rem;
+		font-size: 0.75rem;
+		cursor: pointer;
+		color: var(--text-secondary);
+		background: var(--panel-bg-night);
+		border: 1px solid var(--divider);
+		border-radius: 0;
+		border-bottom-right-radius: 4px;
+		opacity: 0.5;
+		transition: opacity 0.15s;
+		align-self: flex-end;
+		&:hover:not(:disabled) {
+			opacity: 1;
+		}
+		&:disabled {
+			cursor: default;
+			opacity: 0.3;
+		}
+	}
+
+	.loading {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background-color: var(--panel-bg-night);
+		background-image: var(--panel-bg);
+		z-index: 10;
+	}
+
+	&.loading {
+		flex: 0 0 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.spacer {
+		margin: 0.25rem 0;
+		width: 100%;
+		flex: 0 0 1px;
+		background-color: var(--divider);
+	}
+
+	.chart {
+		z-index: 0;
+
+		flex: 0 1 calc(50% - 0.5rem); /* allow shrinking */
+		max-height: calc(50% - 0.5rem);
+
+		width: 100%; /* let flex handle it */
+		min-width: 0; /* crucial for flex children that need to shrink */
+		position: relative;
+		display: flex;
+		flex-direction: row;
+		align-items: stretch; /* default, just in case */
+		justify-content: center;
+
+		.axis {
+			flex: 1 0 2.5rem;
+			height: 100%;
+			display: flex;
+			flex-direction: column-reverse;
+			justify-content: space-between;
+			align-items: center;
+			font-size: 0.85rem;
+
+			.unit-icon {
+				display: flex;
+				align-items: center;
+				gap: 0.25rem;
+				color: var(--text-secondary);
+				text-align: center;
+			}
+
+			.label {
+				user-select: none;
+				color: var(--text-secondary);
+				flex: 0 0 auto;
+				flex-direction: row;
+			}
+
+			.icon {
+				flex: 0 0 1.25rem;
+				width: 1.25rem;
+				height: 1.25rem;
+				margin: 0.25rem 0;
+
+				display: flex;
+				align-items: center;
+				justify-content: center;
+
+				&.hot {
+					color: var(--theme-hot-primary);
+				}
+				&.cold {
+					color: var(--theme-cold-primary);
+				}
+				&.wet {
+					color: var(--primary);
+				}
+			}
+		}
+
+		.size-chart,
+		.intensity-chart {
+			flex: 1 1 75%;
+			background: var(--panel-bg);
+			box-shadow: inset 2px 2px 8px rgba(0, 0, 0, 0.2);
+			// display: block;
+			// width: 100%; /* remove !important */
+			// height: 100%; /* optional: depends on parent */
+			// max-width: 100%;
+			// max-height: 100%;
+		}
+	}
+}
+
+.size-chart,
+.intensity-chart {
 	font-family: sans-serif;
 	font-size: 12px;
 	user-select: none;
-	width: 100%;
-	height: 100%;
 
-	.graph-bg-transition-enter-active {
-		transition: all $animTime ease-in-out calc($animTime + $settleTime);
+	.area-bar {
+		cursor: pointer;
+		&.hot {
+			fill: var(--theme-hot-primary);
+		}
+		&.cold {
+			fill: var(--theme-cold-primary);
+		}
+		&.wet {
+			fill: var(--primary);
+		}
+		&.selected {
+			fill: var(--primary-glass-shine);
+			&.hot {
+				fill: var(--theme-hot-primary-glass-shine);
+			}
+			&.cold {
+				fill: var(--theme-cold-primary-glass-shine);
+			}
+		}
 	}
-	.graph-bg-transition-leave-active {
-		transition: all $animTime ease-in-out;
+
+	.line-point {
+		cursor: default;
+		stroke: none;
+		opacity: 0;
+		&.selected {
+			cursor: pointer;
+			opacity: 1;
+			r:4;
+			fill: var(--primary-glass-shine);
+			&.hot {
+				fill: var(--theme-hot-primary-glass-shine);
+			}
+			&.cold {
+				fill: var(--theme-cold-primary-glass-shine);
+			}
+		}
 	}
-	.graph-bg-transition-enter-from,
-	.graph-bg-transition-leave-to {
-		height: 0;
+
+	.intensity-line {
+		&.hot {
+			stroke: var(--theme-hot-primary);
+		}
+		&.cold {
+			stroke: var(--theme-cold-primary);
+		}
+		&.wet {
+			stroke: var(--primary);
+		}
 	}
-	.graph-bg-transition-enter-to,
-	.graph-bg-transition-leave-from {
-		height: 100%;
+
+	.graph-bg {
+		fill: white;
+		cursor: pointer;
 	}
-}
-text {
-	fill: #444;
-	font-weight: bold;
 }
 </style>

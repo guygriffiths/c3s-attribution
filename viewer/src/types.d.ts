@@ -1,19 +1,32 @@
 // Globally-available types should go here
 
+import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson'
+
 declare global {
 	const $l: ReturnType<typeof useLabels>
 
 	type Language = 'en'
 
+	interface UserRegion {
+		id: string
+		name: string
+		geojson:
+			| Feature<Polygon | MultiPolygon>
+			| FeatureCollection<Polygon | MultiPolygon>
+	}
+
 	type ViewMode = 'timemachine' | 'heatmap'
 
 	type TimeReelMode = 'default' | 'timeline' | 'eventzoom' | 'overview'
 
-	type EventType = 'hot' | 'cold' // | 'wet' | 'windy' | 'dry'
+	type EventType = 'hot' | 'cold' | 'wet'
+	type SelectedEventType = EventType | 'hotcold' | 'hotwet' | 'coldwet' | 'all'
+
+	type Variable = 'duration' | 'size' | 'intensity'
 
 	interface ExtremeEvent {
 		id: string
-		times: Date[]
+		times: number[]
 		duration: number // in days
 		regions: [number, number][][]
 		total_region: [number, number][]
@@ -43,10 +56,40 @@ declare global {
 	}
 
 	interface EventBox {
-		event: ExtremeEvent
+		eventId: string
+		type: EventType
+		color: string
 		y: number
 		startX: number
 		endX: number
+	}
+
+	interface Filters {
+		duration: {
+			minimum: boolean
+			value: number
+		}
+		size: {
+			minimum: boolean
+			value: number
+		}
+		heatIntensity: {
+			minimum: boolean
+			type: 'intensity' | 'min' | 'mean' | 'max'
+			value: number
+			active: boolean
+		}
+		coldIntensity: {
+			minimum: boolean
+			type: 'intensity' | 'min' | 'mean' | 'max'
+			value: number
+			active: boolean
+		}
+		wetIntensity: {
+			minimum: boolean
+			value: number
+			active: boolean
+		}
 	}
 }
 

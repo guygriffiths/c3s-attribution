@@ -1,36 +1,43 @@
 <script lang="ts" setup>
 import { useStore } from '@/store/store'
-import { useStore as useEventStore } from '@/store/eventStore'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { useUserRegionsStore } from '@/store/userRegionsStore'
 import {
-	faDrawPolygon,
-	faMapMarkerAlt,
-	faBan,
-	faPenAlt,
-	faGlobe,
-} from '@fortawesome/free-solid-svg-icons'
+	IconCircleNumber1,
+	IconCircleNumber2,
+	IconCircleNumber3,
+	IconLayersSelected,
+	IconMapPin,
+	IconPolygon,
+	IconUser,
+	IconWorld,
+} from '@tabler/icons-vue'
+import { ref } from 'vue'
 import { useLabels } from '@/lib/labels'
-import scssModule from '@/assets/styles/scssVars.module.scss'
-import { onFilterBuilt } from '@/lib/eventFiltering'
-import { nextTick, ref } from 'vue'
 
-const store = useStore()
-const eventStore = useEventStore()
 const $l = useLabels()
 
-const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
+const store = useStore()
+const userRegionsStore = useUserRegionsStore()
+
+const numberIcons = [IconCircleNumber1, IconCircleNumber2, IconCircleNumber3]
+
 const setSelectingPoint = () => {
 	if (store.filteringByPoint) {
 		// Turn off point filtering and go back to global
 		store.filteringByPoint = false
 		store.regionFilterReady = false
+			// Deactivate any user region
+	userRegionsStore.deactivate()
 		store.filteringByRegion = false
+		store.filteringByUserRegion = false
 		return
 	}
-	store.setLoading() // start loading immediately
 	store.filteringByPoint = true
 	store.regionFilterReady = false
 	store.filteringByRegion = false
+	// Deactivate any user region
+	userRegionsStore.deactivate()
+	store.filteringByUserRegion = false
 }
 
 const setDrawingRegion = () => {
@@ -39,11 +46,13 @@ const setDrawingRegion = () => {
 		store.filteringByRegion = false
 		store.regionFilterReady = false
 		store.filteringByPoint = false
-		// Set back to global
 	} else {
 		store.filteringByRegion = true
 		store.regionFilterReady = false
 		store.filteringByPoint = false
+		// Deactivate any user region
+		userRegionsStore.deactivate()
+		store.filteringByUserRegion = false
 	}
 }
 
@@ -52,70 +61,100 @@ const setExploreGlobal = () => {
 	store.filteringByPoint = false
 	store.regionFilterReady = false
 	store.filteringByRegion = false
+	userRegionsStore.deactivate()
+	store.filteringByUserRegion = false
 }
 
-const ready = ref(false)
-onFilterBuilt(() => {
-	ready.value = true
-})
+const toggleUserRegion = (id: string) => {
+	if (userRegionsStore.activeRegionId === id) {
+		// Toggle off
+		userRegionsStore.deactivate()
+		store.filteringByUserRegion = false
+		store.regionFilterReady = false
+	} else {
+		// Deactivate drawn / point modes
+		store.filteringByRegion = false
+		store.filteringByPoint = false
+		store.regionFilterReady = false
+		// Activate this user region
+		userRegionsStore.setActive(id)
+		store.filteringByUserRegion = true
+	}
+}
+
+const ready = ref(true)
 </script>
 
 <template>
 	<div class="region-control">
 		<div class="label">
-			<FontAwesomeIcon :icon="faDrawPolygon" />
+			<IconLayersSelected size="16" aria-hidden="true" />
 			<!-- <span>{{ $l.selectByRegion}}</span> -->
 		</div>
 		<!-- <p> {{ eventStore.eventPointFilter }}</p> -->
 
 		<div>
-			<!-- <button
-				class="none-button"
-				:class="{
-					selected:
-						store.filteringByPoint === false &&
-						store.filteringByRegion === false &&
-				}"
-				:style="{ backgroundColor: scssModule.c3sred }"
-				title="No event charts, just view the global heatmap"
-				@click="noExplore"
-			>
-				<FontAwesomeIcon :icon="faBan" />
-			</button> -->
-
 			<button
-				:style="{ backgroundColor: scssModule.c3sred }"
+				class="glassy"
 				:class="{
-					selected: store.exploreGlobal
+					selected: store.exploreGlobal,
 				}"
-				title="Explore global events"
+				:aria-pressed="store.exploreGlobal"
 				@click="setExploreGlobal"
+				v-tooltip="$l.exploreGlobal"
 			>
-				<FontAwesomeIcon :icon="faGlobe" />
+				<IconWorld class="icon" aria-hidden="true" />
 			</button>
 			<button
-				:style="{ backgroundColor: scssModule.c3sred }"
+				class="glassy"
 				:class="{
 					selected: store.filteringByRegion,
 				}"
-				title="Explore a region of your choice"
+				:aria-pressed="store.filteringByRegion"
 				:disabled="!ready"
 				@click="setDrawingRegion"
+				v-tooltip="$l.selectByRegion"
 			>
-				<FontAwesomeIcon :icon="faPenAlt" />
+				<IconPolygon class="icon" aria-hidden="true" />
 			</button>
 			<button
-				:style="{ backgroundColor: scssModule.c3sred }"
+				class="glassy"
 				:class="{
 					selected: store.filteringByPoint,
 				}"
+				:aria-pressed="store.filteringByPoint"
 				:disabled="!ready"
-				title="Explore events at a point"
 				@click="setSelectingPoint"
+				v-tooltip="$l.selectByPoint"
 			>
-				<FontAwesomeIcon :icon="faMapMarkerAlt" />
+				<IconMapPin class="icon" aria-hidden="true" />
+			</button>
+			<button
+				v-for="(region, idx) in userRegionsStore.regions"
+				:key="region.id"
+				class="glassy user-region-btn"
+				:class="{
+					selected: userRegionsStore.activeRegionId === region.id,
+				}"
+				:aria-pressed="userRegionsStore.activeRegionId === region.id"
+				:disabled="!ready"
+				@click="toggleUserRegion(region.id)"
+				v-tooltip="region.name"
+			>
+				<IconPolygon class="icon" aria-hidden="true" />
+				<span class="user-icon-overlay" aria-hidden="true">
+					<IconUser :size="14" />
+				</span>
+				<span
+					v-if="userRegionsStore.regions.length > 1"
+					class="number-overlay"
+					aria-hidden="true"
+				>
+					<component :is="numberIcons[idx]" :size="14" />
+				</span>
 			</button>
 		</div>
+		<slot />
 	</div>
 </template>
 
@@ -129,46 +168,85 @@ onFilterBuilt(() => {
 	position: relative;
 	margin-top: 0.75rem;
 	margin-left: 0.25rem;
-	background-color: rgba($c3sblue, 0.33);
-	padding: 0;
+	padding: 0 2rem 2rem 0;
 	border-radius: 0.5rem;
+	// background-color: aqua;
 
 	.label {
 		font-weight: bolder;
-		font-family: 'Raleway', sans-serif;
 		font-size: 1rem;
 		position: absolute;
 		top: -0.75rem;
 		left: -0.75rem;
-		background-color: rgba(255, 255, 255, 0.9);
+		background-color: var(--panel-bg);
+		backdrop-filter: $frosty;
 		border-radius: 100%;
 		padding: 0 0.3rem;
 		border: 1px solid rgba(0, 0, 0, 0.2);
+		z-index: 10;
+
+		svg {
+			transform: translate(0, 3px) scale(1.2);
+		}
 	}
 
 	button {
-		margin: 0 0.05rem;
-		font-family: 'Raleway', sans-serif;
-		font-weight: bolder;
-		color: rgb(255, 255, 255);
+		margin: 0;
+		border-radius: 0;
 
-		&:disabled {
-			opacity: 0.5;
-			cursor: not-allowed;
+		&:first-child {
+			border-top-left-radius: $borderRadius;
+			border-bottom-left-radius: $borderRadius;
+		}
+		&:last-child {
+			border-top-right-radius: $borderRadius;
+			border-bottom-right-radius: $borderRadius;
+		}
+	}
+
+	.user-region-btn {
+		position: relative;
+
+		.user-icon-overlay {
+			position: absolute;
+			bottom: 2px;
+			right: 2px;
+			width: 16px;
+			height: 16px;
+			background: var(--panel-bg);
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			line-height: 1;
 		}
 
-		&.none-button {
-			// background-color: rgb(64, 64, 64);
-			&.selected {
-				// color: rgb(64, 64, 64);
-				svg {
-					// color: rgb(64, 64, 64) !important;
-					filter: drop-shadow(0 0 1px rgb(255, 255, 255))
-						drop-shadow(0 0 2px rgb(255, 255, 255))
-						drop-shadow(0 0 5px rgb(255, 255, 255))
-						drop-shadow(0 0 10px rgb(255, 255, 255));
-				}
-			}
+		.number-overlay {
+			position: absolute;
+			top: 2px;
+			right: 2px;
+			width: 16px;
+			height: 16px;
+			background: var(--panel-bg);
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			line-height: 1;
+		}
+	}
+
+	:deep(.help-button) {
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity $animTime $animEase;
+	}
+
+	&:hover,
+	&:focus {
+		:deep(.help-button) {
+			opacity: 1;
+			pointer-events: all;
 		}
 	}
 }

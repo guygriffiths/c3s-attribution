@@ -129,10 +129,9 @@ const tileImageCache = new Map<string, HTMLCanvasElement>()
 
 export const getCanvasFromCache = (
 	key: EventTileKey,
-	selectedEvent: ExtremeEventFull | null,
+	selectedEvent: ExtremeEvent | ExtremeEventFull | null,
 	selectedTime: Date,
 	viewMode: ViewMode,
-	intensityRange: [number, number],
 	eventHeatmapRef: any | null,
 	colorForValue: (v: number) => string,
 	intensityForValue: (v: number) => number,
@@ -149,6 +148,11 @@ export const getCanvasFromCache = (
 		console.error('Failed to get canvas context')
 		return canvas
 	}
+	if(selectedEvent === null || !selectedEvent.hasOwnProperty('pixel_max_values')) {
+		// We have an empty event, or not a full event
+		return canvas
+	}
+	selectedEvent = selectedEvent as ExtremeEventFull
 
 	const layer = eventHeatmapRef
 	if (layer?.leafletObject == undefined) {
@@ -169,7 +173,7 @@ export const getCanvasFromCache = (
 		}
 		latLonValues = selectedEvent?.slices[selectedIndex] || []
 		dataValues =
-			selectedEvent?.values[selectedIndex].map(intensityForValue) || []
+			selectedEvent?.values[selectedIndex]?.map(intensityForValue) || []
 	} else {
 		latLonValues = selectedEvent?.pixel_set || []
 		dataValues = selectedEvent?.pixel_max_values.map(intensityForValue) || []
@@ -200,7 +204,6 @@ export const drawEventTile =
 		selectedEvent: ExtremeEventFull | null,
 		selectedTime: Date,
 		viewMode: ViewMode,
-		intensityRange: [number, number],
 		eventHeatmapRef: any | null,
 		colorForValue: (v: number) => string,
 		intensityForValue: (v: number) => number,
@@ -209,10 +212,11 @@ export const drawEventTile =
 		if(!selectedEvent) {
 			return
 		}
-		const tIndex = selectedEvent?.times.findIndex((t) => t.getTime() === selectedTime.getTime())
+		const tIndex = selectedEvent?.times.findIndex((t) => t === selectedTime.getTime())
 		if(tIndex < 0) {
 			return
 		}
+		// console.log('Drawing event tile for event', selectedEvent.id, 'at time index', tIndex, colorForValue, intensityForValue)
 
 		const key = eventTileKey(
 			props.coords,
@@ -233,7 +237,6 @@ export const drawEventTile =
 			selectedEvent,
 			selectedTime,
 			viewMode,
-			intensityRange,
 			eventHeatmapRef,
 			colorForValue,
 			intensityForValue,

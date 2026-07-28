@@ -1,173 +1,778 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { differenceInDays } from 'date-fns'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
-import { useStore as useEventStore } from '@/store/eventStore'
+import { colorForValue, useStore as useEventStore } from '@/store/eventStore'
+import { helpMe } from '@/lib/help'
 import MapComponent from './Map.vue'
-import Panel from './util/Panel.vue'
-import Histogram from './util/Histogram.vue'
-import ScatterPlot from './util/ScatterPlot.vue'
+import AppLogo from './AppLogo.vue'
+import FooterLogos from './FooterLogos.vue'
+import HamburgerMenu from './HamburgerMenu.vue'
 import TimeReel from './TimeReel.vue'
 import EventGraphs from './EventGraphs.vue'
-import EventInfo from './EventInfo.vue'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import {
-	faChevronUp,
-	faAnglesUp,
-	faWandMagicSparkles,
-	faClose,
-	faBarsStaggered,
-	faClock,
-	faExpand,
-	faTemperatureHigh,
-	faRankingStar,
-	faCalendarDays,
-} from '@fortawesome/free-solid-svg-icons'
+import EventInfoPanel from './EventInfoPanel.vue'
+import SelectedEventInfoPanel from './SelectedEventInfoPanel.vue'
 import FocusFrame from './util/FocusFrame.vue'
-import EventRanker from './util/EventRanker.vue'
 import ModeToggle from './util/ModeToggle.vue'
+import MultiEventSmartPanel from './MultiEventSmartPanel.vue'
+import EventDayPanel from './EventDayPanel.vue'
+import HelpButton from './util/HelpButton.vue'
+import ColorScale from './ColorScale.vue'
+import Achievements from './Achievements.vue'
 import {
-	clearFilter,
-	getFilteredEvents,
-	getFilteredIds,
-	getGlobalFilteredEvents,
-	onGlobalEventsReady,
-	onRegionEventsReady,
-	setColdOnly,
-	setHotColdBoth,
-	setHotOnly,
-} from '@/lib/eventFiltering'
-import { differenceInDays } from 'date-fns'
-import { glob } from 'fs'
-import { difference } from 'd3'
-import { propsBinder } from '@vue-leaflet/vue-leaflet/dist/src/utils'
+	IconCalendarWeek,
+	IconChartBar,
+	IconChartHistogram,
+	IconReport,
+	IconInfoCircle,
+	IconWindowMaximize,
+	IconWindowMinimize,
+	IconTrophy,
+	IconDice,
+	IconX,
+} from '@tabler/icons-vue'
+import { useEventFilters } from '@/lib/eventFilters'
+import { getCurrentEvents } from '@/lib/eventsDB'
+import { interpolateColorCold, interpolateColorHot, applyTheme } from '@/lib/utils'
+import { c3sred, c3sblue, c3steal } from '@/assets/styles/scssVars.module.scss'
 
+import { usePersistentStore } from '@/store/persistentStore'
+
+// Stores
 const $l = useLabels()
 const store = useStore()
 const timeStore = useTimeStore()
 const eventStore = useEventStore()
+const persistentStore = usePersistentStore()
 
-onMounted(async () => {})
-const toggleLabel = computed(() =>
-	timeStore.timePanelVisible ? $l.value.hideTimePanel : $l.value.showTimePanel,
+// Achievements
+const achievementPulse = ref(false)
+const achievementNew = ref(false)
+let pulseTimeout: ReturnType<typeof setTimeout> | null = null
+
+watch(
+	() => persistentStore.lastUnlocked,
+	(id) => {
+		if (!id) return
+		if (pulseTimeout) clearTimeout(pulseTimeout)
+		achievementPulse.value = true
+		achievementNew.value = true
+		pulseTimeout = setTimeout(() => {
+			achievementPulse.value = false
+			persistentStore.lastUnlocked = null
+		}, 2000)
+	},
+)
+
+onMounted(() => {
+	persistentStore.incrementVisitCount()
+	persistentStore.unlockAchievement('firstVisit')
+	// Show hard mode notification if already unlocked but not yet seen
+	if (persistentStore.basicComplete && !persistentStore.hardModeSeen) {
+		persistentStore.setHardModeSeen()
+		nextTick(() => helpMe('hardModeUnlocked'))
+	}
+})
+
+watch(
+	() => timeStore.isPlaying,
+	(playing) => { if (playing) persistentStore.unlockAchievement('timeTraveler') },
+)
+watch(
+	() => store.filteringByPoint,
+	(v) => { if (v) persistentStore.unlockAchievement('pointExplorer') },
+)
+watch(
+	() => store.regionFilterReady,
+	(v) => { if (v) persistentStore.unlockAchievement('regionScout') },
+)
+watch(
+	() => eventStore.eventTypeMode,
+	(mode) => {
+		if (`${mode}`.includes('hot')) persistentStore.unlockAchievement('heatwaveWatcher')
+		if (`${mode}`.includes('cold')) persistentStore.unlockAchievement('coldFrontChaser')
+		if (`${mode}`.includes('wet')) persistentStore.unlockAchievement('rainChaser')
+	},
+	{ immediate: true },
+)
+watch(
+	() => eventStore.selectedEventId,
+	(id) => { if (id) persistentStore.unlockAchievement('eventInspector') },
+)
+watch(
+	() => store.viewMode,
+	(mode) => { if (mode === 'heatmap') persistentStore.unlockAchievement('bigPicture') },
+)
+watch(
+	() => timeStore.timePanelExpanded,
+	(v) => { if (v) persistentStore.unlockAchievement('timelineExplorer') },
+)
+
+// Hard mode unlock notification
+watch(
+	() => persistentStore.basicComplete,
+	(complete) => {
+		if (complete && !persistentStore.hardModeSeen) {
+			persistentStore.setHardModeSeen()
+			helpMe('hardModeUnlocked')
+		}
+	},
+)
+
+// All complete notification
+watch(
+	() => persistentStore.allComplete,
+	(complete) => {
+		if (complete && !persistentStore.allCompleteSeen) {
+			persistentStore.setAllCompleteSeen()
+			helpMe('allComplete')
+		}
+	},
+)
+
+const randomiseEvent = () => {
+	const pool = getCurrentEvents(null, true)
+	if (!pool.length) return
+	const event = pool[Math.floor(Math.random() * pool.length)]
+	eventStore.selectEvent(event)
+}
+
+// Rainbow mode
+watch(
+	() => persistentStore.rainbowMode,
+	(rainbow) => {
+		if (rainbow) {
+			applyTheme(`${eventStore.eventTypeMode}-sparkle`)
+		} else {
+			applyTheme(eventStore.eventTypeMode)
+		}
+	},
+	{ immediate: true },
+)
+watch(
+	() => eventStore.eventTypeMode,
+	(mode) => {
+		if (persistentStore.rainbowMode) {
+			applyTheme(`${mode}-sparkle`)
+		}
+	},
+)
+
+// Hard mode achievement watchers
+
+// Overview section
+watch(
+	() => eventStore.eventTypeMode,
+	(mode) => {
+		if (mode === 'hotcold') persistentStore.unlockAchievement('hardOverviewHotcold')
+		if (mode === 'hotwet') persistentStore.unlockAchievement('hardOverviewHotwet')
+		if (mode === 'coldwet') persistentStore.unlockAchievement('hardOverviewColdwet')
+	},
+	{ immediate: true },
+)
+watch(
+	() => store.maximizeMultiPanel,
+	(v) => { if (v) persistentStore.unlockAchievement('hardOverviewMaximize') },
+)
+watch(
+	[() => timeStore.startTimeFilter, () => timeStore.endTimeFilter],
+	([start, end]) => {
+		if (
+			start.getTime() > timeStore.startTime.getTime() ||
+			end.getTime() < timeStore.endTime.getTime()
+		) {
+			persistentStore.unlockAchievement('hardOverviewTimeFilter')
+		}
+	},
+)
+
+// Time Machine section
+watch(
+	() => timeStore.selectedTime,
+	(t) => {
+		if (t < new Date(1985, 0, 1)) persistentStore.unlockAchievement('hardTimemachineEarly')
+		if (t >= new Date(2022, 0, 1)) persistentStore.unlockAchievement('hardTimemachineRecent')
+	},
+)
+
+// Moved to individual components for specific types:
+// Hot on the map
+// Cold on the ranker
+// Wet from the timeline
+// watch(
+// 	() => eventStore.selectedEvent,
+// )
+
+// Time Reel section
+watch(
+	() => timeStore.speedFactor,
+	(s) => { if (s > 1) persistentStore.unlockAchievement('hardTimeReelFaster') },
+)
+watch(
+	() => timeStore.showBars,
+	(v) => { if (!v) persistentStore.unlockAchievement('hardTimeReelBarsOff') },
+)
+watch(() => [timeStore.startTimeFilter, timeStore.endTimeFilter], ([start, end]) => {
+	if (
+		start.getTime() > timeStore.startTime.getTime() ||
+		end.getTime() < timeStore.endTime.getTime()
+	) {
+		persistentStore.unlockAchievement('hardTimeReelWindow')
+	}
+})
+
+
+// Multi-Event Panel section
+watch(
+	() => store.focusVariable,
+	(v) => {
+		if (v === 'size') persistentStore.unlockAchievement('hardMultiSortSize')
+		if (v === 'intensity') persistentStore.unlockAchievement('hardMultiSortIntensity')
+	},
+)
+watch(
+	() => store.showAnalytics,
+	(v) => { if (v) persistentStore.unlockAchievement('hardMultiAnalytics') },
+)
+
+// Moved to event ranker
+// watch(
+// 	() => eventStore.hoveringEvent,
+// 	(v) => { if (v) persistentStore.unlockAchievement('hardMultiHover') },
+// )
+
+// Event Info section
+watch(
+	() => store.showInfoPanel,
+	(v) => { if (!v) persistentStore.unlockAchievement('hardEventInfoPanel') },
+)
+
+// Settings Menu section
+watch(
+	() => store.hamburgerMenuOpen,
+	(v) => { if (v) persistentStore.unlockAchievement('hardHamburgerOpen') },
+)
+watch(
+	() => eventStore.filters.duration.value,
+	(v) => { if (v !== 3) persistentStore.unlockAchievement('hardHamburgerDurationFilter') },
+)
+watch(
+	() => eventStore.filters.heatIntensity.minimum || eventStore.filters.coldIntensity.minimum || eventStore.filters.wetIntensity.minimum,
+	(v) => { persistentStore.unlockAchievement('hardHamburgerIntensityFilter') },
 )
 const toggleTimePanelExpanded = () => {
 	timeStore.timePanelExpanded = !timeStore.timePanelExpanded
-	if (timeStore.timePanelExpanded) {
-		timeStore.timePanelVisible = true
-	}
-}
-const toggleTimePanelHidden = () => {
-	timeStore.timePanelVisible = !timeStore.timePanelVisible
-	// if (!timeStore.timePanelVisible) {
-	// 	timeStore.timePanelExpanded = false
-	// }
 }
 
 const exitFocus = () => {
 	eventStore.selectEvent(null)
-	clearFilter()
 	store.draggingFilter = false
 }
 
-const globalEventsOfInterest = computed((): boolean => {
-	return (
-		store.viewMode === 'timemachine' ||
-		store.exploreGlobal ||
-		(!(store.filteringByRegion && store.regionFilterReady) &&
-			!store.filteringByPoint)
-	)
-})
+const { timeReelEvents, summaryEvents, globalFilteredEvents } =
+	useEventFilters()
 
-const globalFilteredEvents = ref([] as ExtremeEvent[])
-const eventsOfInterest = ref([] as ExtremeEvent[])
-onGlobalEventsReady(() => {
-	globalFilteredEvents.value = getGlobalFilteredEvents()
-	if (globalEventsOfInterest.value) {
-		eventsOfInterest.value = globalFilteredEvents.value
-	}
-})
-
-onRegionEventsReady(() => {
-	eventsOfInterest.value = getFilteredEvents()
-})
-watch(
-	() => eventStore.selectedEvent,
-	(newVal) => {
-		if (globalEventsOfInterest.value) {
-			eventsOfInterest.value = globalFilteredEvents.value
-		} else {
-			eventsOfInterest.value = getFilteredEvents()
-		}
-	},
-)
-watch(
-	() => [
-		store.filteringByRegion,
-		store.regionFilterReady,
-		store.filteringByPoint,
-		store.exploreGlobal,
-		store.viewMode,
-	],
-	() => {
-		if (globalEventsOfInterest.value) {
-			eventsOfInterest.value = globalFilteredEvents.value
-		} else {
-			eventsOfInterest.value = getFilteredEvents()
-		}
-	},
-	{ immediate: true },
-)
-
-watch(
-	() => [eventStore.coldEventsOn, eventStore.hotEventsOn],
-	() => {
-		if (eventStore.coldEventsOn && eventStore.hotEventsOn) {
-			setHotColdBoth()
-		} else if (eventStore.coldEventsOn) {
-			setColdOnly()
-		} else if (eventStore.hotEventsOn) {
-			setHotOnly()
-		} else {
-			// none selected, default to both
-			setHotColdBoth()
-		}
-		if (globalEventsOfInterest.value) {
-			globalFilteredEvents.value = getGlobalFilteredEvents()
-			eventsOfInterest.value = globalFilteredEvents.value
-		} else {
-			eventsOfInterest.value = getFilteredEvents()
-		}
-	},
-	{ immediate: true },
-)
-
+// Time reel mode computation
 const mode = computed((): TimeReelMode => {
 	if (store.viewMode === 'heatmap') return 'timeline'
 	if (eventStore.eventSelected) return 'eventzoom'
 	if (timeStore.timePanelExpanded) return 'overview'
 	return 'default'
 })
+
+// Selected day index for event day panel
+const selectedDayIdx = computed((): number | null => {
+	if (
+		!eventStore.selectedEvent ||
+		!eventStore.selectedEvent.hasOwnProperty('pixel_max_values')
+	) {
+		return null
+	}
+
+	const totalDays = eventStore.durationForEvent(eventStore.selectedEvent)
+	const selectedDay = differenceInDays(
+		timeStore.selectedTime,
+		new Date(eventStore.selectedEvent?.times[0] || 0),
+	)
+
+	if (selectedDay < 0 || selectedDay >= totalDays) return null
+	return selectedDay
+})
+
+// Day browse achievement: user has navigated to a non-first day within an event
+watch(selectedDayIdx, (idx) => {
+	if (idx !== null && idx > 0) persistentStore.unlockAchievement('hardEventDayBrowse')
+})
+
+const hotScaleOn = computed(() => {
+	if (store.viewMode === 'timemachine') {
+		return eventStore.eventTypeMode.indexOf('hot') > -1
+	} else {
+		return eventStore.selectedEvent?.event_type === 'hot'
+	}
+})
+
+const coldScaleOn = computed(() => {
+	if (store.viewMode === 'timemachine') {
+		return `${eventStore.eventTypeMode}`.indexOf('cold') > -1
+	} else {
+		return eventStore.selectedEvent?.event_type === 'cold'
+	}
+})
+
+const wetScaleOn = computed(() => {
+	if (store.viewMode === 'timemachine') {
+		return eventStore.eventTypeMode.indexOf('wet') > -1
+	} else {
+		return eventStore.selectedEvent?.event_type === 'wet'
+	}
+})
+
+const hotHeatmapOn = computed(() => {
+	return (
+		store.viewMode === 'heatmap' && eventStore.eventTypeMode.indexOf('hot') > -1
+	)
+})
+
+const coldHeatmapOn = computed(() => {
+	return (
+		store.viewMode === 'heatmap' &&
+		eventStore.eventTypeMode.indexOf('cold') > -1
+	)
+})
+
+const wetHeatmapOn = computed(() => {
+	return (
+		store.viewMode === 'heatmap' && eventStore.eventTypeMode.indexOf('wet') > -1
+	)
+})
+
+const hslToRgb01 = (
+	h: number,
+	s: number,
+	l: number,
+): [number, number, number] => {
+	const hue = ((h % 360) + 360) % 360
+	const sat = Math.max(0, Math.min(1, s))
+	const lig = Math.max(0, Math.min(1, l))
+
+	const c = (1 - Math.abs(2 * lig - 1)) * sat
+	const x = c * (1 - Math.abs(((hue / 60) % 2) - 1))
+	const m = lig - c / 2
+
+	let r = 0
+	let g = 0
+	let b = 0
+
+	if (hue < 60) {
+		r = c
+		g = x
+	} else if (hue < 120) {
+		r = x
+		g = c
+	} else if (hue < 180) {
+		g = c
+		b = x
+	} else if (hue < 240) {
+		g = x
+		b = c
+	} else if (hue < 300) {
+		r = x
+		b = c
+	} else {
+		r = c
+		b = x
+	}
+
+	return [r + m, g + m, b + m]
+}
+
+const parseHslColor = (hslColor: string): [number, number, number] | null => {
+	const match = hslColor
+		.trim()
+		.match(/^hsla?\(\s*([-\d.]+)(?:deg)?[\s,]+([-\d.]+)%[\s,]+([-\d.]+)%/i)
+
+	if (!match) return null
+
+	const h = Number(match[1])
+	const s = Number(match[2]) / 100
+	const l = Number(match[3]) / 100
+	return hslToRgb01(h, s, l)
+}
+
+const multiplyStackedColor = (baseColor: string, value: number): string => {
+	const rgb = parseHslColor(baseColor)
+	if (!rgb) return baseColor
+
+	const layers = Math.max(0, Math.round(value))
+	const alpha = 0.1
+
+	const applyMultiplyLayer = (sourceChannel: number): number => {
+		const step = 1 - alpha * (1 - sourceChannel)
+		return Math.pow(step, layers)
+	}
+
+	const r = Math.round(255 * applyMultiplyLayer(rgb[0]))
+	const g = Math.round(255 * applyMultiplyLayer(rgb[1]))
+	const b = Math.round(255 * applyMultiplyLayer(rgb[2]))
+
+	return `rgb(${r}, ${g}, ${b})`
+}
+
+const getStackedC3sRed = (value: number): string => {
+	return multiplyStackedColor(c3sred, value)
+}
+
+const getStackedC3sBlue = (value: number): string => {
+	return multiplyStackedColor(c3sblue, value)
+}
+
+const getStackedC3steal = (value: number): string => {
+	// C3S green is not in HSL format, so we hardcode an approximation here
+	return multiplyStackedColor(c3steal, value)
+}
 </script>
 
 <template>
 	<div class="main">
-		<FocusFrame
-			class="focus-frame"
-			:active="store.isFocused"
-			@close="exitFocus"
+		<!-- Focus overlay frame -->
+		<FocusFrame id="focus-frame" :active="store.isFocused" @close="exitFocus" />
+
+		<!-- Main map component -->
+		<MapComponent id="map" />
+
+		<div
+			id="color-scale"
+			class="panel"
+			:class="{
+				selected: store.isFocused,
+				timemachine: store.viewMode === 'timemachine',
+			}"
+		>
+			<ColorScale
+				:colorfunc="
+					(val: number) => colorForValue(val, 'hot', eventStore.hotScale)
+				"
+				:domain="eventStore.hotScale.domain()"
+				:label="eventStore.eventSelected ? $l.cellTemp : $l.eventMax"
+				:units="eventStore.heatIntensityUnits"
+				v-if="hotScaleOn"
+			/>
+			<ColorScale
+				:colorfunc="
+					(val: number) => colorForValue(val, 'cold', eventStore.coldScale)
+				"
+				:domain="eventStore.coldScale.domain()"
+				:units="eventStore.coldIntensityUnits"
+				:label="eventStore.eventSelected ? $l.cellTemp : $l.eventMin"
+				v-if="coldScaleOn"
+			/>
+			<ColorScale
+				:colorfunc="
+					(val: number) => colorForValue(val, 'wet', eventStore.wetScale)
+				"
+				:domain="eventStore.wetScale.domain()"
+				:label="$l.wetIntensityLabel"
+				units=""
+				v-if="wetScaleOn"
+			/>
+			<ColorScale
+				:colorfunc="getStackedC3sRed"
+				:domain="[0, 30]"
+				label="events"
+				v-if="hotHeatmapOn"
+			/>
+			<ColorScale
+				:colorfunc="getStackedC3sBlue"
+				:domain="[0, 30]"
+				label="events"
+				v-if="coldHeatmapOn"
+			/>
+			<ColorScale
+				:colorfunc="getStackedC3steal"
+				:domain="[0, 30]"
+				label="events"
+				v-if="wetHeatmapOn"
+			/>
+		</div>
+
+		<!-- Logo and title section -->
+		<AppLogo id="logo" />
+
+		<!-- Mode toggle (time machine / overview) -->
+		<ModeToggle
+			v-model="store.viewMode"
+			id="mode-toggle"
+			:class="{ hidden: timeStore.timePanelExpanded }"
 		/>
-		<MapComponent id="map"></MapComponent>
-		<ModeToggle v-model="store.viewMode" id="mode-toggle" />
-		<Panel
+
+		<!-- Help button -->
+		<button
+			id="help-button"
+			class="glassy color"
+			:class="{
+				hidden: store.isFocused || timeStore.timePanelExpanded,
+			}"
+			:inert="
+				store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined
+			"
+			@click="helpMe('aboutInfo')"
+			v-tooltip="$l.aboutInfo"
+		>
+			<IconInfoCircle
+				size="24"
+				aria-hidden="true"
+				v-if="!store.hamburgerMenuOpen"
+			/>
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+
+		<!-- Randomise event button (unlocked when all achievements complete) -->
+		<button
+			v-if="persistentStore.allComplete"
+			id="randomise-button"
+			class="glassy color"
+			:class="{ hidden: store.isFocused || timeStore.timePanelExpanded }"
+			:inert="store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined"
+			@click="randomiseEvent"
+			v-tooltip="'Surprise me!'"
+		>
+			<IconDice size="24" aria-hidden="true" />
+		</button>
+
+		<!-- Achievements button -->
+		<button
+			id="achievements-button"
+			class="glassy color"
+			:class="{
+				hidden: store.isFocused || timeStore.timePanelExpanded,
+				close: store.achievementsOpen,
+				pulse: achievementPulse && !store.achievementsOpen,
+				selected: achievementNew && !store.achievementsOpen,
+			}"
+			:inert="
+				store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined
+			"
+			@click="store.achievementsOpen = !store.achievementsOpen; achievementNew = false"
+			v-tooltip="store.achievementsOpen ? $l.close : 'Achievements'"
+		>
+			<IconTrophy size="24" aria-hidden="true" v-if="!store.achievementsOpen" />
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+
+		<!-- Achievements panel -->
+		<div
+			id="achievements-menu"
+			class="panel top"
+			:class="{ active: store.achievementsOpen && !store.isFocused }"
+			:inert="!store.achievementsOpen ? 'true' : undefined"
+		>
+			<Achievements />
+		</div>
+
+		<!-- Hamburger menu -->
+		<HamburgerMenu />
+
+		<!-- Event day panel (time machine mode, left side) -->
+		<EventDayPanel
+			id="event-day-panel"
+			:selected-event="eventStore.selectedEvent"
+			:selected-index="selectedDayIdx !== null ? selectedDayIdx : 0"
+			class="panel left chart"
+			:class="{
+				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
+			}"
+			:inert="
+				store.viewMode !== 'timemachine' || !eventStore.eventSelected
+					? 'true'
+					: undefined
+			"
+		>
+			<HelpButton help="eventDayPanel" />
+		</EventDayPanel>
+
+		<!-- Event graphs panel (time machine mode, left side) -->
+		<EventGraphs
+			id="event-graphs"
+			:selected-event="eventStore.selectedEvent"
+			:event-store="eventStore"
+			class="panel left chart event-graphs-help"
+			:class="{
+				active: store.viewMode === 'timemachine' && eventStore.eventSelected,
+			}"
+			:inert="
+				store.viewMode !== 'timemachine' || !eventStore.eventSelected
+					? 'true'
+					: undefined
+			"
+			@dateSelected="
+				(date: number) => {
+					timeStore.selectedTime = new Date(date)
+				}
+			"
+		>
+			<HelpButton help="eventGraphs" />
+		</EventGraphs>
+
+		<!-- Multi-event panel toggle button -->
+		<button
+			id="multi-button"
+			class="glassy color"
+			:class="{
+				hidden: store.viewMode !== 'heatmap' || store.maximizeMultiPanel,
+				close: store.showMultiPanel,
+			}"
+			:inert="
+				store.viewMode !== 'heatmap' || store.maximizeMultiPanel
+					? 'true'
+					: undefined
+			"
+			@click="store.showMultiPanel = !store.showMultiPanel"
+			v-tooltip="store.showMultiPanel ? $l.close : $l.multiEventPanel"
+		>
+			<IconChartHistogram
+				size="24"
+				aria-hidden="true"
+				v-if="!store.showMultiPanel"
+			/>
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+
+		<!-- Multi-event panel (overview mode, right side) -->
+		<MultiEventSmartPanel
+			id="multi-event-panel"
+			:events-of-interest="summaryEvents"
+			:background-events="
+				store.filteringByPoint || store.filteringByRegion || store.filteringByUserRegion
+					? globalFilteredEvents
+					: []
+			"
+			:selectedEvent="eventStore.selectedEvent"
+			class="right panel"
+			:class="{
+				selected: eventStore.eventSelected,
+				active: store.showMultiPanel && store.viewMode === 'heatmap',
+				maximize: store.maximizeMultiPanel,
+			}"
+			:inert="
+				!store.showMultiPanel || store.viewMode !== 'heatmap'
+					? 'true'
+					: undefined
+			"
+		>
+			<button
+				id="multimax-button"
+				class="glassy color"
+				:inert="store.viewMode !== 'heatmap' ? 'true' : undefined"
+				@click="store.maximizeMultiPanel = !store.maximizeMultiPanel"
+				v-tooltip="
+					store.maximizeMultiPanel
+						? $l.restoreMultiEventPanel
+						: $l.maximiseMultiEventPanel
+				"
+			>
+				<IconWindowMaximize
+					size="24"
+					aria-hidden="true"
+					v-if="!store.maximizeMultiPanel"
+					style="transform: scaleX(-1)"
+				/>
+				<IconWindowMinimize
+					size="24"
+					aria-hidden="true"
+					style="transform: scaleX(-1)"
+					v-else
+				/>
+			</button>
+			<HelpButton help="multiEventPanel" />
+		</MultiEventSmartPanel>
+
+		<!-- Event info panel toggle button -->
+		<button
+			id="info-button"
+			class="glassy color"
+			:class="{
+				hidden:
+					timeStore.timePanelExpanded ||
+					(store.isFocused && store.viewMode === 'timemachine') ||
+					store.maximizeMultiPanel,
+				close: store.showInfoPanel,
+			}"
+			:inert="
+				timeStore.timePanelExpanded ||
+				(store.isFocused && store.viewMode === 'timemachine') ||
+				store.maximizeMultiPanel
+					? 'true'
+					: undefined
+			"
+			@click="store.showInfoPanel = !store.showInfoPanel"
+			v-tooltip="store.showInfoPanel ? $l.close : $l.showInfoPanel"
+		>
+			<IconReport size="24" aria-hidden="true" v-if="!store.showInfoPanel" />
+			<IconX size="24" aria-hidden="true" v-else />
+		</button>
+
+		<!-- Event info panel (right side, top) -->
+		<EventInfoPanel
+			id="event-info-panel"
+			:selected-event="eventStore.selectedEvent"
+			:main-store="store"
+			:event-store="eventStore"
+			:time-store="timeStore"
+			:events-of-interest="summaryEvents"
+			:class="{
+				'disable-transitions': timeStore.isPlaying,
+				show:
+					store.showInfoPanel &&
+					!timeStore.timePanelExpanded &&
+					!(store.isFocused && store.viewMode === 'timemachine') &&
+					store.maximizeMultiPanel === false,
+			}"
+			:inert="
+				!store.showInfoPanel ||
+				timeStore.timePanelExpanded ||
+				(store.isFocused && store.viewMode === 'timemachine') ||
+				store.maximizeMultiPanel
+					? 'true'
+					: undefined
+			"
+		>
+			<HelpButton help="eventInfo" />
+		</EventInfoPanel>
+
+		<!-- Selected event info panel (dependent upon mode - RHS in timemachine, LHS in heatmap) -->
+		<SelectedEventInfoPanel
+			v-if="eventStore.selectedEvent"
+			id="selected-event-info-panel"
+			class="chart"
+			:selected-event="eventStore.selectedEvent"
+			:event-store="eventStore"
+			:class="{
+				show:
+					eventStore.selectedEvent !== null &&
+					(store.showInfoPanel || store.viewMode === 'timemachine'),
+				single: store.viewMode === 'timemachine' && store.isFocused,
+			}"
+			:inert="
+				eventStore.selectedEvent === null ||
+				!(store.showInfoPanel && store.viewMode === 'timemachine')
+					? 'true'
+					: undefined
+			"
+		>
+			<HelpButton help="selectedEventInfo" />
+		</SelectedEventInfoPanel>
+
+		<!-- Time panel (bottom) -->
+		<div
 			id="time-panel"
-			:active="timeStore.timePanelVisible || eventStore.eventSelected"
-			class="bottom peek"
+			class="panel bottom active"
 			:class="{
 				event: eventStore.eventSelected,
 				expanded: timeStore.timePanelExpanded,
-				heatmap: store.viewMode === 'heatmap',
+				[store.viewMode]: true,
 				focused: store.isFocused,
 			}"
 		>
@@ -175,42 +780,40 @@ const mode = computed((): TimeReelMode => {
 				id="times"
 				:start="timeStore.startTime"
 				:end="timeStore.endTime"
-				:events="eventsOfInterest"
-				:dragging-filter="store.draggingFilter"
+				v-model:startFilter="timeStore.startTimeFilter"
+				v-model:endFilter="timeStore.endTimeFilter"
+				:events="timeReelEvents"
 				:selected-event="eventStore.selectedEvent"
-				v-model="timeStore.selectedTime"
-				@event-selected="eventStore.selectEvent"
+				:hover-event="eventStore.hoveringEvent"
 				:mode="mode"
 				:show-bars="timeStore.showBars"
 				:color-for-event="eventStore.colorForEvent"
+				:eventType="eventStore.eventTypeMode"
+				:speed-factor="timeStore.speedFactor"
 				:class="mode"
-				:hot="eventStore.hotEventsOn"
-				:cold="eventStore.coldEventsOn"
-				:value-extractor="eventStore.intensityForEvent"
-			></TimeReel>
-			<!-- <button
-				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
-				class="panel-hide"
-				@click="toggleTimePanelHidden"
-			>
-				<font-awesome-icon
-					:icon="!timeStore.timePanelExpanded ? faChevronUp : faAnglesUp"
-					:class="{ 'fa-rotate-180': timeStore.timePanelVisible }"
-				/>
-			</button> -->
+				v-model="timeStore.selectedTime"
+				@event-selected="eventStore.selectEvent"
+				@playing="timeStore.isPlaying = true"
+				@paused="timeStore.isPlaying = false"
+				@hover="eventStore.setHoveringEvent"
+			/>
+
+			<!-- Time panel expand button -->
 			<button
-				v-if="
-					timeStore.timePanelVisible &&
-					!eventStore.eventSelected &&
-					store.viewMode !== 'heatmap'
-				"
-				class="panel-expand"
+				v-if="!eventStore.eventSelected && store.viewMode !== 'heatmap'"
+				class="panel-expand glassy color"
 				@click="toggleTimePanelExpanded"
+				v-tooltip="timeStore.timePanelExpanded ? $l.close : $l.showOverview"
 			>
-				<font-awesome-icon
-					:icon="!timeStore.timePanelExpanded ? faCalendarDays : faClose"
+				<IconCalendarWeek
+					v-if="!timeStore.timePanelExpanded"
+					size="20"
+					aria-hidden="true"
 				/>
+				<IconX v-else aria-hidden="true" />
 			</button>
+
+			<!-- Show bars toggle -->
 			<button
 				v-if="
 					store.viewMode === 'timemachine' &&
@@ -218,238 +821,35 @@ const mode = computed((): TimeReelMode => {
 					eventStore.selectedEvent === null
 				"
 				:draggable="false"
-				class="show-bars"
-				:class="{ active: timeStore.showBars }"
+				class="show-bars glassy"
+				:class="{ selected: timeStore.showBars }"
 				@click="timeStore.showBars = !timeStore.showBars"
+				:aria-pressed="timeStore.showBars"
+				v-tooltip="timeStore.showBars ? $l.hideEventBars : $l.showEventBars"
 			>
-				<font-awesome-icon :icon="faBarsStaggered" />
+				<IconChartBar class="bar-icon" aria-hidden="true" />
 			</button>
-		</Panel>
 
-		<Panel
-			id="event-info-panel"
-			class="bottom"
-			:active="eventStore.selectedEvent !== null"
-		>
-			<EventInfo :selected-event="eventStore.selectedEvent" />
-		</Panel>
+			<HelpButton help="timeReel" />
+		</div>
 
-		<Panel
-			id="multi-event-panel"
-			class="right"
-			:class="{ small: store.viewMode === 'timemachine' }"
-			:active="
-				store.showMultiEventPanel &&
-				(store.viewMode !== 'timemachine' || eventStore.eventSelected)
-			"
-		>
-			<button
-				class="panel-toggle"
-				@click="store.showMultiEventPanel = !store.showMultiEventPanel"
-			>
-				<font-awesome-icon
-					:icon="!store.showMultiEventPanel ? faRankingStar : faClose"
-				/>
-			</button>
-			<div class="title-panel">
-				<h1>
-					<FontAwesomeIcon :icon="faClock" />
-					Duration
-				</h1>
-				<h1>
-					<FontAwesomeIcon :icon="faExpand" />
-					Size
-				</h1>
-				<h1>
-					<FontAwesomeIcon :icon="faTemperatureHigh" />
-					Intensity
-				</h1>
-			</div>
-			<div class="medals-subpanel subpanel">
-				<EventRanker
-					:events="eventsOfInterest"
-					:sort-func="
-						(a, b) =>
-							eventStore.durationForEvent(b) - eventStore.durationForEvent(a)
-					"
-					:topN="200"
-				/>
-				<EventRanker
-					:events="eventsOfInterest"
-					:sort-func="
-						(a, b) => eventStore.sizeForEvent(b) - eventStore.sizeForEvent(a)
-					"
-					:topN="200"
-				/>
+		<!-- Footer logos -->
+		<FooterLogos id="footer-logos" />
 
-				<EventRanker
-					:events="eventsOfInterest"
-					:sort-func="
-						(a, b) =>
-							eventStore.intensityForEvent(b) - eventStore.intensityForEvent(a)
-					"
-					:topN="200"
-				/>
-			</div>
-			<div class="histogram-subpanel subpanel">
-				<Histogram
-					:data="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-					:nbins="10"
-					:xmin="eventStore.durationRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.durationRange[1],
-									eventStore.durationForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.durationRange[1]
-					"
-					:labelFunc="(v: number) => v.toFixed(0)"
-					:units="'days'"
-					:highlight-value="
-						eventStore.selectedEvent
-							? eventStore.durationForEvent(eventStore.selectedEvent)
-							: null
-					"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-				/>
-				<Histogram
-					:data="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-					:nbins="10"
-					:xmin="eventStore.sizeRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.sizeRange[1],
-									eventStore.sizeForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.sizeRange[1]
-					"
-					:labelFunc="(v: number) => (v / 1000).toFixed(1) + 'k'"
-					:units="'m²'"
-					:highlight-value="
-						eventStore.selectedEvent
-							? eventStore.sizeForEvent(eventStore.selectedEvent)
-							: null
-					"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-				/>
-				<Histogram
-					:data="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-					:nbins="10"
-					:xmin="eventStore.intensityRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.intensityRange[1],
-									eventStore.intensityForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.intensityRange[1]
-					"
-					:labelFunc="(v: number) => v.toFixed(0)"
-					:units="'°C'"
-					:highlight-value="
-						eventStore.selectedEvent
-							? eventStore.intensityForEvent(eventStore.selectedEvent)
-							: null
-					"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-				/>
-			</div>
-			<div class="scatter-subpanel subpanel">
-				<ScatterPlot
-					:xdata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-					:ydata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-					:xmin="eventStore.durationRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.durationRange[1],
-									eventStore.durationForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.durationRange[1]
-					"
-					:ymin="eventStore.intensityRange[0]"
-					:ymax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.intensityRange[1],
-									eventStore.intensityForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.intensityRange[1]
-					"
-					:ids="eventsOfInterest.map((e) => e.id)"
-					:highlightId="eventStore.selectedEventId"
-				/>
-				<ScatterPlot
-					:xdata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-					:ydata="eventsOfInterest.map((e) => eventStore.durationForEvent(e))"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-					:xmin="eventStore.sizeRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.sizeRange[1],
-									eventStore.sizeForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.sizeRange[1]
-					"
-					:ymin="eventStore.durationRange[0]"
-					:ymax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.durationRange[1],
-									eventStore.durationForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.durationRange[1]
-					"
-					:ids="eventsOfInterest.map((e) => e.id)"
-					:highlightId="eventStore.selectedEventId"
-				/>
-				<ScatterPlot
-					:xdata="eventsOfInterest.map((e) => eventStore.intensityForEvent(e))"
-					:ydata="eventsOfInterest.map((e) => eventStore.sizeForEvent(e))"
-					:types="eventsOfInterest.map((e) => e.event_type)"
-					:xmin="eventStore.intensityRange[0]"
-					:xmax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.intensityRange[1],
-									eventStore.intensityForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.intensityRange[1]
-					"
-					:ymin="eventStore.sizeRange[0]"
-					:ymax="
-						eventStore.selectedEvent
-							? Math.max(
-									eventStore.sizeRange[1],
-									eventStore.sizeForEvent(eventStore.selectedEvent),
-								)
-							: eventStore.sizeRange[1]
-					"
-					:ids="eventsOfInterest.map((e) => e.id)"
-					:highlightId="eventStore.selectedEventId"
-				/>
-			</div>
-		</Panel>
-
+		<!-- Event window (invisible div for map zoom boundaries) -->
 		<div
 			id="event-window"
 			:class="{
 				eventPanelOn:
 					eventStore.selectedEvent !== null && store.viewMode === 'timemachine',
-				multiEventPanelOn: store.showMultiEventPanel,
+				multiEventPanelOn: store.viewMode === 'heatmap',
 			}"
 		/>
 	</div>
 </template>
 
-<style lang="scss" scoped>
+<style lang="scss">
 @use '@/assets/styles/scssVars.module.scss' as *;
-
-$smallTimePanelHeight: max(6rem, 10%);
 
 .main {
 	display: flex;
@@ -461,112 +861,410 @@ $smallTimePanelHeight: max(6rem, 10%);
 	max-height: 100vh;
 	position: relative;
 
-	.focus-frame {
-		overflow: hidden;
-		transition: all $settleTime ease-in-out;
-		z-index: 200;
+	#color-scale {
+		position: absolute;
+
+		z-index: 350;
+		padding: 0.5rem;
+		width: calc(0.5 * (100vw - 35rem - 2 * $panelMargin));
+		background: var(--panel-bg);
+		gap: 0.5rem;
+		transition: all $transition;
+
+		bottom: calc($panelMargin + $smallTimePanelHeight + $panelMargin);
+		left: $panelMargin;
+
+		&.timemachine {
+			display: flex;
+			bottom: $panelMargin * 0.5;
+			left: $panelMargin * 0.5;
+			&.selected {
+				bottom: calc($panelMargin + $smallTimePanelHeight + $panelMargin);
+				left: calc(50vw + 0.5 * 35rem);
+			}
+		}
 	}
 
-	#buttons-debug {
+	#footer-logos {
 		position: absolute;
-		left: -10px;
-		bottom: -10px;
+		bottom: 0;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 325;
+		width: 35rem;
+	}
+
+	#focus-frame {
+		overflow: hidden;
+		transition: all $transition;
+		z-index: 500;
+		position: absolute;
 	}
 
 	#map {
 		flex: 1 1 100%;
-		z-index: 0;
+		height: 100vh;
+		min-height: 100vh;
+		width: 100vw;
+		min-width: 100vw;
 	}
+
+	#logo {
+		position: absolute;
+		top: $panelMargin;
+		left: $panelMargin;
+		z-index: 200;
+	}
+
 	#mode-toggle {
 		position: absolute;
-		bottom: 0;
+		top: 0;
 		left: 50%;
 		z-index: 250;
-		transform: translateX(-50%);
-		// border-bottom-right-radius: 0;
-		// border-bottom-left-radius: 0;
-		// padding: 0 3rem;
+		transform: translateX(-50%) translateY(-1rem);
+		transition: transform $transition;
+		box-shadow: unset !important;
+
+		&.hidden {
+			transform: translateX(-50%) translateY(-150%);
+		}
 	}
+
+	#help-button {
+		position: absolute;
+		top: $panelMargin;
+		right: 3 * $panelMargin + 2 * $buttonSize;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 300;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+
+		&.hidden {
+			transform: translateY(-200%);
+		}
+	}
+
+	#randomise-button {
+		position: absolute;
+		top: $panelMargin;
+		right: 4 * $panelMargin + 3 * $buttonSize;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 300;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+
+		&.hidden {
+			transform: translateY(-200%);
+		}
+	}
+
+	#achievements-button {
+		position: absolute;
+		top: $panelMargin;
+		right: 2 * $panelMargin + $buttonSize;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 350;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+
+		&.hidden {
+			transform: translateY(-200%);
+		}
+
+		&.pulse {
+			animation: trophy-pulse 2s ease-out;
+		}
+
+	}
+
+	@keyframes trophy-pulse {
+		0% {
+			box-shadow: var(--shadow-sm), var(--shadow-md), 1px 1px 0 0 var(--contrast);
+		}
+		40% {
+			box-shadow: var(--shadow-sm), var(--shadow-md), 1px 1px 0 10px rgba(247, 205, 81, 0.3);
+		}
+		80% {
+			box-shadow: var(--shadow-sm), var(--shadow-md), 1px 1px 0 18px rgba(247, 205, 81, 0);
+		}
+		100% {
+			box-shadow: var(--shadow-sm), var(--shadow-md), 1px 1px 0 0 rgba(247, 205, 81, 0);
+		}
+	}
+
+	#achievements-menu {
+		background: var(--panel-bg);
+		backdrop-filter: $frosty;
+		top: $panelMargin;
+		right: 2 * $panelMargin + $buttonSize;
+		padding: $panelMargin * 0.5;
+		z-index: 340;
+		border-radius: 8px;
+		overflow-y: auto;
+		max-height: calc(100vh - 6rem);
+	}
+
+	$eventGap: calc(
+		100vh - $smallTimePanelHeight - 4 * $panelMargin - 0.5 * $infoHeight -
+			$headerHeight
+	);
+	$eventPanelHeight: calc($eventGap * 0.5 - $panelMargin);
+
+	#event-day-panel {
+		position: absolute;
+		width: $eventPanelWidth;
+		left: $panelMargin;
+		height: $eventPanelHeight;
+		bottom: calc(3 * $panelMargin + $smallTimePanelHeight + $eventPanelHeight);
+		z-index: 150;
+	}
+
+	#event-graphs {
+		position: absolute;
+		width: $eventPanelWidth;
+		left: $panelMargin;
+		height: $eventPanelHeight;
+		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+		z-index: 150;
+	}
+
+	#multi-button {
+		position: absolute;
+		top: 0;
+		right: $panelMargin;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 200;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+		transform: translateY(
+			calc(100vh - 2 * $panelMargin - $smallTimePanelHeight - 2.5rem)
+		);
+
+		&.hidden {
+			transform: translateX(200%);
+		}
+
+		&.close {
+			transform: translateY(
+				calc($headerHeight + 3 * $panelMargin + $infoHeight)
+			);
+
+			&.hidden {
+				transform: translate(
+					200%,
+					calc($headerHeight + 3 * $panelMargin + $infoHeight)
+				);
+			}
+		}
+	}
+
+	#multimax-button {
+		position: absolute;
+		top: 0;
+		left: 0;
+		border-radius: 0;
+		border-top-left-radius: $borderRadius;
+		border-bottom-right-radius: $borderRadius;
+		width: 1.5rem;
+		height: 1.5rem;
+		padding: 0;
+		z-index: 250;
+		box-shadow: none !important;
+		opacity: 0.5;
+
+		&:hover {
+			opacity: 1;
+		}
+
+		.tabler-icon {
+			width: 1.25rem;
+		}
+	}
+
+	#multi-event-panel {
+		z-index: 180;
+		width: calc($infoWidth * 2 + $panelMargin);
+		height: calc(
+			100vh - 5 * $panelMargin - $smallTimePanelHeight - $infoHeight - 3rem
+		);
+		right: calc($panelMargin);
+		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+		background-color: var(--panel-bg-alt);
+		backdrop-filter: $frosty;
+		overflow: visible;
+		background: var(--panel-bg);
+		transition: all $transition;
+
+		&.selected {
+			background-color: var(--panel-bg-dark);
+		}
+
+		&.maximize {
+			width: calc(100% - 2 * $panelMargin);
+			height: calc(
+				100vh - 4 * $panelMargin - $smallTimePanelHeight - $headerHeight
+			);
+			right: $panelMargin;
+			bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
+			z-index: 400;
+		}
+	}
+
+	#info-button {
+		position: absolute;
+		top: calc($headerHeight + 2 * $panelMargin);
+		right: $panelMargin;
+		border-radius: 100%;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.5rem;
+		z-index: 300;
+		box-shadow: var(--shadow-sm), var(--shadow-md);
+
+		&.hidden {
+			transform: translateX(200%);
+		}
+	}
+
+	#event-info-panel {
+		height: $infoHeight !important;
+		width: $infoWidth !important;
+		z-index: 150;
+		transition: all $transition;
+		position: absolute;
+		top: calc($headerHeight + 2 * $panelMargin);
+		right: $panelMargin;
+		transform: translate(0, calc(-200% - 2 * $panelMargin));
+
+		.event-info {
+			width: 100%;
+		}
+
+		&.show {
+			transform: translate(0, 0);
+		}
+	}
+
+	#selected-event-info-panel {
+		z-index: 150;
+		transition: all $transition;
+		position: absolute;
+		top: calc($headerHeight + 2 * $panelMargin);
+		right: calc($infoWidth + 2 * $panelMargin);
+		transform: translate(0, calc(-250% - 2 * $panelMargin));
+		height: $infoHeight !important;
+		width: $infoWidth !important;
+
+		&.single {
+			right: calc(100vw - $eventPanelWidth - $panelMargin);
+			width: calc($eventPanelWidth) !important;
+			height: calc($infoHeight * 0.5) !important;
+		}
+
+		&.show {
+			transform: translate(0, 0);
+		}
+	}
+
 	#time-panel {
-		box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;
+		z-index: 150;
 		width: calc(100% - 2 * $panelMargin);
 		right: $panelMargin;
 		bottom: $panelMargin;
-		height: 40%;
-		z-index: 20;
-		transition: all $animTime ease-in-out;
+		height: $timePanelHeight;
+		transition: all $transition;
+		border-radius: $borderRadius;
+		background: transparent;
+		backdrop-filter: none;
 
 		&.expanded {
-			height: calc(100% - 4 * $panelMargin);
+			height: calc(100% - 2 * $panelMargin);
+			z-index: 350;
 		}
 
 		&.event {
-			// width: calc(50% - $panelMargin);
+			z-index: 350;
 			height: $smallTimePanelHeight;
-			// padding-bottom: calc(15% - 0.75rem);
 			border-top: none;
 			border-top-right-radius: 0;
 			border-top-left-radius: 0;
 			border-bottom-left-radius: 0;
+
+			&.timemachine {
+				background: var(--panel-bg);
+			}
 		}
 
-		transition: height 0 linear;
 		&.heatmap {
 			height: $smallTimePanelHeight;
-			transition: height $animTime linear;
+			background-color: var(--panel-bg-alt);
 		}
 
 		#times {
 			width: 100%;
 			height: 100%;
-			overflow-x: auto;
-			overflow-y: hidden;
 			display: flex;
 			align-items: center;
 			justify-content: center;
 			border: none;
+			border-radius: $borderRadius;
+
+			.scroller {
+				border-radius: $borderRadius !important;
+			}
 		}
+
 		.show-bars,
-		.panel-expand,
-		.panel-hide {
+		.panel-expand {
 			padding: 0.5rem;
 			position: absolute;
 			right: 0;
-			top: -0.5rem;
+			top: 0;
 			z-index: 20;
-			border: none;
-			background-color: transparent;
-			color: $textColor;
-			&:hover {
-				color: $c3sred;
+			width: 2.5rem;
+			height: 2.5rem;
+			border-radius: 0;
+			box-shadow: unset;
+		}
+
+		.show-bars {
+			border-bottom-right-radius: $borderRadius;
+			border-top-left-radius: $borderRadius;
+		}
+
+		.panel-expand {
+			border-top-right-radius: $borderRadius;
+			border-bottom-left-radius: $borderRadius;
+		}
+
+		&.expanded {
+			.panel-expand {
+				width: 2rem;
+				height: 2rem;
+				padding: 0.25rem;
 			}
 		}
-		.panel-expand {
-			// right: 1.2rem;
-		}
+
 		.panel-sideline {
 			position: absolute;
 			left: -20px;
 			z-index: 20;
 		}
+
 		.show-bars {
 			right: unset;
 			left: 0;
-
-			top: -0.5rem;
 			z-index: 20;
-
-			&.active {
-				color: $c3sred;
-				filter: drop-shadow(0 0 2px rgb(255, 255, 255))
-					drop-shadow(0 0 5px rgb(255, 255, 255));
-			}
 		}
 	}
-
-	$eventPanelWidth: 33%;
-	$multiEventPanelWidth: 40%;
-	$smallMultiScale: 0.6;
 
 	#event-window {
 		position: absolute;
@@ -575,121 +1273,38 @@ $smallTimePanelHeight: max(6rem, 10%);
 		width: calc(100% - 2 * $panelMargin);
 		height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 		pointer-events: none;
-		// background-color: rgba(34, 150, 200, 0.5);
-		// border: 1px solid orange;
 		z-index: 10000;
 
 		&.eventPanelOn {
 			left: calc($panelMargin + $eventPanelWidth);
 			width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
+			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 		}
 
 		&.multiEventPanelOn {
+			height: calc(100% - 2 * $panelMargin - $smallTimePanelHeight);
 			width: calc(100% - $multiEventPanelWidth - $panelMargin);
+
 			&.eventPanelOn {
-				width: calc(
-					100% - $eventPanelWidth - $smallMultiScale * $multiEventPanelWidth -
-						2 * $panelMargin
-				);
+				width: calc(100% - $eventPanelWidth - 2 * $panelMargin);
 			}
 		}
 	}
 
-	#multi-event-panel {
-		display: flex;
-		flex-direction: column;
-		// gap: 0.5rem;
-		width: calc($multiEventPanelWidth - $panelMargin);
-		height: calc(100% - 3 * $panelMargin - $smallTimePanelHeight);
-		right: $panelMargin;
-		bottom: calc(1 * $panelMargin + $smallTimePanelHeight);
-
-		&.small {
-			transform: scale($smallMultiScale) translateX(120%);
-			transform-origin: bottom right;
-
-			&.active {
-				transform: scale($smallMultiScale);
-			}
-		}
-
-		.panel-toggle {
-			position: absolute;
-			top: 50%;
-			left: -2.5rem;
-			padding: 1rem;
-			border: none;
-			border-top-right-radius: 0;
-			border-bottom-right-radius: 0;
-			border-top-left-radius: 100%;
-			border-bottom-left-radius: 100%;
-			// padding-left: 1rem;
-			// background-color: transparent;
-			color: $textColor;
-			z-index: -100;
-			&:hover {
-				color: $c3sred;
-			}
-
-			svg {
-				margin-left: -0.5rem;
-			}
-		}
-
-		.title-panel {
-			display: flex;
-			justify-content: space-around;
-			justify-content: space-between;
-			width: 100%;
-			h1 {
-				// position: absolute;
-				// top: -1.75rem;
-				// left: 0;
-				flex: 1 1 100%;
-				margin: 0;
-				padding: 0.5rem 0;
-				background-color: transparent;
-				font-size: 0.9rem;
-				text-align: center;
-				z-index: 10;
-			}
-		}
-
-		.subpanel {
-			flex: 1 1 100%;
-			height: 33%;
-			width: 100%;
-			display: flex;
-			flex-direction: row;
-			// gap: 0.5rem;
-			border: 0.5px solid $c3sred;
-			// margin-bottom: 0.5rem;
-		}
-
-		.medals-subpanel {
-			.event-ranker {
-				flex: 1 1 33%;
-				height: 100%;
-			}
-		}
-
-		.histogram-subpanel {
-		}
-
-		.scatter-subpanel {
+	.panel {
+		.help-button {
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity $animTime $animEase;
 		}
 	}
 
-	#event-info-panel {
-		display: none;
-		box-shadow: rgba(0, 0, 0, 0.5) 3px 3px 3px 0px;
-		width: calc(20% - 2 * $panelMargin);
-		right: 50%;
-		// transform: translateX(50%);
-		bottom: calc(2 * $panelMargin + $smallTimePanelHeight);
-		height: auto;
-		z-index: 20;
-		transition: all $animTime ease-in-out;
+	.panel:hover,
+	.panel:focus {
+		.help-button {
+			opacity: 1;
+			pointer-events: all;
+		}
 	}
 }
 </style>

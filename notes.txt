@@ -1,71 +1,14 @@
-General
-* Get docker working properly with UID/GID
-* Set up cron job to download latest data and extract events. Split events into historical.jsonl and current.jsonl?
-
-
-Event Generation
-* Run full generation on Bertha
-
-
-THE VARIABLES
-they define what graphs we show, and what we explore by similar. swhen we're looking at regions we want to rank events by variable - "this is the 4th hottest heatwave in the last 30 years"; "this is the 2nd largest one in the last 50" etc.
-
-I think we need 3 at least. but that 3 is fine.
-AREA
-MIN/MAX/PEAK (DAY/NIGHT for min/max?)
-
-everything will have
-DURATION
-
-is that 3 always enough to get 6, colour wheel style?
-
-Area plus duration could be magnitude.
-Area plus mini max peak could be intensity.
-MinMax Peak plus duration could be discomfort.
-
-Which means that for the time series we can always plot some kind of intensity.
-On the summary stats, we can always write down what the magnitude is.
-
-
-
-
-Web Explorer
-* EventGraphs:
-    - 
-* Colour events by chooser
-    - area
-    - intensity
-    - ?
-* TimeReel
-    - Get the TimeReel expanding nicely to full-screen.
-    - Nicer transitions
-* Event view - lock view, show all events within this region
-* Global view - show heatmap of global events. Click/move a marker - see all events at that pixel
-* Graph views - open the full explore view, with the selected variable highlighted. This will explore "similar" events, or rather all events in some 2d(?) space(s) perhaps centred/zoomed on the current event
-    
-
-Questions
-
-* It was really hot that day, for ages, why am I not a heatwave? Do it by saving all eventlets in a backup database, sorted by pixel id? It's a big filesystem, but probably not unmanageably so. Certainly not if stored by row OR column
-
-
-What info do we return for a selected location?
-What about background when exploring event? What is useful? Don't say "the mean over the period of the event". Also what about backgrounds in general.
-
 
 Unsorted TODO List:
 
 * Set zoom centre on buttons with: map.setZoomAround([lat, lng], map.getZoom() + 1);
-* proper color scale for excessive pixels
 * Probably gonna have to set up ncWMS or a TMS
 * Lock time reel when event selected - keys, mouse, track (all of which need dealing with separately anyway)
 * Colour-blindness friendly
 * Proper aria stuff for blindness
 
 Event Ranker:
-* Lock scrolling together button
-* When event clicked, scroll into view at the same place (if possible)
-* When event hovered, highlight in all rankers, draw on the map as an outline with a pretty transition
+* When event clicked, scroll into view at the same place (if possible). Kind of, but fix the bottom stuff
 * Make 1, 2, 3 look like medals
 * On hover, show event information (on popup on map?). Maybe on click, or 2-3s debounced (?) hover. On ranker on hover, but full event info on map on click?
 * Highlight on the timeline when an event is selected
@@ -96,5 +39,428 @@ Time overview for regional/point data
 
 Gamification help. Help button. Tip of the day
 
-Download button
+Download button - done
+Add to cart button - phase 2
+password protect - c3suser - unguessable
+replace icons with tabler
 
+
+
+
+Modern style notes from Claude:
+
+Here's some design direction for your heat/cold/precip/drought map webapp:
+
+## 1. Panel Color Schemes
+
+For a **light theme** with your monochrome Positron map, try these neutral bgs that won't wash out:
+
+**Option A - Warm Neutral (complements red theme):**
+- Background: `rgb(250, 248, 246)` (off-white with warm undertone)
+- Panel surface: `rgb(255, 253, 251)` with subtle shadow
+- Border/divider: `rgb(229, 224, 219)`
+
+**Option B - Cool Neutral (balances the red):**
+- Background: `rgb(248, 249, 250)` (slightly blue-grey tint)
+- Panel surface: `rgb(253, 254, 255)`
+- Border/divider: `rgb(222, 226, 230)`
+
+**Option C - Greige (my pick for versatility):**
+- Background: `rgb(247, 247, 245)` (neutral greige)
+- Panel surface: `rgb(254, 254, 252)`
+- Border/divider: `rgb(226, 225, 221)`
+
+For **dark theme:**
+- Background: `rgb(17, 17, 19)` (near-black, slightly warm)
+- Panel surface: `rgb(28, 28, 30)` 
+- Elevated panel: `rgb(38, 38, 40)` (for layering)
+- Border/divider: `rgb(48, 48, 50)`
+
+These are real values I've used in production - they provide enough contrast with white maps without being jarring.
+
+## 2. Theming Strategy
+
+**Button color switching by event type:**
+- **Heatwave view:** Red buttons (`rgb(220, 38, 38)` primary, `rgb(185, 28, 28)` hover)
+- **Coldwave view:** Navy blue (`rgb(30, 58, 138)` primary, `rgb(23, 37, 84)` hover)
+- **Precip view:** Teal/aqua (`rgb(13, 148, 136)` primary, `rgb(15, 118, 110)` hover)
+- **Drought view:** Warm amber (`rgb(217, 119, 6)` primary, `rgb(180, 83, 9)` hover)
+
+**Implementation tip:** Use CSS custom properties that update based on active dataset. Swap the entire accent color system, not just individual components. This includes selected states, focus rings, progress indicators, etc.
+
+## 3. Modern Map UI Aesthetics (Late 2024/2025)
+
+**What's current:**
+- **Semi-transparent panels with backdrop blur** - This is still very much in. Think `background: rgba(255, 255, 255, 0.85)` + `backdrop-filter: blur(12px)`. Creates depth without full obscuration of the map.
+- **Soft rounded corners remain** - But tighter radii (4-8px) rather than the puffy 16px+ of 2020. Sharp corners feel dated unless you're going brutalist.
+- **Gradients: YES, but subtle** - Gentle noise textures or very faint radial gradients (like `radial-gradient(circle at top left, rgba(255,255,255,0.1), transparent)`) add premium feel. Heavy gradients are out.
+
+**What's emerging/fresh:**
+- **Glassmorphism 2.0** - The frosted glass look but with better contrast and accessibility. Darker tints, heavier blurs.
+- **Floating panels with subtle shadows** - Not flat, but not heavy drop shadows either. Think `box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04)`
+- **Asymmetric layouts** - Panels don't all have to be the same size/style. Mix a tall slim control panel with a wider data panel.
+
+**For your use case:** I'd go with **semi-transparent panels (85-90% opacity), 6px border radius, backdrop blur, subtle shadow, no heavy gradients**. This keeps the map visible and feels modern without being gimmicky.
+
+## 4. Modern UI Component Trends
+
+**Controls:**
+- **Toggle switches with smooth animations** - Not just on/off, but satisfying spring physics. Compact size (not oversized).
+- **Segmented controls** (pill-shaped button groups) - Great for switching between your 4 event types. More tactile than tabs.
+- **Icon-first buttons** - Especially for map tools (zoom, layer toggle). Text labels on hover only.
+
+**Data Display:**
+- **Monospaced numbers** - Use tabular-nums for any numeric data so digits don't jump around
+- **Minimal line charts** - No gridlines, subtle axis, emphasis on the data line itself
+- **Badges with colored dots** - Instead of fully colored tags, use a subtle background with a bright accent dot
+
+**Interaction:**
+- **Micro-interactions everywhere** - Hover states that lift slightly (transform: translateY(-1px)), loading states with skeleton screens
+- **Smooth color transitions** - When switching event types, animate the color change over 200-300ms
+- **Haptic-style feedback** (visual) - Brief scale/brightness pulse on click
+
+**Layout:**
+- **Compact spacing** - 2024 trend is tighter, information-dense UIs. Not cramped, just less air.
+- **Floating action buttons** (FABs) - For primary actions like "Reset view" or "Download data"
+- **Collapsible panels** - Start with minimal info, expand on demand. Accordion-style but smooth.
+
+**Typography:**
+- **Slightly heavier weights for UI** - Medium (500) for labels, Semibold (600) for active states
+- **Smaller base sizes** - 14px is the new 16px for dense UIs
+
+**What's out:**
+- Big puffy rounded everything
+- Heavy drop shadows
+- Fully opaque panels that block the map
+- Overly colorful UI chrome (let your data colors be the stars)
+
+The overall vibe should be **clean, fast, functional** - let the weather data and map be the hero, UI should fade back but feel premium when you interact with it.
+
+
+Notes on highlight yellow:
+
+**Ah, so the issue is yellow highlight on white map, not the drought clash.**
+
+Few paths here:
+
+## Option 1: Darken the Map Background
+Instead of pure white Positron, try:
+- **Positron with custom bg color** - Most map libraries let you set a background color
+- Try `rgb(242, 242, 240)` (warm off-white) or `rgb(240, 242, 244)` (cool off-white)
+- Gives yellow something to pop against while staying clean and monochrome
+- Subtle enough you barely notice, but makes highlights readable
+
+## Option 2: Add Stroke to Yellow Elements
+- Keep the yellow fill as-is
+- Add a darker border: `2px solid rgb(180, 83, 9)` (your darker drought color) or even `rgba(0, 0, 0, 0.3)`
+- Works for highlighted map features, buttons, badges, whatever
+- Ensures definition even on white
+
+## Option 3: Use Yellow More Strategically
+- Don't highlight *on* the map with yellow (use cyan/blue there)
+- Reserve yellow for UI highlights - selected buttons, active panel sections, etc.
+- Yellow stays on-theme but lives where there's contrast
+
+## Option 4: Two-Tone Yellow
+- Hover/inactive: lighter yellow `rgb(250, 204, 21)`
+- Selected/active: deeper golden `rgb(234, 179, 8)` or amber `rgb(217, 119, 6)`
+- Darker version has better contrast on white
+
+## Option 5: Different Monochrome Base Map
+If you're open to changing the map slightly:
+- **Light grey Positron**: Many style variants offer light grey instead of pure white
+- **Carto Voyager (no labels)**: Still monochrome but slightly warmer/darker base
+- **Custom Mapbox style**: Monochrome grey (`rgb(235, 235, 235)` land, `rgb(245, 245, 245)` water)
+
+**My vote:** Darken your Positron background to `rgb(242, 242, 240)` + add a subtle stroke to yellow highlights when needed. Keeps everything you like, solves the contrast issue with minimal change.
+
+What's the yellow highlighting specifically - map features, UI elements, both?
+
+
+
+Notes on charts:
+## Charts on Frosted Panels
+
+**The hierarchy problem:** You've got frosted panels floating over a map. Charts need to be readable without creating a visual mess. Here's what works:
+
+### Background Approach
+
+**Best: Subtle solid inset**
+- Give charts a barely-there solid background that's slightly darker/lighter than the panel
+- Light theme: `rgb(245, 245, 243)` inside `rgb(254, 254, 252)` panel (3-5% darker)
+- Dark theme: `rgb(35, 35, 37)` inside `rgb(28, 28, 30)` panel (slightly lighter)
+- Adds definition without breaking the frosted aesthetic
+- Use 4px border-radius to match your panels but smaller
+
+**Alternative: No background, but crisp elements**
+- Chart sits directly on frosted panel with no extra container
+- Works IF your chart elements (bars, lines) are solid and high-contrast
+- Grid lines must be very subtle or absent
+- Only works well for simple charts (single line, single bar series)
+
+**Avoid: Frost-on-frost**
+- Double translucency creates muddy, low-contrast mess
+- Accessibility nightmare - text becomes unreadable
+- Looks "trying too hard" rather than clean
+
+### Chart Elements
+
+**Bar Charts:**
+- **Solid bars, always** - Your event colors (red, navy, teal, amber) at full opacity
+- Slight rounded tops (2px radius) feels modern
+- On hover: brighten by 10% + subtle lift shadow
+- Background grid: Either very faint (`rgba(0,0,0,0.03)` light theme) or none at all
+- Labels: solid color, medium weight font
+
+**Line Charts:**
+- **Solid 2-3px stroke** - No transparency on the main line
+- Fill gradient below the line: your event color at 20% opacity fading to 0% - this is where subtle transparency works
+- Points: only show on hover/active, solid color
+- Grid: horizontal lines only, very subtle
+
+**Time Series / Sparklines:**
+- These can live directly on frosted background
+- Keep them minimal - just the line, no axes, no grid
+- Use your theme color at full opacity
+
+**Mixed Charts:**
+- If combining multiple data types, one gets full opacity (primary data), others get 60-70% (secondary/comparison)
+- Never more than 2-3 colors per chart
+
+### Specific Recommendations
+
+**Temperature timeline (hot/cold waves):**
+- Area chart with gradient fill
+- Solid line on top, 20% opacity fill below
+- Red above baseline, navy below
+- Sits in subtle solid inset container
+
+**Precipitation bars:**
+- Solid teal/aqua bars (`rgb(13, 148, 136)`)
+- Minimal padding between bars
+- No grid lines, just Y-axis values
+- Direct on frosted panel works here
+
+**Drought index over time:**
+- Solid line chart, amber color
+- Threshold lines (if showing severity levels) at 40% opacity
+- Subtle solid background recommended for readability
+
+### Typography on Charts
+
+- **Axis labels:** 12px, medium weight, `rgb(100, 100, 105)` light theme or `rgb(155, 155, 160)` dark theme
+- **Values/tooltips:** 13-14px, semibold weight, full black/white
+- **Legends:** 13px, regular weight, match axis label color
+- Use tabular numbers (font-variant-numeric: tabular-nums)
+
+### The Golden Rule
+
+**Opacity hierarchy:** Map (underneath) → Frosted panel (medium) → Chart background (nearly solid) → Chart elements (fully solid)
+
+You're creating depth through layering, and each layer needs to be decisively more opaque than the one below. Charts are where you land the data, so they should be the most solid, readable element in the stack.
+
+**TL;DR:** Solid bars/lines on a barely-perceptible solid inset background, inside your frosted panels. Clean, readable, modern.
+
+
+And events:
+
+**Ah okay, two different viz modes:**
+
+1. **Heatmap mode** - Pixel-level gradient data (black→white→red/blue/green/brown) = needs monochrome map
+2. **Browse mode** - Block-colored polygons at max saturation = could use muted color map
+
+For the **block-colored polygons in browse mode:**
+
+## Styling Options
+
+**Option A: Frosted polygons (my pick for this)**
+- Fill: Event color at 40-50% opacity - `rgba(220, 38, 38, 0.45)` for heatwave
+- Stroke: Same color at 90% opacity, 2px width - `rgba(220, 38, 38, 0.9)`
+- On hover: bump fill to 60% opacity, stroke to 100%
+- **Why:** Creates depth, lets muted map show through, feels layered and modern
+- Polygons feel like they're floating above the map rather than stamped on it
+
+**Option B: Solid with transparency**
+- Fill: Event color at 65% opacity
+- Stroke: White or light grey `rgba(255, 255, 255, 0.8)`, 1.5px
+- **Why:** More visible, cleaner boundaries between adjacent events
+- Better if events are small or densely packed
+
+**Option C: Solid fill, no stroke (cleaner)**
+- Fill: Event color at 70-75% opacity, no stroke
+- **Why:** Very clean, lets the color be the story
+- Only works if polygons don't touch/overlap much
+- Feels more like a data layer than outlined regions
+
+## For the Highlight Yellow Outline
+
+**Current approach (yellow stroke on transparent polygon) is good, but:**
+- Bump the stroke width to **2.5-3px** so it pops on white
+- Add a **subtle dark shadow** to the stroke: use a double-stroke technique or SVG filter
+  - Inner stroke: your yellow
+  - Outer glow: `rgba(0, 0, 0, 0.15)` at 1px
+- Or use a **darker yellow**: `rgb(202, 138, 4)` instead of bright golden
+- **Alternative:** White stroke with yellow fill at 25% opacity for the selected polygon
+
+## Muted Map for Browse Mode
+
+**Yes, do this.** When showing solid event blocks:
+
+**Option 1: Desaturated Positron**
+- Land: `rgb(245, 244, 242)` (warmer)
+- Water: `rgb(235, 240, 245)` (cooler blue-grey)
+- Roads/borders: `rgb(220, 220, 218)`
+
+**Option 2: Subtle color tint**
+- Very pale warm grey for land: `rgb(242, 240, 238)`
+- Keeps things calm, complements red theme
+- Your event colors will sing against this
+
+**Option 3: Custom grey scale**
+- Land: `rgb(238, 238, 238)`
+- Water: `rgb(228, 232, 237)` (hint of blue)
+- Administrative boundaries: `rgb(210, 210, 210)`
+
+The key: **just different enough from pure white** that your event colors and yellow highlights have something to grip onto.
+
+## My Recommendation
+
+**Browse mode (block polygons):**
+- Muted warm-grey map (land `rgb(242, 240, 238)`)
+- Frosted polygons: event color at 45% opacity fill, 90% opacity 2px stroke
+- Selected: yellow `rgb(234, 179, 8)` 3px stroke + slight darkening of fill (55% opacity)
+
+**Heatmap mode (gradient pixels):**
+- Pure white/monochrome Positron
+- Full color intensity on the data
+- No polygon strokes (just the heatmap)
+
+This gives you clear visual modes - **frosted blocks on subtle grey = browsing**, **intense gradients on white = analyzing**.
+
+**No, actually not for the map polygons.**
+
+Let me clarify where blur goes:
+
+## Blur: UI Panels Only
+- **Frosted panels** (your controls, charts, info boxes): YES, `backdrop-filter: blur(12px)`
+- These float over the map and benefit from the glassmorphic effect
+
+## No Blur: Map Data Layers
+- **Event polygons** (heatwave/coldwave regions): NO blur, just opacity
+- **Heatmap pixels**: NO blur, just alpha channel in colors
+- **Selected outlines**: NO blur
+
+**Why no blur on data?**
+- Blur makes boundaries mushy and imprecise
+- You need crisp edges to see where events start/stop
+- Map data should be sharp - only the UI chrome gets frosted
+- Performance: blurring many vector polygons kills framerate
+
+## The Stack
+From bottom to top:
+1. **Base map** - sharp, no effects
+2. **Data layers** (polygons/heatmaps) - sharp, use opacity for layering
+3. **UI panels** - frosted with `backdrop-filter: blur()`
+
+So when I said "frosted polygons at 45% opacity" - I just meant semi-transparent, not actually frosted/blurred. Poor word choice on my part.
+
+**TL;DR:** Blur is only for UI panels floating over the map. All map data stays sharp, just use opacity/alpha for transparency effects.
+
+Tabs on Floating Frosted PanelsThe Challenge: Tabs need to be visible but not compete with your data. On a frosted panel, heavy tab treatments look clunky.Style OptionsOption 1: Underline tabs (modern, minimal)
+
+Tabs as text labels only, no backgrounds
+14px medium weight, 12px horizontal padding between
+Active: colored 2px underline (your theme color), text in theme color
+Inactive: grey text rgb(115, 115, 120), no underline
+Hover: text darkens slightly
+Underline sits 2-3px below text, smooth 200ms transition
+Why: Very 2024/25, doesn't break the frosted aesthetic, lets panel breathe
+
+
+The multi event panel:
+
+**That's a LOT of data viz in one panel.** Good call making it collapsible and selective. Here's how to tame it:
+
+## Panel Collapse/Expand
+
+**Floating tab handle** (my pick)
+- Thin vertical tab on the left edge of the panel (or right edge if panel is on left side of screen)
+- 40-50px tall, 24px wide when collapsed
+- Icon: chevron or hamburger + label rotated 90° ("Analytics" or "Data")
+- Click to slide panel in/out from screen edge
+- Smooth 300ms ease-in-out animation
+- When collapsed: just the tab visible, hugging screen edge
+
+**Alternative: Minimize button**
+- Small button in panel header (top-right corner)
+- Icon changes: expand `↔` when minimized, collapse `→` when open
+- Panel slides off-screen, leaves small floating button behind
+- Less elegant but more explicit
+
+## Organizing the Viz Overload
+
+**Option 1: Tabbed sections** (cleanest for this much content)
+```
+[Overview] [Distributions] [Relationships] [Timeline]
+```
+- **Overview**: Event ranks table only (your entry point)
+- **Distributions**: The 3 histograms side-by-side
+- **Relationships**: Duration vs Size, Duration vs Intensity scatter plots
+- **Timeline**: Time series plots
+
+User picks what they want to see, not overwhelmed by everything at once.
+
+**Option 2: Accordion sections**
+- Start with just "Event Rankings" expanded
+- Collapsible sections below:
+  - "▼ Distribution Analysis" (histograms)
+  - "▶ Correlations" (scatters)
+  - "▶ Temporal Patterns" (time series)
+- Click to expand/collapse each
+- Can have multiple open at once
+
+**Option 3: Compact mode + expand**
+- Default view: Just the scrollable table + small "Show analysis" button
+- Click button → panel expands vertically, reveals all charts below
+- Good if vertical space isn't an issue
+
+**Option 4: Floating viz selector**
+- Small dropdown or segmented control in panel header
+- "View: [Rankings ▼]" 
+- Select to swap between table / histograms / scatters / timeline
+- Only one viz active at a time
+- Most space-efficient
+
+## My Recommendation
+
+**Combination approach:**
+
+1. **Collapsible panel** with floating tab handle (slides in from left edge)
+
+2. **Inside panel: Tabs at top**
+   - Default tab: "Events" (just the scrollable table)
+   - Other tabs: "Distributions", "Scatter", "Timeline"
+   - Small, compact tab design (not full-width buttons)
+
+3. **Within tabs, use smart defaults:**
+   - Distributions tab: Show all 3 histograms (they're compact)
+   - Scatter tab: Dropdown to pick which relationship (Duration×Size, Duration×Intensity, Size×Intensity)
+   - Timeline tab: Segmented control for which metric (Duration / Size / Intensity)
+
+**Visual treatment:**
+- Tabs: Subtle, not heavy. Active tab gets your theme color underline (2px), inactive are grey
+- Panel header: Small, ~40px tall with tab controls
+- Collapse tab: Matches your theme color when panel is active event type
+
+**Interaction flow:**
+1. User opens app → panel visible, "Events" tab active (just the table)
+2. Want to see distributions? Click "Distributions" tab
+3. Done analyzing? Click collapse tab → panel slides away, leaves small handle
+4. Want it back? Click handle → slides back in, remembers which tab
+
+This gives progressive disclosure - start simple (table), add complexity on demand (charts), hide everything when focusing on map.
+
+**Bonus: Settings gear**
+Small gear icon in panel header → "Customize view" modal where power users can set their default tab, toggle which charts appear, etc. But don't lead with this.
+
+Sound workable?

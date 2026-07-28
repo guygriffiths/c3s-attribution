@@ -1,38 +1,219 @@
+@use 'sass:color';
+@use 'sass:list';
+@use 'sass:map';
+@use 'sass:math';
+
 // Official colors
-$c3sred: rgb(151, 24, 65);
+$c3sred: hsl(345, 77%, 33%);
+$c3steal: hsl(159, 77%, 33%);
+$c3sblue: hsl(211, 57%, 40%);
+$c3spurple: hsl(281, 28%, 35%);
+$c3sgreen: hsl(120, 100%, 25%);  // complement of c3spurple; hotcold contrast
+$c3sorange: hsl(25, 77%, 33%);   // hotwet: warm arc between red and teal
+$c3saqua: hsl(185, 67%, 36%);    // coldwet: midpoint between teal and blue
 $lightbulb: rgb(247, 205, 81);
-$c3sredContrast: rgb(105, 17, 45);
-// $c3sblue: rgb(22, 104, 180);
-$c3sblue: rgb(44, 102, 162);
-$panelBg: rgb(255, 255, 255);
+$c3sgrey: hsl(211, 0%, 40%);
 
-// Crap I've made up and will definitely be replacing later
-$bg: rgb(197, 228, 236);
-$bgContrast: rgb(196, 237, 247);
-$textColor: rgb(27, 11, 9);
-$primary: rgb(50, 108, 184);
-$highlight: rgb(211, 54, 130);
+$monoFont: 'IBM Plex Mono', 'Chivo Mono', monospace;
 
-$animTime: 0.25s;
+$frosty: blur(8px);
+
+$animTime: 0.35s;
+$animEase: ease;
 $settleTime: 0.25s;
 
-$headerHeight: 4rem;
 $gap: 0.5rem;
 $footerHeight: 2.25rem;
 
-$eventTimePanelHeight: 10%;
+$panelMargin: 1rem;
+$buttonSize: 2rem;
+
+$smallTimePanelHeight: max(6rem, 20vh);
+$timePanelHeight: max(10rem, 40vh);
+$eventPanelWidth: min(400px, 33vw);
+$multiEventPanelWidth: 40vw;
+$smallMultiScale: 0.6;
 $rankedEventHeight: 1.5rem;
+$modeButtonWidth: 7rem;
+$modeButtonHeight: 4.5rem;
+$infoHeight: 18rem;
+$infoWidth: 12rem;
+$headerHeight: 3rem;
 
 $frameBorderRadius: 0.5rem;
 
 $frameBorderWidth: 1.5rem;
-$panelMargin: 1rem;
+
+$borderRadius: 7px;
 
 :export {
 	c3sred: $c3sred;
 	c3sblue: $c3sblue;
+	c3spurple: $c3spurple;
+	c3steal: $c3steal;
+	c3spurple: $c3spurple;
+	c3sgreen: $c3sgreen;
+	c3sorange: $c3sorange;
+	c3saqua: $c3saqua;
+	c3sgrey: $c3sgrey;
 	lightbulb: $lightbulb;
 	animTime: $animTime;
 	frameBorderWidth: $frameBorderWidth;
 	panelMargin: $panelMargin;
+}
+
+$transition: $animTime $animEase;
+
+$shd-sm: calc(0.25 * $panelMargin);
+$shd-md: calc(0.5 * $panelMargin);
+$shd-lg: calc(0.75 * $panelMargin);
+// Panel backgrounds are centred on the complement of the primary hue.
+// Per-theme: hue stops (centred on complement), primary colour, contrast colour.
+// Remaining parameters take the defaults shared by most themes.
+@function _mk-theme(
+	$stops,               // 5 gradient hue stops, centred on complement
+	$primary,             // primary brand colour
+	$contrast,            // contrast/secondary brand colour
+	$solid-sat: 15%,      // saturation for panel-solid (centre stop hue)
+	$alt-sat: 5%,         // saturation for panel-bg-alt (primary hue)
+	$surface-sat: 15%,    // saturation for panel-surface (primary hue)
+	$hint-sat: 50%,       // saturation for panel-hint (primary hue)
+	$border-sat: 10%,     // saturation for border (primary hue)
+	$shine-sat-adj: -10%, // saturation delta for primary-glass-shine
+) {
+	$h1: list.nth($stops, 1);
+	$h2: list.nth($stops, 2);
+	$h3: list.nth($stops, 3); // centre hue
+	$h4: list.nth($stops, 4);
+	$h5: list.nth($stops, 5);
+	$ph: math.div(color.hue($primary), 1deg); // primary hue as unitless number
+	@return (
+		panel-bg: linear-gradient(
+				123deg,
+				hsla($h1, 35%, 96%, 0.88) 0%,
+				hsla($h2, 35%, 96%, 0.88) 25%,
+				hsla($h3, 35%, 96%, 0.88) 50%,
+				hsla($h4, 35%, 96%, 0.88) 75%,
+				hsla($h5, 35%, 96%, 0.88) 100%
+			),
+		panel-bg-dark: linear-gradient(
+				123deg,
+				hsla($h1, 4%, 74%, 0.88) 0%,
+				hsla($h2, 4%, 74%, 0.88) 25%,
+				hsla($h3, 4%, 74%, 0.88) 50%,
+				hsla($h4, 4%, 74%, 0.88) 75%,
+				hsla($h5, 4%, 74%, 0.88) 100%
+			),
+		panel-bg-night: linear-gradient(
+				123deg,
+				hsla($h1, 1%, 17%, 0.25) 0%,
+				hsla($h2, 1%, 17%, 0.25) 25%,
+				hsla($h3, 1%, 17%, 0.25) 50%,
+				hsla($h4, 1%, 17%, 0.25) 75%,
+				hsla($h5, 1%, 17%, 0.25) 100%
+			),
+		panel-solid:   hsla($h3, $solid-sat, 97%, 1),
+		panel-bg-alt:  hsla($ph, $alt-sat, 85%, 0.8),
+		panel-surface: hsl($ph, $surface-sat, 99%),
+		panel-hint:    hsla($ph, $hint-sat, 95%, 0.35),
+		panel-hint2:   hsla($h3, 20%, 80%, 0.2),
+		border:        hsl($ph, $border-sat, 88%),
+		primary:               $primary,
+		contrast:              $contrast,
+		primary-glass:         rgba($primary, 0.7),
+		primary-glass-shine:   rgba(color.adjust($primary, $saturation: $shine-sat-adj, $lightness: 10%), 0.7),
+		primary-glass-dark:    rgba(color.adjust($primary, $saturation: -10%, $lightness: -10%), 0.7),
+		primary-hover:         color.adjust($primary, $lightness: -8%),
+		primary-active:        color.adjust($primary, $lightness: -12%),
+		primary-selected:      color.adjust($primary, $lightness: 65%),
+		primary-unselected:    color.adjust($primary, $saturation: -30%),
+		text-primary:          rgb(17, 17, 19),
+		text-secondary:        rgb(100, 100, 105),
+		text-tertiary:         rgb(142, 142, 147),
+		text-on-primary:       rgb(255, 255, 255),
+		text-on-primary-shadow: 0 0 5px var(--text-on-primary),
+		highlight:             $lightbulb,
+		highlight-hover:       color.adjust($lightbulb, $lightness: -8%),
+		focus-ring:            rgba($primary, 0.4),
+		hover-bg:              rgba(0, 0, 0, 0.04),
+		divider-subtle:        rgba(0, 0, 0, 0.06),
+		divider:               rgba(0, 0, 0, 0.1),
+		shadow-sm: $shd-sm $shd-sm $shd-sm rgba(0, 0, 0, 0.5),
+		shadow-md: $shd-md $shd-md $shd-md rgba(0, 0, 0, 0.2),
+		shadow-lg: $shd-lg $shd-lg $shd-lg rgba(0, 0, 0, 0.15),
+	);
+}
+
+//   hot     (345°) → complement 165°  stops: 105 135 165 195 225
+//   cold    (211°) → complement  31°  stops: 331   1  31  61  91
+//   wet     (159°) → complement 339°  stops: 279 309 339   9  39
+//   hotcold (281°) → complement 101°  stops:  41  71 101 131 161
+//   hotwet   (25°) → complement 205°  stops: 145 175 205 235 265
+//   coldwet (185°) → complement   5°  stops: 305 335   5  35  65
+$themes: (
+	hot:     _mk-theme((105, 135, 165, 195, 225), $c3sred,    $c3sblue,   $solid-sat: 20%),
+	cold:    _mk-theme((331,   1,  31,  61,  91), $c3sblue,   $c3sred),
+	wet:     _mk-theme((279, 309, 339,   9,  39), $c3steal,   $c3sorange),
+	hotcold: _mk-theme(( 41,  71, 101, 131, 161), $c3spurple, $c3sgreen,
+	         $solid-sat: 10%, $alt-sat: 3%, $surface-sat: 8%, $hint-sat: 40%, $border-sat: 5%, $shine-sat-adj: 10%),
+	hotwet:  _mk-theme((145, 175, 205, 235, 265), $c3sorange, $c3spurple, $surface-sat: 10%, $hint-sat: 60%),
+	coldwet: _mk-theme((305, 335,   5,  35,  65), $c3saqua,   $c3sred,   $solid-sat: 10%, $surface-sat: 10%),
+);
+
+// Sparkle theme variants: panel gradients with sat+30%, lightness×2/3
+@function _mk-sparkle-themes($base) {
+	$stops-map: (
+		hot:     (105, 135, 165, 195, 225),
+		cold:    (331,   1,  31,  61,  91),
+		wet:     (279, 309, 339,   9,  39),
+		hotcold: ( 41,  71, 101, 131, 161),
+		hotwet:  (145, 175, 205, 235, 265),
+		coldwet: (305, 335,   5,  35,  65),
+	);
+	$result: ();
+	@each $name, $hs in $stops-map {
+		$h1: list.nth($hs, 1); $h2: list.nth($hs, 2); $h3: list.nth($hs, 3);
+		$h4: list.nth($hs, 4); $h5: list.nth($hs, 5);
+		$overrides: (
+			panel-bg: linear-gradient(123deg,
+				hsla($h1, 65%, 64%, 0.88) 0%,  hsla($h2, 65%, 64%, 0.88) 25%,
+				hsla($h3, 65%, 64%, 0.88) 50%, hsla($h4, 65%, 64%, 0.88) 75%,
+				hsla($h5, 65%, 64%, 0.88) 100%),
+			panel-bg-dark: linear-gradient(123deg,
+				hsla($h1, 34%, 49%, 0.88) 0%,  hsla($h2, 34%, 49%, 0.88) 25%,
+				hsla($h3, 34%, 49%, 0.88) 50%, hsla($h4, 34%, 49%, 0.88) 75%,
+				hsla($h5, 34%, 49%, 0.88) 100%),
+			panel-bg-night: linear-gradient(123deg,
+				hsla($h1, 31%, 11%, 0.25) 0%,  hsla($h2, 31%, 11%, 0.25) 25%,
+				hsla($h3, 31%, 11%, 0.25) 50%, hsla($h4, 31%, 11%, 0.25) 75%,
+				hsla($h5, 31%, 11%, 0.25) 100%),
+		);
+		$entry: map.merge(map.get($base, $name), $overrides);
+		$result: map.merge($result, ('#{$name}-sparkle': $entry));
+	}
+	@return $result;
+}
+
+$all-themes: map.merge($themes, _mk-sparkle-themes($themes));
+
+@function theme-var-name($k) {
+	@return '--#{ $k }';
+}
+
+// Emit root (defaults = hot)
+:root {
+	@each $token, $val in map.get($themes, hot) {
+		#{ theme-var-name($token) }: #{$val};
+	}
+
+	@each $theme, $map in $all-themes {
+		@each $token, $val in $map {
+			--theme-#{$theme}-#{$token}: #{$val};
+		}
+	}
+}
+
+// Optional helpers
+@mixin use-var($token) {
+	color: var(--#{$token});
 }

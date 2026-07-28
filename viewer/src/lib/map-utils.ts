@@ -1,7 +1,10 @@
 import iconPng from '@/assets/img/marker-icon-2x-c3sred.png'
 import scssVars from '@/assets/styles/scssVars.module.scss'
+import { IconMapPinFilled } from '@tabler/icons-vue'
+import { renderToString } from '@vue/server-renderer'
 import L from 'leaflet'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+import { h } from 'vue'
 
 export const fitMapToBounds = (map: L.Map, event: ExtremeEvent) => {
 	// TODO - 32px is hardcoded padding, yuck
@@ -35,8 +38,8 @@ export const centreMapOnDiv = (
 
 	// calculate pixel offset from map centre
 	const offsetX = rect.left + rect.width / 2 - mapSize.x / 2
-	const offsetY = rect.top + rect.height / 2 - mapSize.y / 2
-	console.log('centring map on div', rect, mapSize, offsetX, offsetY)
+	const offsetY = 0//rect.top + rect.height / 2 - mapSize.y / 2
+	// console.log('centring map on div', rect, mapSize, offsetX, offsetY)
 	// pan by the negative of that offset so the div moves to centre
 	if (!uncentre) {
 		map.panBy([-offsetX, -offsetY], {
@@ -69,8 +72,7 @@ export const fitBoundsToDiv = (
 		mapRect.bottom - divRect.bottom,
 	]
 
-	console.log('fitting bounds to div', bbox, paddingTopLeft, paddingBottomRight)
-	// @ts-ignore
+	// console.log('fitting bounds to div', bbox, paddingTopLeft, paddingBottomRight)
 
 	map.fitBounds(
 		[
@@ -99,7 +101,7 @@ export const getZeitgeistOpacity = (stepsFromNow: number) => {
 	return Math.max(opacity, 0.01)
 }
 
-export const markerIcon = L.icon({
+export const markerIcon2 = L.icon({
 	iconUrl: iconPng,
 	shadowUrl: markerShadow,
 	iconSize: [25, 41],
@@ -109,19 +111,38 @@ export const markerIcon = L.icon({
 	shadowSize: [41, 41],
 })
 
+export const markerIconCold = L.divIcon({
+	className: '', // disable Leaflet’s default styles
+	iconSize: [32, 32],
+	iconAnchor: [16, 32],
+	shadowUrl: markerShadow,
+
+})
+export const markerIconHot = L.divIcon({
+	className: '', // disable Leaflet’s default styles
+	iconSize: [32, 32],
+	iconAnchor: [16, 32],
+	shadowUrl: markerShadow,
+})
+renderToString(h(IconMapPinFilled, { size: 32, color: scssVars.lightbulb })).then((svgString) => {
+	markerIconCold.options.html = `<div style="filter: drop-shadow(0 0 6px ${scssVars.c3sgrey}) drop-shadow(0 2px 4px rgba(0,0,0,0.3))">${svgString}</div>`
+})
+renderToString(h(IconMapPinFilled, { size: 32, color: scssVars.lightbulb })).then((svgString) => {
+	markerIconHot.options.html = `<div style="filter: drop-shadow(0 0 6px ${scssVars.c3sgrey}) drop-shadow(0 2px 4px rgba(0,0,0,0.3))">${svgString}</div>`
+})
+
 // Extract the region for a given event at the currently selected time
 // This is for the timemachine mode, updates the "current" events as we drag/animate the time slider
 export const getEventRegion = (event: ExtremeEvent, time: Date) => {
 	const selected = time.getTime()
 	const idx = event.times
-		.map((t: Date) => t.getTime())
 		.findIndex((t) => t === selected)
 
 	if (idx < 0) {
-		console.warn(
-			`No region found for event ${event.id} at time ${time.toISOString()}`,
-		)
-		return event.regions[0] || [] // Fallback to first region if no matching time found
+		// console.warn(
+		// 	`No region found for event ${event.id} at time ${time.toISOString()}`,
+		// )
+		return event.total_region || [] // Fallback to first region if no matching time found
 	}
 	return event.regions[idx] || [] // Fallback to empty array if no region found
 }
