@@ -25,7 +25,6 @@ import {
 	onMounted,
 	onUnmounted,
 	ref,
-	Ref,
 	watch,
 } from 'vue'
 import {
@@ -68,9 +67,8 @@ const years = computed(() =>
 )
 const showBars = computed(() => props.showBars && !isTimeline.value)
 
-const model: Ref<Date> = defineModel({
-	type: Date,
-	default: new Date(),
+const model = defineModel<Date>({
+	default: () => new Date(),
 })
 const selectedDay = computed(() => getDayOfYear(model.value))
 const selectedYear = computed(() => model.value.getUTCFullYear())
