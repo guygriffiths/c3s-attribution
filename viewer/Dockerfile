@@ -3,9 +3,6 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
-ARG environment=dev
-COPY ./actions.env.${environment} .env
-
 # Enable Corepack so the Yarn version pinned in package.json is used
 RUN corepack enable
 
@@ -23,17 +20,17 @@ COPY src/ src/
 
 # X_PUBLIC_PATH is baked into the bundle at build time (Vite `base`),
 # so it must be set here rather than at runtime.
-# Its value is read from APP_PATH in the copied .env file.
-RUN export X_PUBLIC_PATH=$(grep '^APP_PATH=' .env | cut -d'=' -f2-) && \
-    X_PUBLIC_PATH=${X_PUBLIC_PATH:-/} && \
-    X_PUBLIC_PATH="${X_PUBLIC_PATH%/}/" && \
-    yarn build
+ARG X_PUBLIC_PATH="/"
+ENV X_PUBLIC_PATH=${X_PUBLIC_PATH}
+
+RUN yarn build
 
 # -------- Production stage --------
 FROM nginx:1.27-alpine AS production
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY nginx/.htpasswd /etc/nginx/.htpasswd
 
 EXPOSE 80
 
