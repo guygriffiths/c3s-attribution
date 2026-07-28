@@ -3,6 +3,9 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
+ARG environment=dev
+COPY ./actions.env.${environment} .env
+
 # Enable Corepack so the Yarn version pinned in package.json is used
 RUN corepack enable
 
@@ -17,9 +20,6 @@ COPY tsconfig.json ./
 COPY vite.config.ts ./
 COPY public/ public/
 COPY src/ src/
-
-ARG environment=dev
-COPY ../environments/actions.env.${environment} .env
 
 # X_PUBLIC_PATH is baked into the bundle at build time (Vite `base`),
 # so it must be set here rather than at runtime.
