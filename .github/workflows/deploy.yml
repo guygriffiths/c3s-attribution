@@ -52,11 +52,7 @@ jobs:
       run: |
         echo "EXCUTING: helm upgrade --install -n $APP_NAMESPACE $APP_NAME $HELM_CHART --version ${HELM_CHART_VERSION} --values values.yaml"
         helm upgrade --install -n $APP_NAMESPACE $APP_NAME $HELM_CHART --version ${HELM_CHART_VERSION} --values values.yaml
-      env:
-        KUBECONFIG: kubeconfig.yaml
     - name: "Force update of pods"
       run: |
         echo kubectl delete pods -n $APP_NAMESPACE -l app=$APP_NAME
         kubectl delete pods -n $APP_NAMESPACE -l app=$APP_NAME
-      env:
-        KUBECONFIG: kubeconfig.yaml   
