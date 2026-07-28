@@ -25,9 +25,9 @@ jobs:
       image_tag: ${{ github.event.inputs.image_tag }}
       context: ./viewer
       dockerfile: ./viewer/Dockerfile
-      environment_file: viewer/.env.${{ github.event.inputs.environment }}
-      # build_args: |
-      #   environment=${{ github.event.inputs.environment }}
+      # environment_file: viewer/.env.${{ github.event.inputs.environment }}
+      build_args: |
+        environment=${{ github.event.inputs.environment }}
     secrets:
       registry_username: ${{ secrets.HARBOR_USERNAME }}
       registry_password: ${{ secrets.HARBOR_PASSWORD }}
