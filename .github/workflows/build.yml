@@ -23,6 +23,8 @@ jobs:
       registry: eccr.ecmwf.int
       image_repository: c3s-applications/c3s-extreme-events-app
       image_tag: ${{ github.event.inputs.image_tag }}
+      context: ./viewer
+      dockerfile: ./viewer/Dockerfile
       build_args: |
         environment=${{ github.event.inputs.environment }}
     secrets:
