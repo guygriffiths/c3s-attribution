@@ -2,7 +2,15 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import * as d3 from 'd3'
-import { IconDownload } from '@tabler/icons-vue'
+import { IconZoomReset } from '@tabler/icons-vue'
+import ChartDownloadMenu from '@/components/util/ChartDownloadMenu.vue'
+import {
+	createExportCanvas,
+	plotRect,
+	drawTitle,
+	drawLinearAxes,
+	downloadCanvas,
+} from '@/lib/chart-export'
 
 type Props = {
 	xdata: number[]
@@ -20,10 +28,18 @@ type Props = {
 	hoverId?: string | null
 	xscale?: number
 	yscale?: number
+	lockX?: boolean
 	title?: string
+	xLabel?: string
+	yLabel?: string
+	xIsTime?: boolean
 }
 
 const props = defineProps<Props>()
+
+const emit = defineEmits<{
+	pointClick: [id: string]
+}>()
 
 // container + canvas refs
 const containerRef = ref<HTMLElement | null>(null)
@@ -95,6 +111,24 @@ const yScale = computed(() =>
 		.domain(yDomain.value)
 		.range([height.value - padding, padding]),
 )
+
+// interactive pan/zoom transform (pixel space); identity = prop-driven auto view
+const transform = ref<d3.ZoomTransform>(d3.zoomIdentity)
+const isZoomed = computed(
+	() =>
+		transform.value.k !== 1 ||
+		transform.value.x !== 0 ||
+		transform.value.y !== 0,
+)
+// effective scales apply the current zoom/pan on top of the base scales
+function effectiveScales() {
+	return {
+		xs: props.lockX
+			? xScale.value
+			: transform.value.rescaleX(xScale.value),
+		ys: transform.value.rescaleY(yScale.value),
+	}
+}
 
 // point list
 const xyData = computed(() => {
@@ -291,6 +325,7 @@ function draw() {
 	const ctx = canvasRef.value.getContext('2d')!
 	ctx.clearRect(0, 0, width.value, height.value)
 	const highlights = [] as PointState[]
+	const { xs, ys } = effectiveScales()
 
 	ctx.globalCompositeOperation = 'source-over'
 	ctx.globalAlpha = 0.01
@@ -311,8 +346,8 @@ function draw() {
 
 		if (st.opacity <= 0) continue
 
-		const cx = xScale.value(st.x)
-		const cy = yScale.value(st.y)
+		const cx = xs(st.x)
+		const cy = ys(st.y)
 
 		ctx.fillStyle = st.color
 		ctx.globalAlpha = st.opacity
@@ -341,8 +376,8 @@ function draw() {
 		if (st.id === props.hoverId) {
 			highlights.push(st)
 		} else {
-			const cx = xScale.value(st.x)
-			const cy = yScale.value(st.y)
+			const cx = xs(st.x)
+			const cy = ys(st.y)
 			ctx.globalAlpha = st.opacity
 			ctx.beginPath()
 			ctx.arc(cx, cy, 3, 0, 2 * Math.PI)
@@ -357,8 +392,8 @@ function draw() {
 	ctx.fillStyle = scssVars.lightbulb
 	ctx.beginPath()
 	for (const st of highlights) {
-		const cx = xScale.value(st.x)
-		const cy = yScale.value(st.y)
+		const cx = xs(st.x)
+		const cy = ys(st.y)
 		ctx.moveTo(cx + 6, cy)
 		ctx.arc(cx, cy, 6, 0, 2 * Math.PI)
 	}
@@ -366,8 +401,8 @@ function draw() {
 
 	// Selected
 	if (props.selectedX !== null && props.selectedY !== null) {
-		const cx = xScale.value(props.selectedX)
-		const cy = yScale.value(props.selectedY)
+		const cx = xs(props.selectedX)
+		const cy = ys(props.selectedY)
 		ctx.beginPath()
 		ctx.arc(cx, cy, 6, 0, 2 * Math.PI)
 		ctx.fill()
@@ -380,6 +415,89 @@ function draw() {
 
 	return anyAnimating
 }
+
+// pan/zoom + click-to-select wiring
+let zoomBehavior: d3.ZoomBehavior<HTMLCanvasElement, unknown> | null = null
+let downPt: [number, number] | null = null
+
+function nearestPointId(px: number, py: number): string | null {
+	const { xs, ys } = effectiveScales()
+	let bestId: string | null = null
+	let bestD2 = 100 // ~10px hit radius (squared)
+	for (const st of pointStates.values()) {
+		if (!st.id || st.opacity <= 0) continue
+		const cx = xs(st.x)
+		const cy = ys(st.y)
+		const d2 = (cx - px) ** 2 + (cy - py) ** 2
+		if (d2 <= bestD2) {
+			bestD2 = d2
+			bestId = st.id
+		}
+	}
+	return bestId
+}
+
+function onPointerDown(e: PointerEvent) {
+	downPt = [e.offsetX, e.offsetY]
+}
+function onCanvasClick(e: MouseEvent) {
+	if (downPt) {
+		const dx = e.offsetX - downPt[0]
+		const dy = e.offsetY - downPt[1]
+		downPt = null
+		if (dx * dx + dy * dy > 16) return // moved > ~4px => treat as pan, not a click
+	}
+	const id = nearestPointId(e.offsetX, e.offsetY)
+	if (id) emit('pointClick', id)
+}
+
+function resetZoom() {
+	if (!canvasRef.value || !zoomBehavior) return
+	d3.select(canvasRef.value)
+		.transition()
+		.duration(200)
+		.call(zoomBehavior.transform, d3.zoomIdentity)
+}
+
+onMounted(() => {
+	if (!canvasRef.value) return
+	zoomBehavior = d3
+		.zoom<HTMLCanvasElement, unknown>()
+		.scaleExtent([1, 40])
+		// Trackpad pinch fires wheel events with ctrlKey set, so it zooms.
+		// Plain wheel (two-finger scroll) passes through to the panel scroller.
+		.filter((event) => {
+			if (event.type === 'wheel') return event.ctrlKey || event.metaKey
+			return !event.button
+		})
+		.on('zoom', (event) => {
+			transform.value = event.transform
+			needsRedraw.value = true
+		})
+	const sel = d3.select(canvasRef.value)
+	sel.call(zoomBehavior)
+	sel.on('dblclick.zoom', null) // leave double-click free for future use
+	canvasRef.value.addEventListener('pointerdown', onPointerDown)
+	canvasRef.value.addEventListener('click', onCanvasClick)
+})
+
+onBeforeUnmount(() => {
+	if (canvasRef.value) {
+		canvasRef.value.removeEventListener('pointerdown', onPointerDown)
+		canvasRef.value.removeEventListener('click', onCanvasClick)
+	}
+})
+
+// Re-baseline any manual zoom whenever the auto view (prop domain) changes,
+// so the mode toggles act as an implicit reset.
+watch(
+	[() => props.xmin, () => props.xmax, () => props.ymin, () => props.ymax],
+	() => {
+		if (canvasRef.value && zoomBehavior && isZoomed.value) {
+			d3.select(canvasRef.value).call(zoomBehavior.transform, d3.zoomIdentity)
+		}
+	},
+)
 
 function loop() {
 	requestAnimationFrame(loop)
@@ -409,19 +527,84 @@ function downloadCSV() {
 	URL.revokeObjectURL(url)
 }
 
-defineExpose({ downloadCSV })
+function downloadImage() {
+	// Freshly render the current view (respecting zoom/pan) to a clean PNG.
+	const { xs, ys } = effectiveScales()
+	const xDomain = xs.domain() as [number, number]
+	const yDomain = ys.domain() as [number, number]
+	const { canvas, ctx, width: cw, height: ch } = createExportCanvas()
+	const plot = plotRect(cw, ch)
+	const xSpan = xDomain[1] - xDomain[0] || 1
+	const ySpan = yDomain[1] - yDomain[0] || 1
+	const sx = (v: number) => plot.x + ((v - xDomain[0]) / xSpan) * plot.w
+	const sy = (v: number) =>
+		plot.y + plot.h - ((v - yDomain[0]) / ySpan) * plot.h
+
+	drawTitle(ctx, props.title ?? '', cw)
+	drawLinearAxes(ctx, {
+		plot,
+		xDomain,
+		yDomain,
+		xScale: sx,
+		yScale: sy,
+		xLabel: props.xLabel,
+		yLabel: props.yLabel,
+		xFormat: props.xIsTime
+			? (v: number) => new Date(v).toISOString().slice(0, 10)
+			: undefined,
+	})
+
+	const colorFor = (type: EventType | 'bg') =>
+		type === 'hot'
+			? scssVars.c3sred
+			: type === 'cold'
+				? scssVars.c3sblue
+				: type === 'wet'
+					? scssVars.c3steal
+					: scssVars.c3spurple
+
+	ctx.save()
+	ctx.beginPath()
+	ctx.rect(plot.x, plot.y, plot.w, plot.h)
+	ctx.clip()
+
+	// background points (faint)
+	ctx.globalAlpha = 0.18
+	ctx.fillStyle = scssVars.c3spurple
+	for (const p of bgData.value) {
+		ctx.beginPath()
+		ctx.arc(sx(p.x), sy(p.y), 2, 0, 2 * Math.PI)
+		ctx.fill()
+	}
+
+	// main points
+	ctx.globalAlpha = 0.85
+	for (const p of xyData.value) {
+		ctx.fillStyle = colorFor(p.type)
+		ctx.beginPath()
+		ctx.arc(sx(p.x), sy(p.y), 3.5, 0, 2 * Math.PI)
+		ctx.fill()
+	}
+	ctx.restore()
+
+	downloadCanvas(canvas, props.title ?? 'scatter')
+}
+
+defineExpose({ downloadCSV, resetZoom })
 </script>
 
 <template>
 	<div ref="containerRef" class="scatter-root chart">
 		<h1 class="chart-title" v-if="props.title">{{ props.title }}</h1>
+		<ChartDownloadMenu @csv="downloadCSV" @image="downloadImage" />
 		<button
-			class="download-btn"
-			@click="downloadCSV"
-			v-tooltip="'Download data as CSV'"
-			aria-label="Download CSV"
+			v-if="isZoomed"
+			class="reset-btn"
+			@click="resetZoom"
+			v-tooltip="'Reset zoom'"
+			aria-label="Reset zoom"
 		>
-			<IconDownload :size="14" />
+			<IconZoomReset :size="14" />
 		</button>
 		<canvas
 			ref="canvasRef"
@@ -440,18 +623,18 @@ defineExpose({ downloadCSV })
 	height: 100%;
 	position: relative;
 
-	.download-btn {
+	.reset-btn {
 		position: absolute;
 		top: 0px;
-		left: 0px;
+		right: 0px;
 		z-index: 10;
 		background: var(--panel-bg-night);
 		border: 1px solid var(--divider);
 		border-radius: 0;
-		border-bottom-right-radius: 4px;
+		border-bottom-left-radius: 4px;
 		padding: 2px 4px;
 		cursor: pointer;
-		opacity: 0.5;
+		opacity: 0.6;
 		color: var(--text-secondary);
 		display: flex;
 		align-items: center;
@@ -498,6 +681,8 @@ defineExpose({ downloadCSV })
 		left: 0;
 		z-index: 0;
 		border-radius: 0;
+		touch-action: none;
+		cursor: crosshair;
 	}
 }
 </style>

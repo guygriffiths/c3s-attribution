@@ -41,7 +41,8 @@ interface State {
 	focusVariable: Variable
 	sortDesc: boolean
 
-	axisMode: 'full' | 'most' | 'event'
+	zoomScale: 'sensible' | 'outliers'
+	followSelected: boolean
 
 	aboutSectionOpen: string | null
 }
@@ -95,7 +96,8 @@ export const useStore = defineStore('main', {
 
 			mainHelpOpen: false,
 
-			axisMode: 'full',
+			zoomScale: 'sensible',
+			followSelected: true,
 
 			aboutSectionOpen: null
 	 	}

@@ -1,60 +1,11 @@
-Look at Cloudflare location dash. The colour scale thing is hot shit, let's steal that shit (probably not the top graph)
+Help once-over + achievements. Better onboarding, mention 2 main modes, timeline ,help and achievements.
+Make buttons clickable in help (time machine/overview)
+Layout on small screens/mobiles
+Output partial events to file so that current heatwaves show before
+Session memory (user returns to the state they were in), back + forward buttons
+Operational + realtime working
+Remove rainbow mode :(
+bookmark events
 
-
-Can I reverse the histogram calculation to get every event within a histogram bar and then highlight all of those events everywhere? Would that be cool as fuck?
-
-Download CSV from scatter. And histogram?  Make PNG exportable - going to have to render to canvas, but it's doable
-
-July 11th 2023 - good example for research (over USA)
-
-PRECIP DEF - Climatology, 95th%ile of wet days (- precip < 1mm), 75%, 25%
-IQR is 75%-25%
-So (precip - 95%) / IQR = PRECIP
-NO 3 DAY LIMIT
-
-
-HEAT INDEX: DEI anomaly over 95th%ile per day, added up per pixel
-
-mean intensity * mean duration * mean area
-
-Intensity = degrees over threshold / SD at that pixel
-
-
-Climatology has a 30 day window and is on a daily basis.
-
-P2
---
-
-* JSON download -> CSV download (or another better format)
-* Better entrypoint
-* Better help on "How to use"
-* Better help on event definitions
-* Highlight the hamburger menu, the fact you can switch to cold events, etc. 
-* Allow day change on event summary chart
-* Fix the map panning
-* Show the ranking of the heatwave instead of the MEDAL 100
-* Put full years (Dec 05 is misleading)
-* Change title “Daily grid cell temperature distribution”  “Histogram of daily grid cell temperature”
-* Hamburger menu positioning - make draggable?
-* Too overwhelming
-* Changing mode with an event selected - make more restrictive - i.e. don't allow time machine dragging when event selected.
-* Click on the map in overview mode to select an event?
-
-* Dual filters (e.g. 4 < duration < 10)
-* Precipitation (drought/wet to mirror heat/cold duality)
-* Data 1940-1979
-* Achievements system
-* Better contextual help
-* Chart and chart data download
-* User-uploadable regions
-* Save user settings in local storage, including custom regions.
-* Greater interactivity with analytics charts (zoom/pan, etc, select-similar events)
-* Attribution?
-* Similar-event selection on scatters
-* Filter max pixels out of region filters?
-
-DONE:
-* Put colour scale on map
-
-
-OK, so pick things from feedback reports, do them one at a time, commit after each feature, cherry pick to the main branch for P1 release
+Charts more interactive
+Download of PNG charts

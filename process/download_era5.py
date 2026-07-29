@@ -24,6 +24,7 @@ Usage:
 """
 
 import logging, sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from datetime import datetime
 from typing import List, Set, Optional
@@ -49,7 +50,7 @@ TEMP_DATASET = "derived-era5-single-levels-daily-statistics"
 LAND_DATASET = "reanalysis-era5-land"
 PRECIP_DATASET = "derived-era5-single-levels-daily-statistics"
 STATISTICS = ["min", "max", "mean"]
-START_YEAR = 1979
+START_YEAR = 2024
 ALL_MONTHS = [f"{m:02d}" for m in range(1, 13)]
 ALL_DAYS = [f"{d:02d}" for d in range(1, 32)]
 
@@ -281,13 +282,17 @@ def download_all_latest(
     output_dir: str = "/data",
     statistics: Optional[List[str]] = None,
     include_precip: bool = True,
-    include_land_sea_mask: bool = True
+    include_land_sea_mask: bool = True,
+    max_workers: int = 10
 ) -> dict:
     """
     Download all missing years for all temperature statistics and precipitation.
 
     Scans the output directory for existing files and downloads only
-    missing years from 1979 to the current year.
+    missing years from START_YEAR to the current year. All requests are
+    submitted concurrently so they queue on ECMWF's servers in parallel.
+    Keep max_workers at or below your CDS per-user active-request limit
+    (typically 20).
 
     Directory layout produced:
         <output_dir>/t2m/min/
@@ -300,6 +305,7 @@ def download_all_latest(
         statistics: List of t2m statistics to download (default: all)
         include_precip: Download total precipitation (default: True)
         include_land_sea_mask: Download land-sea mask if missing (default: True)
+        max_workers: Maximum concurrent CDS requests (default: 10)
 
     Returns:
         Dictionary with download results:
@@ -324,69 +330,71 @@ def download_all_latest(
     logger.info(f"T2M statistics: {statistics}")
     logger.info(f"Precipitation: {include_precip}")
     logger.info(f"Output directory: {output_dir}")
+    logger.info(f"Concurrent workers: {max_workers}")
 
-    client = cdsapi.Client()
     results = {}
 
     # ------------------------------------------------------------------ #
-    # Land-sea mask
+    # Land-sea mask (cheap one-off check, keep sequential)
     # ------------------------------------------------------------------ #
     if include_land_sea_mask:
         logger.info("\n--- Checking land-sea mask ---")
-        mask_success = download_land_sea_mask(output_dir, client)
+        mask_success = download_land_sea_mask(output_dir)
         results['land_sea_mask'] = mask_success
         if not mask_success:
             logger.warning("Land-sea mask download failed, continuing anyway")
 
     # ------------------------------------------------------------------ #
-    # 2m temperature statistics  →  t2m/<stat>/
+    # Build task list — each task owns its own cdsapi.Client instance
     # ------------------------------------------------------------------ #
+    # List of (result_key, year, callable, positional_args)
+    tasks = []
+
     for stat in statistics:
         key = f"t2m_{stat}"
         results[key] = {'success': [], 'failed': []}
-
-    for stat in statistics:
-        key = f"t2m_{stat}"
-        logger.info(f"\n--- Processing t2m/{stat} ---")
         base_dir = Path(output_dir) / "t2m" / stat
         base_dir.mkdir(parents=True, exist_ok=True)
-
-        missing_years = get_missing_years(
-            base_dir, f"era5_daily_{stat}_temperature"
+        missing_years = _apply_partial_year_logic(
+            get_missing_years(base_dir, f"era5_daily_{stat}_temperature")
         )
-        missing_years = _apply_partial_year_logic(missing_years)
-
-        logger.info(f"t2m/{stat}: Downloading {len(missing_years)} years")
-
+        logger.info(f"t2m/{stat}: {len(missing_years)} years to download")
         for year in missing_years:
-            success = download_year(year, stat, output_dir, client)
+            tasks.append((key, year, download_year, (year, stat, output_dir)))
+
+    if include_precip:
+        results['precip'] = {'success': [], 'failed': []}
+        precip_dir = Path(output_dir) / "precip"
+        precip_dir.mkdir(parents=True, exist_ok=True)
+        missing_years = _apply_partial_year_logic(
+            get_missing_years(precip_dir, "era5_daily_total_precipitation")
+        )
+        logger.info(f"precip: {len(missing_years)} years to download")
+        for year in missing_years:
+            tasks.append(('precip', year, download_precip_year, (year, output_dir)))
+
+    logger.info(f"\nSubmitting {len(tasks)} requests with up to {max_workers} in parallel")
+
+    # ------------------------------------------------------------------ #
+    # Submit all requests concurrently
+    # Each worker creates its own cdsapi.Client (not thread-safe to share)
+    # ------------------------------------------------------------------ #
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_meta = {
+            executor.submit(fn, *args): (key, year)
+            for key, year, fn, args in tasks
+        }
+        for future in as_completed(future_to_meta):
+            key, year = future_to_meta[future]
+            try:
+                success = future.result()
+            except Exception as exc:
+                logger.error(f"{key} {year} raised an exception: {exc}")
+                success = False
             if success:
                 results[key]['success'].append(year)
             else:
                 results[key]['failed'].append(year)
-
-    # ------------------------------------------------------------------ #
-    # Total precipitation  →  precip/
-    # ------------------------------------------------------------------ #
-    if include_precip:
-        results['precip'] = {'success': [], 'failed': []}
-        logger.info("\n--- Processing precip ---")
-        precip_dir = Path(output_dir) / "precip"
-        precip_dir.mkdir(parents=True, exist_ok=True)
-
-        missing_years = get_missing_years(
-            precip_dir, "era5_daily_total_precipitation"
-        )
-        missing_years = _apply_partial_year_logic(missing_years)
-
-        logger.info(f"precip: Downloading {len(missing_years)} years")
-
-        for year in missing_years:
-            success = download_precip_year(year, output_dir, client)
-            if success:
-                results['precip']['success'].append(year)
-            else:
-                results['precip']['failed'].append(year)
 
     # ------------------------------------------------------------------ #
     # Summary

@@ -14,13 +14,12 @@ services:
       - ../docker/.env
     volumes:
       - ./:/app:ro  # Mount process scripts into container
-      - /private/shared/era5-t2m:/data:rw
-      - /homes/web/.cdsapirc:/root/.cdsapirc:ro
-      - /private/wp1/test-output:/output:rw
+      - /Users/guy/Data/c3s-attribution/:/data:rw
+      - /Users/guy/.cdsapirc:/root/.cdsapirc:ro
+      - /Users/guy/Data/c3s-attribution/testout:/output:rw
     working_dir: /app
     environment:
       - EVENT_INPUT_DIR=/data
     command: ["/bin/bash", "-c", "\
-        micromamba run -n c3s-pyenv python3 make_percentiles.py && \
-        micromamba run -n c3s-pyenv python3 find_events.py \
+        micromamba run -n c3s-pyenv python3 download_era5.py \
     "]

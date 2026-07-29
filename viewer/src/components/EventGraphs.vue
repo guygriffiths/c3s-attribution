@@ -5,10 +5,22 @@ import * as d3 from 'd3'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore as useTimeStore } from '@/store/timeStore'
-import { IconDimensions, IconTemperatureMinus, IconTemperaturePlus, IconCloudRain, IconDownload } from '@tabler/icons-vue'
+import { IconDimensions, IconTemperatureMinus, IconTemperaturePlus, IconCloudRain } from '@tabler/icons-vue'
 import { niceNumber } from '@/lib/utils'
 import { dateStr } from '@/lib/time-utils'
 import { useLabels } from '@/lib/labels'
+import ChartDownloadMenu from '@/components/util/ChartDownloadMenu.vue'
+import {
+	createExportCanvas,
+	drawDateAxis,
+	downloadCanvas,
+	resolveColor,
+	AXIS_COLOR,
+	GRID_COLOR,
+	TICK_COLOR,
+	TEXT_COLOR,
+	type Rect,
+} from '@/lib/chart-export'
 import { circle } from 'leaflet'
 
 const $l = useLabels()
@@ -128,6 +140,152 @@ function downloadCSV() {
 	a.download = (props.selectedEvent?.id ?? 'event') + '-timeseries.csv'
 	a.click()
 	URL.revokeObjectURL(url)
+}
+
+function downloadImage() {
+	const dayList = days.value
+	if (!dayList.length) return
+	const type = eventType.value
+	const themeColor = resolveColor(
+		type === 'hot'
+			? 'var(--theme-hot-primary)'
+			: type === 'cold'
+				? 'var(--theme-cold-primary)'
+				: 'var(--primary)',
+	)
+
+	const { canvas, ctx, width: cw, height: ch } = createExportCanvas()
+	const left = 80
+	const right = 28
+	const plot1: Rect = { x: left, y: 74, w: cw - left - right, h: 236 }
+	const plot2: Rect = { x: left, y: 424, w: cw - left - right, h: 236 }
+
+	const n = dayList.length
+	const bandCenter = (plot: Rect, i: number) => {
+		const sideMargin = (0.5 * plot.w) / (n + 1)
+		const bw = (plot.w - 2 * sideMargin) / n
+		return plot.x + sideMargin + i * bw + bw / 2
+	}
+	const bandWidth = (plot: Rect) => {
+		const sideMargin = (0.5 * plot.w) / (n + 1)
+		return (plot.w - 2 * sideMargin) / n
+	}
+
+	const titleFont =
+		'600 16px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+	const tickFont =
+		'12px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+
+	const drawFrame = (
+		plot: Rect,
+		title: string,
+		yLo: number,
+		yHi: number,
+		yUnits: string,
+	) => {
+		const span = yHi - yLo || 1
+		const sy = (v: number) => plot.y + plot.h - ((v - yLo) / span) * plot.h
+		// title
+		ctx.fillStyle = TEXT_COLOR
+		ctx.font = titleFont
+		ctx.textAlign = 'left'
+		ctx.textBaseline = 'alphabetic'
+		ctx.fillText(title, plot.x, plot.y - 18)
+		// y gridlines + ticks
+		ctx.font = tickFont
+		for (let k = 0; k <= 4; k++) {
+			const v = yLo + (span * k) / 4
+			const py = sy(v)
+			ctx.strokeStyle = GRID_COLOR
+			ctx.lineWidth = 1
+			ctx.beginPath()
+			ctx.moveTo(plot.x, py)
+			ctx.lineTo(plot.x + plot.w, py)
+			ctx.stroke()
+			ctx.fillStyle = TICK_COLOR
+			ctx.textAlign = 'right'
+			ctx.textBaseline = 'middle'
+			ctx.fillText(String(niceNumber(v)), plot.x - 7, py)
+		}
+		// frame
+		ctx.strokeStyle = AXIS_COLOR
+		ctx.lineWidth = 1.5
+		ctx.beginPath()
+		ctx.moveTo(plot.x, plot.y)
+		ctx.lineTo(plot.x, plot.y + plot.h)
+		ctx.lineTo(plot.x + plot.w, plot.y + plot.h)
+		ctx.stroke()
+		// y axis title
+		ctx.save()
+		ctx.fillStyle = TEXT_COLOR
+		ctx.font =
+			'600 13px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+		ctx.translate(20, plot.y + plot.h / 2)
+		ctx.rotate(-Math.PI / 2)
+		ctx.textAlign = 'center'
+		ctx.textBaseline = 'top'
+		ctx.fillText(yUnits, 0, 0)
+		ctx.restore()
+		drawDateAxis(ctx, plot, dayList, (i) => bandCenter(plot, i))
+		return sy
+	}
+
+	const intensityUnits =
+		type === 'hot'
+			? eventStore.heatIntensityUnits
+			: type === 'cold'
+				? eventStore.coldIntensityUnits
+				: eventStore.wetIntensityUnits
+
+	const iVals = intensityData.value
+	const aVals = areaData.value
+	const iLo = d3.min(iVals) ?? 0
+	const iHi = d3.max(iVals) ?? 1
+	const aHi = d3.max(aVals) ?? 1
+
+	const intensityTitle =
+		type === 'hot' || type === 'cold' ? $l.value.eventTempTS : $l.value.eventWetTS
+
+	// Panel 1: intensity (line + points)
+	const syI = drawFrame(plot1, intensityTitle, iLo, iHi, intensityUnits)
+	ctx.save()
+	ctx.beginPath()
+	ctx.rect(plot1.x, plot1.y - 6, plot1.w, plot1.h + 6)
+	ctx.clip()
+	ctx.strokeStyle = themeColor
+	ctx.lineWidth = 2
+	ctx.beginPath()
+	iVals.forEach((v, i) => {
+		const px = bandCenter(plot1, i)
+		const py = syI(v)
+		if (i === 0) ctx.moveTo(px, py)
+		else ctx.lineTo(px, py)
+	})
+	ctx.stroke()
+	ctx.fillStyle = themeColor
+	iVals.forEach((v, i) => {
+		ctx.beginPath()
+		ctx.arc(bandCenter(plot1, i), syI(v), 4, 0, 2 * Math.PI)
+		ctx.fill()
+	})
+	ctx.restore()
+
+	// Panel 2: size (bars)
+	const syA = drawFrame(plot2, $l.value.eventSizeTS, 0, aHi, eventStore.sizeUnits)
+	ctx.save()
+	ctx.beginPath()
+	ctx.rect(plot2.x, plot2.y, plot2.w, plot2.h)
+	ctx.clip()
+	const bw = Math.max(1, bandWidth(plot2) - 1)
+	ctx.fillStyle = themeColor
+	aVals.forEach((v, i) => {
+		const cx = bandCenter(plot2, i)
+		const top = syA(v)
+		ctx.fillRect(cx - bw / 2, top, bw, plot2.y + plot2.h - top)
+	})
+	ctx.restore()
+
+	downloadCanvas(canvas, (props.selectedEvent?.id ?? 'event') + '-timeseries')
 }
 </script>
 
@@ -277,15 +435,11 @@ function downloadCSV() {
 				</g>
 			</svg>
 		</div>
-		<button
-			class="download-btn glassy"
-			@click="downloadCSV"
-			v-tooltip="'Download timeseries data as CSV'"
-			aria-label="Download CSV"
+		<ChartDownloadMenu
 			:disabled="!days.length"
-		>
-			<IconDownload :size="14" />
-		</button>
+			@csv="downloadCSV"
+			@image="downloadImage"
+		/>
 		<slot></slot>
 	</div>
 </template>
@@ -301,33 +455,6 @@ function downloadCSV() {
 	justify-content: center;
 	gap: 0.5rem;
 	padding: 0.5rem;
-
-	.download-btn {
-		position:absolute;
-		top:0;
-		left: 0;
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.25rem 0.25rem;
-		font-size: 0.75rem;
-		cursor: pointer;
-		color: var(--text-secondary);
-		background: var(--panel-bg-night);
-		border: 1px solid var(--divider);
-		border-radius: 0;
-		border-bottom-right-radius: 4px;
-		opacity: 0.5;
-		transition: opacity 0.15s;
-		align-self: flex-end;
-		&:hover:not(:disabled) {
-			opacity: 1;
-		}
-		&:disabled {
-			cursor: default;
-			opacity: 0.3;
-		}
-	}
 
 	.loading {
 		position: absolute;

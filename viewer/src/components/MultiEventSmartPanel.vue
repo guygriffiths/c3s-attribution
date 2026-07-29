@@ -50,61 +50,70 @@ watch(
 	},
 )
 
-const minVar = (focus: string, axisMode: string) => {
-	return axisMode === 'event' && eventStore.selectedEvent
-		? focus === 'duration'
-			? eventStore.durationForEvent(eventStore.selectedEvent) * 0.9
+const baseMin = (focus: string) => {
+	return focus === 'duration'
+		? eventStore.durationRange[0]
+		: focus === 'size'
+			? eventStore.sizeRange[0]
+			: eventStore.intensityRange[0]
+}
+const baseMax = (focus: string, zoomScale: string) => {
+	if (zoomScale === 'outliers') {
+		return focus === 'duration'
+			? eventStore.durationRange[1]
 			: focus === 'size'
-				? eventStore.sizeForEvent(eventStore.selectedEvent) * 0.9
-				: eventStore.intensityForEvent(eventStore.selectedEvent) * 0.9
-		: focus === 'duration'
-			? eventStore.durationRange[0]
-			: focus === 'size'
-				? eventStore.sizeRange[0]
-				: eventStore.intensityRange[0]
+				? eventStore.sizeRange[1]
+				: eventStore.intensityRange[1]
+	}
+	// 'sensible' -> P90-clamped
+	return focus === 'duration'
+		? eventStore.durationP90 || eventStore.durationRange[1]
+		: focus === 'size'
+			? eventStore.sizeP90 || eventStore.sizeRange[1]
+			: Math.max(
+					eventStore.heatIntensityP90 || 0,
+					eventStore.coldIntensityP90 || 0,
+				)
+}
+const valueForFocus = (
+	focus: string,
+	event: ExtremeEventFull | ExtremeEvent,
+) => {
+	return focus === 'duration'
+		? eventStore.durationForEvent(event)
+		: focus === 'size'
+			? eventStore.sizeForEvent(event)
+			: eventStore.intensityForEvent(event)
+}
+const minVar = (focus: string, zoomScale: string, followSelected: boolean) => {
+	let lo = baseMin(focus)
+	if (followSelected && eventStore.selectedEvent) {
+		const v = valueForFocus(focus, eventStore.selectedEvent)
+		const margin = (baseMax(focus, zoomScale) - lo) * 0.05 || Math.abs(v) * 0.05
+		if (v < lo) lo = v - margin
+	}
+	return lo
 }
 const xmin = computed(() => {
-	return minVar(store.focusVariable, store.axisMode)
+	return minVar(store.focusVariable, store.zoomScale, store.followSelected)
 })
 const ymin = computed(() => {
-	return minVar(scatterY.value, store.axisMode)
+	return minVar(scatterY.value, store.zoomScale, store.followSelected)
 })
-const maxVar = (focus: string, axisMode: string) => {
-	return focus === 'duration'
-		? axisMode === 'full'
-			? eventStore.durationRange[1]
-			: axisMode === 'most'
-				? eventStore.durationP90 || eventStore.durationRange[1]
-				: axisMode === 'event' && eventStore.selectedEvent
-					? eventStore.durationForEvent(eventStore.selectedEvent) * 1.1
-					: eventStore.durationP90 || eventStore.durationRange[1]
-		: focus === 'size'
-			? axisMode === 'full'
-				? eventStore.sizeRange[1]
-				: axisMode === 'most'
-					? eventStore.sizeP90 || eventStore.sizeRange[1]
-					: axisMode === 'event' && eventStore.selectedEvent
-						? eventStore.sizeForEvent(eventStore.selectedEvent) * 1.1
-						: eventStore.sizeP90 || eventStore.sizeRange[1]
-			: axisMode === 'full'
-				? eventStore.intensityRange[1]
-				: axisMode === 'most'
-					? Math.max(
-							eventStore.heatIntensityP90 || 0,
-							eventStore.coldIntensityP90 || 0,
-						)
-					: axisMode === 'event' && eventStore.selectedEvent
-						? eventStore.intensityForEvent(eventStore.selectedEvent) * 1.1
-						: Math.max(
-								eventStore.heatIntensityP90 || 0,
-								eventStore.coldIntensityP90 || 0,
-							)
+const maxVar = (focus: string, zoomScale: string, followSelected: boolean) => {
+	let hi = baseMax(focus, zoomScale)
+	if (followSelected && eventStore.selectedEvent) {
+		const v = valueForFocus(focus, eventStore.selectedEvent)
+		const margin = (hi - baseMin(focus)) * 0.05 || Math.abs(v) * 0.05
+		if (v > hi) hi = v + margin
+	}
+	return hi
 }
 const xmax = computed(() => {
-	return maxVar(store.focusVariable, store.axisMode)
+	return maxVar(store.focusVariable, store.zoomScale, store.followSelected)
 })
 const ymax = computed(() => {
-	return maxVar(scatterY.value, store.axisMode)
+	return maxVar(scatterY.value, store.zoomScale, store.followSelected)
 })
 
 const valueForEvent = computed(() => {
@@ -206,7 +215,7 @@ const bins = computed(() => {
 		xmin.value,
 		xmax.value,
 		10,
-		store.axisMode !== 'full',
+		store.zoomScale === 'sensible',
 	)
 })
 const maxCount = computed(() => {
@@ -229,25 +238,35 @@ const yscaleFactor = computed(() => {
 	return 1 / (ymax.value - ymin.value)
 })
 
-const getXYScatterTitle = computed(() => {
-	const xLabel =
-		store.focusVariable === 'duration'
-			? $l.value.duration
-			: store.focusVariable === 'size'
-				? $l.value.size
-				: eventStore.eventTypeMode === 'wet'
-					? $l.value.wetIndex
-					: $l.value.temperature
-	const yLabel =
-		scatterY.value === 'duration'
-			? $l.value.duration
-			: scatterY.value === 'size'
-				? $l.value.size
-				: eventStore.eventTypeMode === 'wet'
-					? $l.value.wetIndex
-					: $l.value.temperature
-	return `${yLabel} vs ${xLabel}`
-})
+const focusVarLabel = computed(() =>
+	store.focusVariable === 'duration'
+		? $l.value.duration
+		: store.focusVariable === 'size'
+			? $l.value.size
+			: eventStore.eventTypeMode === 'wet'
+				? $l.value.wetIndex
+				: $l.value.temperature,
+)
+const scatterYLabel = computed(() =>
+	scatterY.value === 'duration'
+		? $l.value.duration
+		: scatterY.value === 'size'
+			? $l.value.size
+			: eventStore.eventTypeMode === 'wet'
+				? $l.value.wetIndex
+				: $l.value.temperature,
+)
+
+const getXYScatterTitle = computed(
+	() => `${scatterYLabel.value} vs ${focusVarLabel.value}`,
+)
+
+const onPointClick = (id: string) => {
+	const event =
+		props.eventsOfInterest.find((e) => e.id === id) ??
+		props.backgroundEvents?.find((e) => e.id === id)
+	if (event) eventStore.selectEvent(event)
+}
 </script>
 <template>
 	<div class="multi-event-panel panel">
@@ -279,7 +298,8 @@ const getXYScatterTitle = computed(() => {
 						:units="'days'"
 						:highlight-value="valueForEvent"
 						:types="types"
-						:has-tail="store.axisMode !== 'full'"
+						:has-tail="store.zoomScale === 'sensible'"
+						:xLabel="focusVarLabel"
 						:title="
 							store.focusVariable === 'duration'
 								? $l.durationHisto
@@ -401,6 +421,9 @@ const getXYScatterTitle = computed(() => {
 						:selectedY="selectedY"
 						:highlightId="eventStore.selectedEventId"
 						:title="getXYScatterTitle"
+						:xLabel="focusVarLabel"
+						:yLabel="scatterYLabel"
+						@pointClick="onPointClick"
 					/>
 				</div>
 				<div class="axis horizontal">
@@ -516,6 +539,7 @@ const getXYScatterTitle = computed(() => {
 						:selectedX="timeStore.selectedTime.getTime()"
 						:selectedY="selectedX"
 						:hoverId="eventStore.hoveringEvent?.id"
+						:lockX="true"
 						:title="
 							store.focusVariable === 'duration'
 								? $l.durationTimeSeries
@@ -525,6 +549,10 @@ const getXYScatterTitle = computed(() => {
 										? $l.wetTimeSeries
 										: $l.tempTimeSeries
 						"
+						:xLabel="$l.time"
+						:yLabel="focusVarLabel"
+						:xIsTime="true"
+						@pointClick="onPointClick"
 					/>
 				</div>
 				<div class="axis horizontal">
@@ -547,26 +575,26 @@ const getXYScatterTitle = computed(() => {
 		<div class="chart-control">
 			<button
 				class="glassy"
-				:class="{ selected: store.axisMode === 'most' }"
-				@click="store.axisMode = 'most'"
-				v-tooltip="$l.focusOnMostEvents"
+				:class="{ selected: store.zoomScale === 'sensible' }"
+				@click="store.zoomScale = 'sensible'"
+				v-tooltip="$l.showSensibleView"
 			>
 				<IconZoomScan aria-hidden="true" />
 			</button>
 			<button
 				class="glassy"
-				:class="{ selected: store.axisMode === 'full' }"
-				@click="store.axisMode = 'full'"
-				v-tooltip="$l.focusOnAllEvents"
+				:class="{ selected: store.zoomScale === 'outliers' }"
+				@click="store.zoomScale = 'outliers'"
+				v-tooltip="$l.showOutliers"
 			>
 				<IconArrowsDiagonal aria-hidden="true" />
 			</button>
 			<button
 				class="glassy"
-				:class="{ selected: store.axisMode === 'event' }"
+				:class="{ selected: store.followSelected }"
 				:disabled="!selectedX"
-				@click="store.axisMode = 'event'"
-				v-tooltip="$l.focusOnSelectedEvent"
+				@click="store.followSelected = !store.followSelected"
+				v-tooltip="$l.followSelectedEvent"
 			>
 				<IconViewfinder aria-hidden="true" />
 			</button>

@@ -15,7 +15,15 @@ import { colorMixer } from '@/lib/utils'
 import { getBins } from '@/lib/histo-utils'
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import { niceNumber } from '@/lib/utils'
-import { IconDownload } from '@tabler/icons-vue'
+import ChartDownloadMenu from '@/components/util/ChartDownloadMenu.vue'
+import {
+	createExportCanvas,
+	plotRect,
+	drawTitle,
+	drawLinearAxes,
+	downloadCanvas,
+	resolveColor,
+} from '@/lib/chart-export'
 
 type Props = {
 	data: number[]
@@ -29,6 +37,7 @@ type Props = {
 	variable?: Variable
 	hasTail?: boolean
 	title?: string
+	xLabel?: string
 }
 
 const props = defineProps<Props>()
@@ -223,20 +232,63 @@ function downloadCSV() {
 	URL.revokeObjectURL(url)
 }
 
+function downloadImage() {
+	const { canvas, ctx, width: cw, height: ch } = createExportCanvas()
+	const plot = plotRect(cw, ch)
+	const dom = domain.value as [number, number]
+	const xSpan = dom[1] - dom[0] || 1
+	const yTop = yMax.value || 1
+	const sx = (v: number) => plot.x + ((v - dom[0]) / xSpan) * plot.w
+	const sy = (v: number) => plot.y + plot.h - (v / yTop) * plot.h
+
+	drawTitle(ctx, props.title ?? '', cw)
+	drawLinearAxes(ctx, {
+		plot,
+		xDomain: dom,
+		yDomain: [0, yTop],
+		xScale: sx,
+		yScale: sy,
+		xLabel: props.xLabel,
+		yLabel: 'Count',
+		yFormat: (v: number) => String(Math.round(v)),
+	})
+
+	ctx.save()
+	ctx.beginPath()
+	ctx.rect(plot.x, plot.y - 4, plot.w, plot.h + 4)
+	ctx.clip()
+	const list = bins.value ?? []
+	list.forEach((b, idx) => {
+		const count = counts.value[idx] ?? 0
+		if (count <= 0) return
+		const x0 = sx(b.x0 as number)
+		const x1 = sx(b.x1 as number)
+		const bw = Math.max(1, x1 - x0 - 2)
+		const yTopPx = sy(count)
+		const hgt = Math.max(0, plot.y + plot.h - yTopPx)
+		const color =
+			b.coldPct === 0 && b.hotPct === 0
+				? 'var(--primary)'
+				: b.coldPct === 0
+					? 'var(--theme-hot-primary)'
+					: b.hotPct === 0
+						? 'var(--theme-cold-primary)'
+						: colorMixer(scssVars.c3sred, b.hotPct, scssVars.c3sblue)
+		ctx.fillStyle = resolveColor(color)
+		ctx.fillRect(x0 + 1, yTopPx, bw, hgt)
+	})
+	ctx.restore()
+
+	downloadCanvas(canvas, props.title ?? 'histogram')
+}
+
 defineExpose({ downloadCSV })
 </script>
 
 <template>
 	<div ref="containerRef" class="histogram-root">
 		<h1 class="chart-title" v-if="props.title">{{ props.title }}</h1>
-		<button
-			class="download-btn"
-			@click="downloadCSV"
-			v-tooltip="'Download data as CSV'"
-			aria-label="Download CSV"
-		>
-			<IconDownload :size="14" />
-		</button>
+		<ChartDownloadMenu @csv="downloadCSV" @image="downloadImage" />
 		<svg class="histogram-svg" role="img">
 			<filter id="histoBarShadow" height="130%">
 				<feDropShadow
@@ -285,35 +337,6 @@ defineExpose({ downloadCSV })
 	width: 100%;
 	height: 100%;
 	position: relative;
-
-	.download-btn {
-		position: absolute;
-		top: 0px;
-		left: 0px;
-		z-index: 10;
-		background: var(--panel-bg-night);
-		border: 1px solid var(--divider);
-		border-radius: 0;
-		border-bottom-right-radius: 4px;
-		padding: 2px 4px;
-		cursor: pointer;
-		opacity: 0.5;
-		color: var(--text-secondary);
-		display: flex;
-		align-items: center;
-		transition: opacity 0.15s;
-		svg {
-			position: static;
-			opacity: 1;
-			pointer-events: none;
-			width: 14px;
-			height: 14px;
-			color: inherit;
-		}
-		&:hover {
-			opacity: 1;
-		}
-	}
 
 	.tabler-icon {
 		width: min(50%, 3rem);
