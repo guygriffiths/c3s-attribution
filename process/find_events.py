@@ -1324,7 +1324,7 @@ class EventletFactory:
         while self.output_queue:
             yield self.output_queue.popleft()
 
-    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius_km=500):
+    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius_km=250):
         """
         Compute sparse distance matrix for spatial clustering.
         
@@ -1335,6 +1335,11 @@ class EventletFactory:
         longitude window. Each row pair therefore needs a single small distance
         table plus a binary search per point, rather than a distance computation
         for every candidate cell in the search box.
+        
+        The longitude window is derived per row pair by inverting the Haversine
+        formula, so the search region is a true circle rather than a box in grid
+        index space. Grid columns converge towards the poles, so a fixed column
+        offset would reach steadily less far east-west the further north you go.
         
         Args:
             coords: Array of grid indices, shape (N, 2) with columns [i_lat, i_lon]
@@ -1366,14 +1371,15 @@ class EventletFactory:
         lat_vals = np.asarray(lat_arr, dtype=np.float64)
         lon_vals = np.asarray(lon_arr, dtype=np.float64)
 
-        # Compute search radius in grid cells
         res = 0.25  # Grid resolution in degrees
-        radius_km_per_deg = 111  # Approximate km per degree
-        radius_deg = radius_km / radius_km_per_deg
-        delta_coord = 2 * int(np.ceil(radius_deg / res))  # 2x for safety margin
 
-        # Longitude offsets, in degrees, that the search box allows
-        offset_deg = np.arange(delta_coord + 1, dtype=np.float64) * res
+        # Latitude reach: rows are evenly spaced, so this is exact
+        dlat_max = int(np.ceil(np.degrees(radius_km / R) / res))
+
+        # Largest longitude window worth considering, half the globe. Beyond
+        # that the window would wrap onto itself and the distance would stop
+        # increasing with the offset.
+        max_width = (lon_len - 1) // 2
 
         # Split the points into contiguous latitude rows
         row_starts = np.flatnonzero(
@@ -1393,7 +1399,7 @@ class EventletFactory:
             n_src = src_to - src_from
 
             blocks = []
-            for dlat in range(-delta_coord, delta_coord + 1):
+            for dlat in range(-dlat_max, dlat_max + 1):
                 k_dst = row_lookup.get(int(row_id) + dlat)
                 if k_dst is None:
                     continue
@@ -1401,13 +1407,29 @@ class EventletFactory:
                 dst_from, dst_to = row_starts[k_dst], row_ends[k_dst]
                 dst_lon = i_lons[dst_from:dst_to]
 
-                # Distances for this row pair, indexed by |longitude offset|
-                dist_table = haversine_row_offsets(
-                    lat_vals[row_id], lat_vals[row_id + dlat], offset_deg
-                )
+                lat1 = lat_vals[row_id]
+                lat2 = lat_vals[row_id + dlat]
 
-                # Widest offset still inside the radius. The table is
-                # non-decreasing, so everything below the cut is admissible.
+                # Invert the Haversine formula for the longitude offset that
+                # lands exactly on the radius, given this pair of latitudes.
+                target = (math.sin(0.5 * radius_km / R) ** 2 -
+                          math.sin(0.5 * math.radians(lat2 - lat1)) ** 2)
+                if target < 0:
+                    continue  # Rows are already further apart than the radius
+                denom = math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+                if denom <= 0 or target >= denom:
+                    width = max_width  # Whole latitude circle is in range
+                else:
+                    width = int(
+                        math.degrees(2 * math.asin(math.sqrt(target / denom))) / res
+                    ) + 1  # One cell of slack, trimmed exactly below
+                    width = min(width, max_width)
+
+                # Distances for this row pair, indexed by |longitude offset|.
+                # Trim the window to the exact set that is within the radius.
+                dist_table = haversine_row_offsets(
+                    lat1, lat2, np.arange(width + 1, dtype=np.float64) * res
+                )
                 width = int(np.searchsorted(dist_table, radius_km, side="right")) - 1
                 if width < 0:
                     continue
@@ -1495,12 +1517,11 @@ class EventletFactory:
             for p in meta_order
         ]
 
-        # Build symmetric sparse matrix
+        # Every pair is generated from both ends, so this is already symmetric
         D = coo_matrix(
             (dists, (point_to_meta[src_idx], point_to_meta[dst_idx])),
             shape=(n_points, n_points),
         )
-        D = D + D.T  # Make symmetric
         
         return D, metadata
 
@@ -1777,7 +1798,7 @@ def get_default_params() -> List[ParamSet]:
             stat="min",
             perc="2.0",
             thresh=0,
-            nr=500,
+            nr=250,
             ms=60,
             dbscan=True,
             event_mode='cold'
@@ -1786,7 +1807,7 @@ def get_default_params() -> List[ParamSet]:
             stat="max",
             perc="98.0",
             thresh=28,
-            nr=500,
+            nr=250,
             ms=60,
             dbscan=True,
             event_mode='hot'
@@ -1795,7 +1816,7 @@ def get_default_params() -> List[ParamSet]:
             stat="tp",
             perc="95.0",
             thresh=0.0,
-            nr=500,
+            nr=250,
             ms=60,
             dbscan=True,
             event_mode='wet'
