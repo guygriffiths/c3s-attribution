@@ -32,6 +32,31 @@ R = 6371.0088
 WET_DAY_THRESHOLD = 1.0 * 1e-3  # 1mm in meters - minimum precipitation for "wet day"
 
 # ============================================================================
+# Grid Cell Keys
+# ============================================================================
+
+def pack_cell_keys(coords) -> np.ndarray:
+    """
+    Pack (lat, lon) coordinates into unique integer grid-cell keys.
+
+    Coordinates are snapped to 0.001 degrees, which is far finer than the
+    0.25 degree data grid but coarse enough to be immune to float round-trips.
+    This makes "do these two points occupy the same cell?" an integer equality
+    test, so sets of cells can be intersected directly.
+
+    Args:
+        coords: Array-like of shape (N, 2) with columns [lat, lon]
+
+    Returns:
+        Array of int64 keys, shape (N,)
+    """
+    arr = np.asarray(coords, dtype=np.float64).reshape(-1, 2)
+    lat = np.rint(arr[:, 0] * 1000.0).astype(np.int64) + 90_000
+    lon = np.rint(arr[:, 1] * 1000.0).astype(np.int64) + 180_000
+    return lat * 1_000_000 + lon
+
+
+# ============================================================================
 # Distance and Geometry Calculations
 # ============================================================================
 
@@ -662,33 +687,58 @@ class Eventlet:
 
         return safe_alphashape(target_slice, alpha)
 
-    def overlaps(self, coords, time, eps=1e-6):
+    def overlaps(self, coords, time):
         """
-        Check if any of the provided coordinates overlap with the eventlet's current slice.
-        
-        Uses distance threshold (eps) to determine if points are close enough to be
-        considered overlapping.
-        
+        Check whether any of the provided coordinates coincide with the
+        eventlet's relevant slice.
+
+        All coordinates originate from the same regular grid, so "overlap"
+        is exact coincidence of grid cells. This is evaluated as a set
+        intersection over packed integer cell keys, which is O(N + M) rather
+        than the O(N * M) pairwise comparison it replaces.
+
         Args:
             coords: Array of (lat, lon) coordinates to test, shape (N, 2)
-            eps: Distance threshold for considering points as overlapping (default 1e-6)
-            
+            time: Timestamp of the slice being matched
+
         Returns:
-            True if any points are within eps distance of current slice points
+            True if any test point occupies the same grid cell as a point in
+            the eventlet's relevant slice
         """
-        test = np.array(coords, dtype=np.float32)  # shape (N, 2)
         idx = (self.times.index(time) - 1) if (time in self.times) and (self.times.index(time) > 0) else -1
-        current = self.slices[idx]  # shape (M, 2)
+        current_keys = self._slice_keys(idx)
+        if not current_keys:
+            return False
 
-        # Compute pairwise absolute differences for lat and lon
-        # Broadcast shapes: (N,1,2) and (1,M,2) -> (N,M,2)
-        diffs = np.abs(test[:, None, :] - current[None, :, :])
+        return not current_keys.isdisjoint(pack_cell_keys(coords).tolist())
 
-        # Check if differences in both lat & lon are < eps
-        close_points = np.all(diffs < eps, axis=2)  # shape (N, M), True if points close
+    def _slice_keys(self, idx):
+        """
+        Return the set of packed grid-cell keys for slice ``idx``, caching the
+        result until that slice's coordinate array is replaced.
 
-        # Check if any pair is close
-        return np.any(close_points)
+        The cache is keyed on array identity, so any operation that rebinds
+        ``self.slices[idx]`` (extend, merge, land/ocean filtering, re-sorting)
+        transparently invalidates it.
+        """
+        target = self.slices[idx]
+        cache = getattr(self, "_keys_cache", None)
+        if cache is None:
+            cache = self._keys_cache = {}
+
+        entry = cache.get(idx)
+        if entry is not None and entry[0] is target:
+            return entry[1]
+
+        keys = set(pack_cell_keys(target).tolist())
+        cache[idx] = (target, keys)
+        return keys
+
+    def __getstate__(self):
+        """Exclude the derived key cache from pickled state."""
+        state = self.__dict__.copy()
+        state.pop("_keys_cache", None)
+        return state
 
     def extend(self, time, coords, values):
         """
@@ -827,7 +877,7 @@ class Eventlet:
             lats = lats[::-1]  # ascending for searchsorted
 
         for i in range(len(self.slices)):
-            if self.hull(i) is not None:
+            if len(self.slices[i]) > 0:
                 coords = np.array(self.slices[i])
                 
                 # Find latitude indices using binary search
@@ -878,7 +928,7 @@ class Eventlet:
             lats = lats[::-1]  # ascending for searchsorted
 
         for i in range(len(self.slices)):
-            if self.hull(i) is not None:
+            if len(self.slices[i]) > 0:
                 coords = np.array(self.slices[i])
                 
                 # Find latitude indices using binary search
@@ -1144,13 +1194,22 @@ class EventletFactory:
         else:
             labels = []
 
-        # Group points by cluster label
+        # Group points by cluster label.
+        # Sorting once is O(n log n); testing every point against every label
+        # would be O(n_labels * n_points).
+        labels = np.asarray(labels)
         blobs = []
-        for label in set(labels):
-            if label == -1:  # Skip noise points
-                continue
-            points = [m for i, m in enumerate(metadata) if labels[i] == label]
-            blobs.append(points)
+        if labels.size:
+            order = np.argsort(labels, kind="stable")
+            ordered_labels = labels[order]
+            starts = np.flatnonzero(
+                np.concatenate(([True], ordered_labels[1:] != ordered_labels[:-1]))
+            )
+            ends = np.concatenate((starts[1:], [len(ordered_labels)]))
+            for start, end in zip(starts, ends):
+                if ordered_labels[start] == -1:  # Skip noise points
+                    continue
+                blobs.append([metadata[i] for i in order[start:end]])
 
         # For wet events use the anomaly (IQR-normalised) as intensity;
         # for temperature events use the raw data value.
@@ -1408,7 +1467,7 @@ class EventletFactory:
 
             # Check each time slice for land points
             for i in range(len(ev.slices)):
-                if ev.hull(i) is not None:
+                if len(ev.slices[i]) > 0:
                     coords = np.array(ev.slices[i])
                     
                     # Map coordinates to mask indices
