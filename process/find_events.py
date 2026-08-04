@@ -255,81 +255,6 @@ def get_region(shape: Union[Polygon, MultiPolygon]) -> List[List[List[float]]]:
 
 
 # ============================================================================
-# Clustering
-# ============================================================================
-
-def walk_scan(
-    D_coo: coo_matrix,
-    eps: float,
-    min_samples: int = 1
-) -> np.ndarray:
-    """
-    Sparse distance-matrix DBSCAN implementation.
-    
-    A memory-efficient clustering algorithm for sparse distance matrices.
-    Uses a breadth-first search approach to grow clusters from seed points,
-    requiring only the sparse distance matrix rather than full pairwise distances.
-    
-    Args:
-        D_coo: Sparse COO matrix of pairwise distances (only store distances < threshold)
-        eps: Maximum distance for two points to be considered neighbors
-        min_samples: Minimum cluster size; smaller clusters are marked as noise
-        
-    Returns:
-        Array of cluster labels (0, 1, 2, ...) with -1 for noise points
-        
-    Algorithm:
-        1. For each unvisited point, find neighbors within eps distance
-        2. If enough neighbors exist, start a new cluster and expand via BFS
-        3. Mark clusters smaller than min_samples as noise (-1)
-        
-    Note:
-        This is optimized for cases where most point pairs are too far apart
-        to be neighbors, making a sparse matrix representation efficient.
-    """
-    D = D_coo.tocsr()
-    n_points = D.shape[0]
-    
-    visited = np.zeros(n_points, dtype=bool)
-    labels = -np.ones(n_points, dtype=int)
-    cluster_id = 0
-
-    for i in range(n_points):
-        if visited[i]:
-            continue
-
-        # Find neighbors within eps distance
-        neighbours = D[i].indices[D[i].data <= eps]
-
-        # Initialize cluster expansion queue
-        queue = deque([i])
-        queue.extend(neighbours)
-        cluster_members = set()
-
-        # Breadth-first search to grow cluster
-        while queue:
-            point = queue.popleft()
-            if visited[point]:
-                continue
-            
-            visited[point] = True
-            cluster_members.add(point)
-
-            # Expand cluster if point has enough neighbors
-            neighbours = D[point].indices[D[point].data <= eps]
-            if len(neighbours) >= min_samples:
-                queue.extend(neighbours)
-
-        # Only keep clusters that meet minimum size requirement
-        if len(cluster_members) >= min_samples:
-            for pt in cluster_members:
-                labels[pt] = cluster_id
-            cluster_id += 1
-
-    return labels
-
-
-# ============================================================================
 # Serialization and Formatting
 # ============================================================================
 
@@ -1029,7 +954,6 @@ class EventletFactory:
         active: List of currently active Eventlet objects
         output_queue: Queue of finalized events ready for output
         output_path: Directory path for output files
-        use_dbscan: If True, use sklearn DBSCAN; if False, use custom walk_scan
         eventtype: Event type label (e.g., 'hot', 'cold', 'wet')
         land_only: If True, only track events over land
         ocean_only: If True, only track events over ocean
@@ -1049,7 +973,6 @@ class EventletFactory:
         neighbor_radius=200,
         min_samples=1,
         output_path="/data/output-debug/events",
-        use_dbscan=False,
         last_slice_name=None,
         eventtype='hot',
         land_only=False,
@@ -1072,9 +995,8 @@ class EventletFactory:
             expiry_days: Number of days without updates before event expires
             min_length: Minimum time slices required for valid event (ignored for precip)
             neighbor_radius: Maximum distance (km) for spatial clustering
-            min_samples: Minimum cluster size for DBSCAN/walk_scan
+            min_samples: Minimum cluster size for DBSCAN
             output_path: Directory path for output files
-            use_dbscan: If True, use sklearn DBSCAN instead of custom walk_scan
             last_slice_name: Optional filename with previous run state for resumption
             eventtype: Event type label for output (e.g., 'hot', 'cold', 'wet')
             land_only: If True, only track events over land (removes ocean points)
@@ -1093,7 +1015,6 @@ class EventletFactory:
         self.min_samples = min_samples
         self.radius = neighbor_radius
         self.output_path = output_path
-        self.use_dbscan = use_dbscan
         self.eventtype = eventtype
         self.land_only = land_only
         self.ocean_only = ocean_only
@@ -1205,9 +1126,7 @@ class EventletFactory:
         )
 
         # Perform spatial clustering
-        if not self.use_dbscan:
-            labels = walk_scan(D, eps=self.radius, min_samples=self.min_samples)
-        elif D.getnnz() > 0:
+        if D.getnnz() > 0:
             db = DBSCAN(
                 eps=self.radius,
                 min_samples=self.min_samples,
@@ -1773,7 +1692,7 @@ if not logger.handlers:
 # Parameter set definition
 ParamSet = namedtuple(
     "ParamSet",
-    ["stat", "perc", "thresh", "nr", "ms", "dbscan", "event_mode"]
+    ["stat", "perc", "thresh", "nr", "ms", "event_mode"]
 )
 
 
@@ -1790,7 +1709,6 @@ def get_default_params() -> List[ParamSet]:
         thresh: Absolute threshold in Celsius (None for precip)
         nr: Neighbor radius in km for spatial clustering (default: 250)
         ms: Minimum samples for DBSCAN cluster size (default: 30)
-        dbscan: Use sklearn DBSCAN if True, custom walk_scan if False
         event_mode: 'hot', 'cold', or 'wet'
     """
     return [
@@ -1800,7 +1718,6 @@ def get_default_params() -> List[ParamSet]:
             thresh=0,
             nr=250,
             ms=60,
-            dbscan=True,
             event_mode='cold'
         ),
         ParamSet(
@@ -1809,7 +1726,6 @@ def get_default_params() -> List[ParamSet]:
             thresh=28,
             nr=250,
             ms=60,
-            dbscan=True,
             event_mode='hot'
         ),
         ParamSet(
@@ -1818,7 +1734,6 @@ def get_default_params() -> List[ParamSet]:
             thresh=0.0,
             nr=250,
             ms=60,
-            dbscan=True,
             event_mode='wet'
         ),
     ]
@@ -1870,11 +1785,13 @@ def process_parameter_set(
                 land_sea_mask_path=f"{input_dir}/era5_land_sea_mask.nc",
             )
         
-        # Generate parameter string for filenames
+        # Generate parameter string for filenames. The clustering segment is
+        # fixed now that DBSCAN is the only option, kept so that filenames stay
+        # comparable with earlier runs.
         param_str = (
             f"{param.stat}-{param.perc}-{param.thresh if param.thresh is not None else 'iqr'}-"
             f"nr{param.nr}-ms{param.ms}-"
-            f"{'dbscan' if param.dbscan else 'walk'}-"
+            f"dbscan-"
             f"{param.event_mode}"
         )
         
@@ -1896,7 +1813,6 @@ def process_parameter_set(
             neighbor_radius=param.nr,
             min_samples=param.ms,
             output_path=out_path,
-            use_dbscan=param.dbscan,
             last_slice_name=f"{out_path}/last_slice-{param_str}.pkl",
             eventtype=param.event_mode,
             land_only=land_sea_mask is not None
