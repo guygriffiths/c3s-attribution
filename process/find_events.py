@@ -1273,9 +1273,10 @@ class EventletFactory:
             
         Note:
             Handles longitude wraparound correctly by using modulo arithmetic.
-            Assumes coords is grouped by latitude row in ascending row order,
-            which is what np.argwhere produces. Metadata is ordered by first
-            touch, matching the order the equivalent nested loop would visit.
+            Assumes coords is grouped by latitude row in ascending row order and
+            free of duplicates, which is what np.argwhere produces. Matrix index
+            i corresponds to coords[i], so the numbering is independent of the
+            neighbour search geometry.
         """
         lon_len = len(lon_arr)
 
@@ -1396,13 +1397,9 @@ class EventletFactory:
             dst_idx = np.concatenate([b[1] for b in blocks])
             dists = np.concatenate([b[2] for b in blocks])
 
-            # Blocks were built in latitude-offset order; a stable sort by
-            # source point recovers the point-major order of the equivalent
-            # nested loop, which is what fixes the metadata numbering.
-            order = np.argsort(src_idx, kind="stable")
-            src_parts.append(src_idx[order])
-            dst_parts.append(dst_idx[order])
-            dist_parts.append(dists[order])
+            src_parts.append(src_idx)
+            dst_parts.append(dst_idx)
+            dist_parts.append(dists)
 
         if src_parts:
             src_idx = np.concatenate(src_parts)
@@ -1413,32 +1410,17 @@ class EventletFactory:
             dst_idx = np.empty(0, dtype=np.int64)
             dists = np.empty(0, dtype=np.float64)
 
-        # Number the points in order of first touch: each source point is
-        # registered when its turn comes, then each of its neighbours in turn.
-        pair_counts = np.bincount(src_idx, minlength=n_points)
-        self_slots = np.arange(n_points) + np.concatenate(
-            ([0], np.cumsum(pair_counts)[:-1])
-        )
-        touch = np.empty(n_points + len(src_idx), dtype=np.int64)
-        touch[self_slots] = np.arange(n_points)
-        pair_slots = np.ones(len(touch), dtype=bool)
-        pair_slots[self_slots] = False
-        touch[pair_slots] = dst_idx
-
-        _, first_seen = np.unique(touch, return_index=True)
-        meta_order = touch[np.sort(first_seen)]
-
-        point_to_meta = np.empty(n_points, dtype=np.int64)
-        point_to_meta[meta_order] = np.arange(n_points)
-
+        # Points keep the order they arrive in, which for np.argwhere is
+        # row-major by latitude then longitude. Matrix index i is coords[i], so
+        # the numbering does not depend on how the neighbour search is done.
         metadata = [
-            (float(lat_vals[i_lats[p]]), float(lon_vals[i_lons[p]]))
-            for p in meta_order
+            (float(lat_vals[i_lat]), float(lon_vals[i_lon]))
+            for i_lat, i_lon in zip(i_lats, i_lons)
         ]
 
         # Every pair is generated from both ends, so this is already symmetric
         D = coo_matrix(
-            (dists, (point_to_meta[src_idx], point_to_meta[dst_idx])),
+            (dists, (src_idx, dst_idx)),
             shape=(n_points, n_points),
         )
         
