@@ -93,6 +93,35 @@ def haversine_fast(ll1: Tuple[float, float], ll2: Tuple[float, float]) -> float:
     return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
 
+def haversine_row_offsets(lat1_deg: float, lat2_deg: float, dlon_deg: np.ndarray) -> np.ndarray:
+    """
+    Great-circle distances between two fixed latitudes over an array of
+    longitude offsets.
+
+    For a fixed pair of latitudes the Haversine distance depends only on the
+    longitude difference, and it increases monotonically with |dlon| over the
+    half circle. That lets a whole row pair be handled with one small table
+    instead of a distance computation per point pair.
+
+    Args:
+        lat1_deg: Latitude of the first row in degrees
+        lat2_deg: Latitude of the second row in degrees
+        dlon_deg: Array of longitude offsets in degrees
+
+    Returns:
+        Array of distances in kilometers, same shape as dlon_deg
+    """
+    lat1 = math.radians(lat1_deg)
+    lat2 = math.radians(lat2_deg)
+    dlat = lat2 - lat1
+    dlon = np.radians(dlon_deg)
+
+    a = (math.sin(dlat * 0.5) ** 2 +
+         math.cos(lat1) * math.cos(lat2) * np.sin(dlon * 0.5) ** 2)
+
+    return R * (2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a)))
+
+
 def safe_alphashape(
     points: np.ndarray,
     alpha: float = 1.0,
@@ -1300,8 +1329,12 @@ class EventletFactory:
         Compute sparse distance matrix for spatial clustering.
         
         Builds a sparse matrix containing only pairwise distances below radius_km.
-        Uses grid-based neighbor search for efficiency: only tests points within
-        a lat/lon bounding box, then computes exact Haversine distances.
+        Points are grouped into latitude rows. For a fixed pair of rows the
+        distance depends only on the longitude offset and grows monotonically
+        with it, so the neighbours of every point in the row form one contiguous
+        longitude window. Each row pair therefore needs a single small distance
+        table plus a binary search per point, rather than a distance computation
+        for every candidate cell in the search box.
         
         Args:
             coords: Array of grid indices, shape (N, 2) with columns [i_lat, i_lon]
@@ -1316,68 +1349,157 @@ class EventletFactory:
             
         Note:
             Handles longitude wraparound correctly by using modulo arithmetic.
+            Assumes coords is grouped by latitude row in ascending row order,
+            which is what np.argwhere produces. Metadata is ordered by first
+            touch, matching the order the equivalent nested loop would visit.
         """
         lon_len = len(lon_arr)
 
-        # Build metadata: unique coordinate mappings
-        metadata = []
-        metadata_index = {}
+        coords = np.asarray(coords, dtype=np.int64).reshape(-1, 2)
+        n_points = len(coords)
+        if n_points == 0:
+            return coo_matrix(([], ([], [])), shape=(0, 0)), []
 
-        coord_set = set(map(tuple, coords))
+        i_lats = coords[:, 0]
+        i_lons = coords[:, 1]
 
-        def get_uid(i_lat, i_lon):
-            """Generate unique ID for grid cell."""
-            return i_lat * lon_len + i_lon
-
-        def ensure_metadata(i_lat, i_lon):
-            """Add coordinate to metadata if not already present."""
-            uid = get_uid(i_lat, i_lon)
-            if uid not in metadata_index:
-                metadata_index[uid] = len(metadata)
-                metadata.append((float(lat_arr[i_lat]), float(lon_arr[i_lon])))
-            return metadata_index[uid]
-
-        # Sparse matrix construction lists
-        p1idx = []  # Source point indices
-        p2idx = []  # Target point indices
-        dists = []  # Distances
+        lat_vals = np.asarray(lat_arr, dtype=np.float64)
+        lon_vals = np.asarray(lon_arr, dtype=np.float64)
 
         # Compute search radius in grid cells
         res = 0.25  # Grid resolution in degrees
         radius_km_per_deg = 111  # Approximate km per degree
         radius_deg = radius_km / radius_km_per_deg
         delta_coord = 2 * int(np.ceil(radius_deg / res))  # 2x for safety margin
-        delta_list = np.arange(-delta_coord, delta_coord + 1, 1)
 
-        # For each point, check neighbors within bounding box
-        for i_lat, i_lon in coords:
-            i_idx = ensure_metadata(i_lat, i_lon)
-            
-            for dlat in delta_list:
-                for dlon in delta_list:
-                    if dlat == 0 and dlon == 0:
-                        continue  # Skip self
-                    
-                    j_lat = i_lat + dlat
-                    j_lon = (i_lon + dlon) % lon_len  # Handle longitude wraparound
+        # Longitude offsets, in degrees, that the search box allows
+        offset_deg = np.arange(delta_coord + 1, dtype=np.float64) * res
 
-                    # Check if neighbor exists in our coordinate set
-                    if (j_lat, j_lon) in coord_set:
-                        # Compute exact Haversine distance
-                        d_km = haversine_fast(
-                            (lat_arr[i_lat], lon_arr[i_lon]),
-                            (lat_arr[j_lat], lon_arr[j_lon])
-                        )
-                        
-                        # Only store if within radius
-                        if d_km <= radius_km:
-                            j_idx = ensure_metadata(j_lat, j_lon)
-                            p1idx.append(i_idx)
-                            p2idx.append(j_idx)
-                            dists.append(d_km)
+        # Split the points into contiguous latitude rows
+        row_starts = np.flatnonzero(
+            np.concatenate(([True], i_lats[1:] != i_lats[:-1]))
+        )
+        row_ends = np.concatenate((row_starts[1:], [n_points]))
+        row_ids = i_lats[row_starts]
+        row_lookup = {int(r): k for k, r in enumerate(row_ids)}
+
+        src_parts = []  # Source point indices
+        dst_parts = []  # Target point indices
+        dist_parts = []  # Distances
+
+        for k_src, row_id in enumerate(row_ids):
+            src_from, src_to = row_starts[k_src], row_ends[k_src]
+            src_lon = i_lons[src_from:src_to]
+            n_src = src_to - src_from
+
+            blocks = []
+            for dlat in range(-delta_coord, delta_coord + 1):
+                k_dst = row_lookup.get(int(row_id) + dlat)
+                if k_dst is None:
+                    continue
+
+                dst_from, dst_to = row_starts[k_dst], row_ends[k_dst]
+                dst_lon = i_lons[dst_from:dst_to]
+
+                # Distances for this row pair, indexed by |longitude offset|
+                dist_table = haversine_row_offsets(
+                    lat_vals[row_id], lat_vals[row_id + dlat], offset_deg
+                )
+
+                # Widest offset still inside the radius. The table is
+                # non-decreasing, so everything below the cut is admissible.
+                width = int(np.searchsorted(dist_table, radius_km, side="right")) - 1
+                if width < 0:
+                    continue
+
+                # Duplicate the target row either side to handle wraparound,
+                # so the window is a plain interval on a sorted array.
+                dst_lon_ext = np.concatenate(
+                    (dst_lon - lon_len, dst_lon, dst_lon + lon_len)
+                )
+                dst_pos_ext = np.tile(np.arange(dst_from, dst_to), 3)
+
+                lo = np.searchsorted(dst_lon_ext, src_lon - width, side="left")
+                hi = np.searchsorted(dst_lon_ext, src_lon + width, side="right")
+                counts = hi - lo
+                total = int(counts.sum())
+                if total == 0:
+                    continue
+
+                # Expand the per-point windows into a flat list of pairs
+                src_rep = np.repeat(np.arange(n_src), counts)
+                within = np.arange(total) - np.repeat(
+                    np.cumsum(counts) - counts, counts
+                )
+                flat = np.repeat(lo, counts) + within
+
+                src_idx = src_rep + src_from
+                dst_idx = dst_pos_ext[flat]
+                offsets = np.abs(dst_lon_ext[flat] - src_lon[src_rep])
+
+                if dlat == 0:
+                    # Skip self
+                    keep = src_idx != dst_idx
+                    src_idx = src_idx[keep]
+                    dst_idx = dst_idx[keep]
+                    offsets = offsets[keep]
+                    if len(src_idx) == 0:
+                        continue
+
+                blocks.append((src_idx, dst_idx, dist_table[offsets]))
+
+            if not blocks:
+                continue
+
+            src_idx = np.concatenate([b[0] for b in blocks])
+            dst_idx = np.concatenate([b[1] for b in blocks])
+            dists = np.concatenate([b[2] for b in blocks])
+
+            # Blocks were built in latitude-offset order; a stable sort by
+            # source point recovers the point-major order of the equivalent
+            # nested loop, which is what fixes the metadata numbering.
+            order = np.argsort(src_idx, kind="stable")
+            src_parts.append(src_idx[order])
+            dst_parts.append(dst_idx[order])
+            dist_parts.append(dists[order])
+
+        if src_parts:
+            src_idx = np.concatenate(src_parts)
+            dst_idx = np.concatenate(dst_parts)
+            dists = np.concatenate(dist_parts)
+        else:
+            src_idx = np.empty(0, dtype=np.int64)
+            dst_idx = np.empty(0, dtype=np.int64)
+            dists = np.empty(0, dtype=np.float64)
+
+        # Number the points in order of first touch: each source point is
+        # registered when its turn comes, then each of its neighbours in turn.
+        pair_counts = np.bincount(src_idx, minlength=n_points)
+        self_slots = np.arange(n_points) + np.concatenate(
+            ([0], np.cumsum(pair_counts)[:-1])
+        )
+        touch = np.empty(n_points + len(src_idx), dtype=np.int64)
+        touch[self_slots] = np.arange(n_points)
+        pair_slots = np.ones(len(touch), dtype=bool)
+        pair_slots[self_slots] = False
+        touch[pair_slots] = dst_idx
+
+        _, first_seen = np.unique(touch, return_index=True)
+        meta_order = touch[np.sort(first_seen)]
+
+        point_to_meta = np.empty(n_points, dtype=np.int64)
+        point_to_meta[meta_order] = np.arange(n_points)
+
+        metadata = [
+            (float(lat_vals[i_lats[p]]), float(lon_vals[i_lons[p]]))
+            for p in meta_order
+        ]
 
         # Build symmetric sparse matrix
-        D = coo_matrix((dists, (p1idx, p2idx)), shape=(len(metadata), len(metadata)))
+        D = coo_matrix(
+            (dists, (point_to_meta[src_idx], point_to_meta[dst_idx])),
+            shape=(n_points, n_points),
+        )
         D = D + D.T  # Make symmetric
         
         return D, metadata
