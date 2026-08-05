@@ -1025,6 +1025,7 @@ class EventletFactory:
         self.oldest_active_time = None
         self.id = 0
         self.skipToTime = None
+        self._mask_cache = {}  # Raw mask slices, keyed by time index
 
         # Create threshold mask based on event type
         if eventtype == 'wet':
@@ -1039,26 +1040,18 @@ class EventletFactory:
             self.raw_mask = (anomaly > self.threshold) & (iqr > 0) & (data >= WET_DAY_THRESHOLD)
             # Store the anomaly DataArray so we can record it as event intensity
             self.anomaly = anomaly
-            # No persistence filtering for precipitation
-            self.enduring_pixels = self.raw_mask
         else:
             # Temperature: existing logic
             if self.over_threshold:
                 self.raw_mask = (data > self.threshold) & (data > ref_data)
             else:
                 self.raw_mask = (data < self.threshold) & (data < ref_data)
-            
-            # Filter for persistence: require 3 consecutive time steps
-            # two step process using rolling to first find centre of sequences (hits) using .rolling.sum() then
-            # assign all elements of a sequence (enduring_pixels) using .rolling.max().
-            hits = (
-                    self.raw_mask.rolling(valid_time=3, center=True).sum().fillna(0) >= 3
-            )
-            self.enduring_pixels = (
-                hits.rolling(valid_time=3, center=True).max().fillna(0).astype(bool)
-            )
+
+        # Persistence is applied per slice in _enduring_at, from cached mask
+        # slices, rather than as a rolling expression over the whole record
 
         # Exclude last 2 time steps where rolling window is incomplete
+        self._n_times = self.raw_mask.sizes["valid_time"]
         self.times = self.data.valid_time.values[:-2]
 
         # Resume from previous state if provided
@@ -1089,6 +1082,78 @@ class EventletFactory:
     def has_more(self):
         return self._t_index < len(self.times)
 
+    def _raw_mask_at(self, k):
+        """
+        Raw threshold mask for one time index, held between slices.
+
+        Consecutive slices need overlapping windows of the raw mask, so each
+        one is read from storage once and then reused.
+
+        Args:
+            k: Index along the valid_time dimension
+
+        Returns:
+            2-D boolean array (latitude, longitude)
+        """
+        cached = self._mask_cache.get(k)
+        if cached is None:
+            cached = self.raw_mask.isel(valid_time=k).values
+            self._mask_cache[k] = cached
+        return cached
+
+    def _hits_at(self, k):
+        """
+        True where k is the middle of three consecutive exceeding steps.
+
+        Args:
+            k: Index along the valid_time dimension
+
+        Returns:
+            2-D boolean array, or None where the window runs off either end of
+            the record and the result is empty by definition
+        """
+        if k <= 0 or k >= self._n_times - 1:
+            return None
+        return (self._raw_mask_at(k - 1)
+                & self._raw_mask_at(k)
+                & self._raw_mask_at(k + 1))
+
+    def _enduring_at(self, t, raw_mask_slice):
+        """
+        Apply the persistence filter to one time index.
+
+        Equivalent to indexing the rolling expression built in __init__, but
+        evaluated from cached mask slices so the shared steps between
+        neighbouring slices are only read once. A pixel survives if it exceeds
+        the threshold now and belongs to a run of three consecutive exceeding
+        steps starting at t-2, t-1 or t.
+
+        Args:
+            t: Index along the valid_time dimension
+            raw_mask_slice: Raw threshold mask at t
+
+        Returns:
+            2-D boolean array (latitude, longitude)
+        """
+        if self.eventtype == 'wet':
+            return raw_mask_slice  # No persistence requirement for precipitation
+
+        # Both rolling passes are centred and 3 wide, so the ends of the record
+        # are incomplete and fill as empty rather than wrapping or shrinking
+        if t <= 0 or t >= self._n_times - 1:
+            return np.zeros_like(raw_mask_slice)
+
+        enduring = None
+        for k in (t - 1, t, t + 1):
+            hits = self._hits_at(k)
+            if hits is None:
+                continue
+            enduring = hits if enduring is None else (enduring | hits)
+
+        if enduring is None:
+            return np.zeros_like(raw_mask_slice)
+        return enduring & raw_mask_slice
+
     def process_next_slice(self):
         """
         Process a single time slice: detect clusters, update active events, expire old ones.
@@ -1110,8 +1175,13 @@ class EventletFactory:
         t = np.searchsorted(self.times, np.datetime64(time))
 
         # Apply persistence filter to raw mask (or just raw mask for precip)
-        raw_mask_slice = self.raw_mask.isel(valid_time=t).values
-        enduring_slice = np.where(self.enduring_pixels[t], raw_mask_slice, False)
+        raw_mask_slice = self._raw_mask_at(t)
+        enduring_slice = self._enduring_at(t, raw_mask_slice)
+
+        # The next slice reaches back one step further than this one, so
+        # anything older can go
+        for stale in [k for k in self._mask_cache if k < t - 1]:
+            del self._mask_cache[stale]
 
         # Get indices of threshold-exceeding points
         hot_indices = np.argwhere(enduring_slice)  # shape (N, 2): (i_lat, i_lon)
