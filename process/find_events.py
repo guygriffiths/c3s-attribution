@@ -32,6 +32,12 @@ from sklearn.cluster import DBSCAN
 R = 6371.0088
 WET_DAY_THRESHOLD = 1.0 * 1e-3  # 1mm in meters - minimum precipitation for "wet day"
 
+# Upper bound on how many time steps are read at once. Reads are aligned to the
+# source file's compression chunks, but a file chunked over a very long span
+# would otherwise pull an unreasonable amount into memory at once: one step of
+# ERA5 at 0.25 degrees is 4 MB as float32.
+MAX_READ_BLOCK = 73
+
 # ============================================================================
 # Grid Cell Keys
 # ============================================================================
@@ -1133,6 +1139,16 @@ class EventletFactory:
         self._n_times = self.raw_mask.sizes["valid_time"]
         self.times = self.data.valid_time.values[:-2]
 
+        # Coordinates are the same for every slice, so resolve them once
+        self._lat_vals = self.data.latitude.values
+        self._lon_vals = self.data.longitude.values
+        self._lat_index = {v: i for i, v in enumerate(self._lat_vals)}
+        self._lon_index = {v: i for i, v in enumerate(self._lon_vals)}
+
+        # Reads are served a whole storage chunk at a time; see _read_span
+        self._read_block = self._storage_time_chunk()
+        self._value_block = None  # (start, stop, 3-D array) for the values
+
         # Resume from previous state if provided
         if last_slice_name:
             if os.path.exists(last_slice_name):
@@ -1161,12 +1177,49 @@ class EventletFactory:
     def has_more(self):
         return self._t_index < len(self.times)
 
+    def _storage_time_chunk(self):
+        """
+        Number of time steps in one on-disk chunk of the source data.
+
+        ERA5 files as delivered are compressed with chunks spanning many days
+        at once, so extracting a single day forces the whole chunk to be
+        decompressed. Reads are aligned to that boundary to pay the cost once.
+
+        Returns:
+            Chunk length along valid_time, or MAX_READ_BLOCK if it cannot be
+            determined or is implausibly large
+        """
+        chunks = self.data.encoding.get("chunksizes")
+        dims = self.data.dims
+        if chunks and "valid_time" in dims:
+            length = chunks[dims.index("valid_time")]
+            if 1 <= length <= MAX_READ_BLOCK:
+                return int(length)
+        return MAX_READ_BLOCK
+
+    def _read_span(self, k):
+        """
+        Chunk-aligned range of time indices to read when index k is wanted.
+
+        Args:
+            k: Index along the valid_time dimension
+
+        Returns:
+            Tuple of (start, stop) covering k, clipped to the record
+        """
+        block = self._read_block
+        start = (k // block) * block
+        return start, min(start + block, self._n_times)
+
     def _raw_mask_at(self, k):
         """
         Raw threshold mask for one time index, held between slices.
 
-        Consecutive slices need overlapping windows of the raw mask, so each
-        one is read from storage once and then reused.
+        On a miss the whole surrounding storage chunk is decompressed anyway,
+        so the entire span is masked and cached in one pass rather than one
+        index at a time. Consecutive slices need overlapping windows of the raw
+        mask, and process_next_slice only evicts indices below t - 1, so the
+        rest of the span survives to be used by later steps.
 
         Args:
             k: Index along the valid_time dimension
@@ -1176,9 +1229,37 @@ class EventletFactory:
         """
         cached = self._mask_cache.get(k)
         if cached is None:
-            cached = self.raw_mask.isel(valid_time=k).values
-            self._mask_cache[k] = cached
+            start, stop = self._read_span(k)
+            block = self.raw_mask.isel(valid_time=slice(start, stop)).values
+            for offset in range(stop - start):
+                self._mask_cache.setdefault(start + offset, block[offset])
+            cached = self._mask_cache[k]
         return cached
+
+    def _values_at(self, t):
+        """
+        Intensity values for one time index, read a storage chunk at a time.
+
+        The anomaly for wet events, the raw data otherwise. Only the current
+        step's values are ever needed, so a single block is held rather than a
+        cache keyed by index.
+
+        Args:
+            t: Index along the valid_time dimension
+
+        Returns:
+            2-D array (latitude, longitude)
+        """
+        if self._value_block is not None:
+            start, stop, block = self._value_block
+            if start <= t < stop:
+                return block[t - start]
+
+        start, stop = self._read_span(t)
+        source = self.anomaly if self.eventtype == 'wet' else self.data
+        block = source.isel(valid_time=slice(start, stop)).values
+        self._value_block = (start, stop, block)
+        return block[t - start]
 
     def _hits_at(self, k):
         """
@@ -1250,7 +1331,6 @@ class EventletFactory:
         logger.info(f"Processing slice at {time}")
 
         # Load data for this time slice
-        data_slice = self.data.sel(valid_time=time).load()
         t = np.searchsorted(self.times, np.datetime64(time))
 
         # Apply persistence filter to raw mask (or just raw mask for precip)
@@ -1266,8 +1346,8 @@ class EventletFactory:
         hot_indices = np.argwhere(enduring_slice)  # shape (N, 2): (i_lat, i_lon)
 
         # Extract coordinate arrays
-        lat_vals = data_slice.latitude.values
-        lon_vals = data_slice.longitude.values
+        lat_vals = self._lat_vals
+        lon_vals = self._lon_vals
 
         # Compute sparse distance matrix for spatial clustering
         D, metadata = self.get_distance_matrix(
@@ -1310,20 +1390,14 @@ class EventletFactory:
 
         # For wet events use the anomaly (IQR-normalised) as intensity;
         # for temperature events use the raw data value.
-        # Either way, load into memory now so per-pixel lookups below don't
-        # each trigger a separate dask graph evaluation.
-        if self.eventtype == 'wet':
-            value_slice = self.anomaly.isel(valid_time=t).load()
-        else:
-            value_slice = data_slice  # already .load()ed above
+        vs_np = self._values_at(t)  # 2-D numpy array (lat, lon)
 
         # Pre-extract values for every blob using vectorized numpy indexing.
         # Doing .sel(lat, lon).item() in a Python loop costs O(N log N) per blob
         # (binary search per point); this approach is O(N) after one coordinate
         # lookup to build integer index arrays.
-        lat_index = {v: i for i, v in enumerate(value_slice.latitude.values)}
-        lon_index = {v: i for i, v in enumerate(value_slice.longitude.values)}
-        vs_np = value_slice.values  # 2-D numpy array (lat, lon)
+        lat_index = self._lat_index
+        lon_index = self._lon_index
 
         def blob_values(blob):
             i_lats = np.fromiter((lat_index[lat] for lat, lon in blob), dtype=np.intp, count=len(blob))
