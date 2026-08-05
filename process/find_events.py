@@ -6,6 +6,7 @@ import math
 import os
 import logging, sys
 import pickle
+import tempfile
 import warnings
 from collections import deque, namedtuple
 from typing import List, Tuple, Union, Optional
@@ -319,6 +320,31 @@ def to_serializable(obj):
         return obj
 
 
+def write_atomic(path: str, text: str) -> None:
+    """
+    Write text to path so that readers only ever see a complete file.
+
+    The active-event files are rewritten while a client may be fetching them,
+    so writing in place would expose truncated JSON. Write to a temporary file
+    in the same directory and rename over the target, which is atomic within a
+    filesystem.
+
+    Args:
+        path: Destination file path
+        text: Complete contents to write
+    """
+    directory = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tmp-", suffix=".part")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
 def round_floats(obj, decimals: int = 4):
     """
     Recursively round floating-point numbers in nested structures.
@@ -625,7 +651,10 @@ class Eventlet:
     def hull(self, n, alpha=1.0):
         """
         Generate an alpha shape (concave hull) around the points at time slice n.
-        
+
+        Memoised on the identity of the slice's coordinate array, so any
+        operation that rebinds ``self.slices[n]`` invalidates the entry.
+
         Args:
             n: Index of the time slice
             alpha: Alpha parameter controlling hull tightness (default 1.0)
@@ -639,7 +668,17 @@ class Eventlet:
         if len(target_slice) == 0:
             return None
 
-        return safe_alphashape(target_slice, alpha)
+        cache = getattr(self, "_hull_cache", None)
+        if cache is None:
+            cache = self._hull_cache = {}
+
+        entry = cache.get(n)
+        if entry is not None and entry[0] is target_slice and entry[1] == alpha:
+            return entry[2]
+
+        shape = safe_alphashape(target_slice, alpha)
+        cache[n] = (target_slice, alpha, shape)
+        return shape
 
     def region(self, n, alpha=1.0):
         """
@@ -729,8 +768,9 @@ class Eventlet:
     def __getstate__(self):
         """Exclude the derived caches from pickled state."""
         state = self.__dict__.copy()
-        state.pop("_keys_cache", None)
-        state.pop("_region_cache", None)
+        for cache in ("_keys_cache", "_hull_cache", "_region_cache",
+                      "_footprint_cache", "_payload_cache"):
+            state.pop(cache, None)
         return state
 
     def extend(self, time, coords, values):
@@ -1331,6 +1371,62 @@ class EventletFactory:
             with open(self.last_slice_name, "wb") as f:
                 pickle.dump(last_slice, f)
 
+        self._publish_active()
+
+    def _publish_active(self):
+        """
+        Republish the set of events that are still in progress.
+
+        Events are only written to the year catalogue once they expire, so
+        without this the most recent events — the ones a reader is most likely
+        to care about — are invisible until they are over. This writes the
+        current active set in the same shape as the finished output, flagged
+        with "provisional": true:
+
+        - ``events-{type}-active.jsonl``, alongside the per-year catalogues
+        - ``events-current/event-{id}.json``, alongside the finished events
+
+        Both are rebuilt from scratch on every time step, so the catalogue
+        cannot go stale. The per-event files can, because an event's id is
+        derived from its most extreme pixel and that pixel can move as the
+        event grows: the same event may be published under a different name
+        tomorrow, orphaning today's file. So the directory is reconciled
+        against the live set on every step rather than cleaned periodically.
+
+        Event types run in separate processes and share events-current/, so
+        reconciliation only ever considers this process's own event type. Ids
+        begin with the type, which makes that a simple prefix test.
+
+        Note that land/ocean filtering is not applied here. It mutates the
+        eventlet and so can only run once the event is complete; a provisional
+        event may therefore include points that the finished one will not.
+        """
+        active_dir = f"{self.output_path}/events-current"
+        os.makedirs(active_dir, exist_ok=True)
+
+        live = []
+        for ev in self.active:
+            full_event, catalogue_event = self._build_event(ev, provisional=True)
+            live.append(catalogue_event)
+            write_atomic(
+                f"{active_dir}/event-{full_event['id']}.json",
+                json.dumps(round_floats(full_event)) + "\n",
+            )
+
+        write_atomic(
+            f"{self.output_path}/events-{self.eventtype}-active.jsonl",
+            "".join(json.dumps(round_floats(e)) + "\n" for e in live),
+        )
+
+        # Drop per-event files this process wrote for ids that are no longer live
+        live_ids = {e["id"] for e in live}
+        prefix = f"event-{self.eventtype}"
+        for name in os.listdir(active_dir):
+            if not name.startswith(prefix) or not name.endswith(".json"):
+                continue
+            if name[len("event-"):-len(".json")] not in live_ids:
+                os.remove(os.path.join(active_dir, name))
+
     def flush(self):
         """
         Finalize and queue all remaining active events.
@@ -1341,6 +1437,7 @@ class EventletFactory:
         for ev in self.active:
             self.output_queue.append(ev)
         self.active = []
+        self._publish_active()
 
     def yield_completed(self):
         """
@@ -1587,7 +1684,10 @@ class EventletFactory:
         - Land/ocean classification
 
         This is read-only with respect to ``ev`` so it can be called repeatedly
-        on an event that is still growing.
+        on an event that is still growing. Because an active event is rebuilt
+        on every time step whether or not it moved, the result is memoised
+        against the identity of the event's slice arrays: an event that was not
+        extended this step costs nothing to republish.
 
         Args:
             ev: Eventlet object to describe
@@ -1596,6 +1696,16 @@ class EventletFactory:
         Returns:
             Tuple of (full_event, catalogue_event) dictionaries
         """
+        cached = getattr(ev, "_payload_cache", None)
+        if (
+            cached is not None
+            and cached[1] == provisional
+            and len(cached[0]) == len(ev.slices)
+            and all(a is b for a, b in zip(cached[0], ev.slices))
+        ):
+            return cached[2], cached[3]
+        slices_snapshot = tuple(ev.slices)
+
         all_times = sorted([pd.Timestamp(t) for t in ev.times])
         # Collect coordinates and compute centroids
         all_coords = []
@@ -1717,8 +1827,33 @@ class EventletFactory:
         total_area = calculate_area(pixel_set)
         areas = [calculate_area(slice.tolist()) for slice in ev.slices]
 
-        # Compute overall event geometry
-        total_region_shape = safe_alphashape(unique_coords, alpha=1.0)
+        # Compute overall event geometry. Extending an event usually does not
+        # change its footprint — new points mostly land on pixels it already
+        # covers — so key the cached shape on the footprint itself rather than
+        # on whether the event grew.
+        footprint_key = unique_coords.tobytes()
+        footprint_cache = getattr(ev, "_footprint_cache", None)
+        if (
+            footprint_cache is not None
+            and footprint_cache[0] == footprint_key
+            and footprint_cache[1] == provisional
+        ):
+            total_region = footprint_cache[2]
+        elif provisional:
+            # An alpha shape over the whole accumulated footprint is by far the
+            # most expensive part of building a payload, and for a growing
+            # event it has to be redone almost every step. Union the per-slice
+            # hulls instead, which are already cached. The result is the region
+            # the event has swept rather than a fresh concave hull over every
+            # point, so it is slightly more conservative where an event moved
+            # far between steps. Finished events still get the exact shape.
+            shapes = [s for s in (ev.hull(i) for i in range(len(ev.slices)))
+                      if s is not None]
+            total_region = get_region(unary_union(shapes) if shapes else None)
+            ev._footprint_cache = (footprint_key, provisional, total_region)
+        else:
+            total_region = get_region(safe_alphashape(unique_coords, alpha=1.0))
+            ev._footprint_cache = (footprint_key, provisional, total_region)
 
         # Build full event dictionary
         full_event = {
@@ -1727,7 +1862,7 @@ class EventletFactory:
             "provisional": provisional,
             "times": [format_time(t) for t in all_times],
             "regions": [ev.region(i) for i in range(len(ev.slices))],
-            "total_region": get_region(total_region_shape),
+            "total_region": total_region,
             "slices": to_serializable(ev.slices),
             "values": to_serializable(ev.values),
             "centroids": to_serializable(centroids),
@@ -1782,6 +1917,9 @@ class EventletFactory:
             "pixel_set": [pack_pixel_to_int(*coord) for coord in pixel_set],
         }
 
+        ev._payload_cache = (
+            slices_snapshot, provisional, full_event, catalogue_event
+        )
         return full_event, catalogue_event
 
 
