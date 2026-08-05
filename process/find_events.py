@@ -641,6 +641,44 @@ class Eventlet:
 
         return safe_alphashape(target_slice, alpha)
 
+    def region(self, n, alpha=1.0):
+        """
+        Return the serialisable region for time slice ``n``, caching the result
+        until that slice's coordinate array is replaced.
+
+        Equivalent to ``get_region(self.hull(n, alpha))``, but memoised. An
+        active event is re-serialised on every time step, so without this the
+        alpha shape for every slice would be recomputed every step, making the
+        cost of publishing an event quadratic in its duration.
+
+        The cache is keyed on array identity, so any operation that rebinds
+        ``self.slices[n]`` (extend, merge, land/ocean filtering) transparently
+        invalidates it.
+
+        Args:
+            n: Index of the time slice
+            alpha: Alpha parameter controlling hull tightness (default 1.0)
+
+        Returns:
+            List of polygons, each a list of [lon, lat] pairs
+        """
+        if not self.slices:
+            return get_region(None)
+
+        target = self.slices[n] if n < len(self.slices) else self.slices[-1]
+
+        cache = getattr(self, "_region_cache", None)
+        if cache is None:
+            cache = self._region_cache = {}
+
+        entry = cache.get(n)
+        if entry is not None and entry[0] is target and entry[1] == alpha:
+            return entry[2]
+
+        region = get_region(self.hull(n, alpha))
+        cache[n] = (target, alpha, region)
+        return region
+
     def overlaps(self, coords, time):
         """
         Check whether any of the provided coordinates coincide with the
@@ -689,9 +727,10 @@ class Eventlet:
         return keys
 
     def __getstate__(self):
-        """Exclude the derived key cache from pickled state."""
+        """Exclude the derived caches from pickled state."""
         state = self.__dict__.copy()
         state.pop("_keys_cache", None)
+        state.pop("_region_cache", None)
         return state
 
     def extend(self, time, coords, values):
@@ -1656,7 +1695,7 @@ class EventletFactory:
             "id": event_id,
             "event_type": self.eventtype,
             "times": [format_time(t) for t in all_times],
-            "regions": [get_region(ev.hull(i)) for i in range(len(ev.slices))],
+            "regions": [ev.region(i) for i in range(len(ev.slices))],
             "total_region": get_region(total_region_shape),
             "slices": to_serializable(ev.slices),
             "values": to_serializable(ev.values),
