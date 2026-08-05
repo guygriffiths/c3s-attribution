@@ -1538,18 +1538,13 @@ class EventletFactory:
     def _finalize_cluster(self, ev):
         """
         Finalize a completed event and write output files.
-        
-        Generates comprehensive metadata including:
-        - Temporal information (times, duration)
-        - Spatial information (geometries, centroids, bounding box)
-        - Statistical summaries (max/mean/min values)
-        - Per-pixel maximum values
-        - Land/ocean classification
-        
-        Writes two output files:
+
+        Applies land/ocean filtering (which mutates the eventlet, and so only
+        happens once the event is complete), then writes two output files:
+
         1. Catalogue entry (JSONL): Compact summary for quick searches
         2. Full event file (JSON): Complete details including all time slices
-        
+
         Args:
             ev: Eventlet object to finalize
         """
@@ -1567,6 +1562,41 @@ class EventletFactory:
 
         all_times = sorted([pd.Timestamp(t) for t in ev.times])
         logger.info(f"Finalising extreme event from {all_times[0]} to {all_times[-1]}")
+
+        full_event, catalogue_event = self._build_event(ev, provisional=False)
+
+        year = all_times[0].strftime('%Y')
+        catalogue_path = f"{self.output_path}/events-{self.eventtype}-{year}.jsonl"
+        event_path = f"{self.output_path}/events/event-{full_event['id']}.json"
+
+        with open(catalogue_path, "a") as f:
+            f.write(json.dumps(round_floats(catalogue_event)) + "\n")
+
+        with open(event_path, "w") as f:
+            f.write(json.dumps(round_floats(full_event)) + "\n")
+
+    def _build_event(self, ev, provisional):
+        """
+        Build the serialisable payloads describing an eventlet.
+
+        Generates comprehensive metadata including:
+        - Temporal information (times, duration)
+        - Spatial information (geometries, centroids, bounding box)
+        - Statistical summaries (max/mean/min values)
+        - Per-pixel maximum values
+        - Land/ocean classification
+
+        This is read-only with respect to ``ev`` so it can be called repeatedly
+        on an event that is still growing.
+
+        Args:
+            ev: Eventlet object to describe
+            provisional: True if the event is still active and may yet change
+
+        Returns:
+            Tuple of (full_event, catalogue_event) dictionaries
+        """
+        all_times = sorted([pd.Timestamp(t) for t in ev.times])
         # Collect coordinates and compute centroids
         all_coords = []
         centroids = []
@@ -1694,6 +1724,7 @@ class EventletFactory:
         full_event = {
             "id": event_id,
             "event_type": self.eventtype,
+            "provisional": provisional,
             "times": [format_time(t) for t in all_times],
             "regions": [ev.region(i) for i in range(len(ev.slices))],
             "total_region": get_region(total_region_shape),
@@ -1738,6 +1769,7 @@ class EventletFactory:
         catalogue_event = {
             "id": full_event["id"],
             "event_type": self.eventtype,
+            "provisional": provisional,
             "times": full_event["times"],
             "regions": full_event["regions"],
             "total_region": full_event["total_region"],
@@ -1750,16 +1782,7 @@ class EventletFactory:
             "pixel_set": [pack_pixel_to_int(*coord) for coord in pixel_set],
         }
 
-        # Write outputs
-        year = all_times[0].strftime('%Y')
-        catalogue_path = f"{self.output_path}/events-{self.eventtype}-{year}.jsonl"
-        event_path = f"{self.output_path}/events/event-{event_id}.json"
-
-        with open(catalogue_path, "a") as f:
-            f.write(json.dumps(round_floats(catalogue_event)) + "\n")
-        
-        with open(event_path, "w") as f:
-            f.write(json.dumps(round_floats(full_event)) + "\n")
+        return full_event, catalogue_event
 
 
 # Configure logging
