@@ -100,6 +100,7 @@ fetchAndIndexWorker.onmessage = (
 		dateIndex: Record<number, number[]>
 		monthIndex: Record<string, number[]>
 		eventType: EventType
+		active: boolean
 	}>,
 ) => {
 	retrievedCount++
@@ -110,12 +111,15 @@ fetchAndIndexWorker.onmessage = (
 		dateIndex: dIndex,
 		monthIndex: mIndex,
 		eventType,
+		active,
 	} = e.data
 
 	// console.log(`Main thread received ${events.length} events from worker for year ${year}`)
 
 	_events.push(...events)
-	loadedYears.add(year)
+	// Events still in progress don't belong to a year, so they mustn't be allowed
+	// to make a year look loaded
+	if (!active) loadedYears.add(year)
 
 	// Merge pixel index
 	for (const [key, val] of Object.entries(pIndex)) {
@@ -157,14 +161,20 @@ fetchAndIndexWorker.onmessage = (
 		for (const cb of globalEventsChangedTriggers) {
 			cb()
 		}
-		if (year === latestYear && eventType === 'hot') {
+		if (eventType === 'hot' && (active || year === latestYear)) {
 			const timeStore = useTimeStore()
 			if (events.length > 0) {
-				timeStore.selectedTime = new Date(
-					events[events.length - 1].times[
-						events[events.length - 1].times.length - 1
-					],
-				)
+				// Events in progress run past the end of the finished catalogue, and
+				// aren't guaranteed to be in chronological order, so take the latest
+				// time in the batch and only ever move forwards.
+				let latestTime = 0
+				for (const event of events) {
+					const endTime = event.times[event.times.length - 1]
+					if (endTime > latestTime) latestTime = endTime
+				}
+				if (latestTime > timeStore.selectedTime.getTime()) {
+					timeStore.selectedTime = new Date(latestTime)
+				}
 			} 
 			// TODO - Get the latest updated date
 			// Set to 6 days before the current date
@@ -217,6 +227,13 @@ export async function fetchAndIndexEvents(
 		{ length: to - from + 1 },
 		(_, i) => i + from,
 	).reverse()
+
+	// Events still in progress, fetched first so the leading edge fills in early.
+	// These are a snapshot taken at page load; a site refresh picks up newer ones.
+	for (const eventType of eventTypes) {
+		postedCount++
+		fetchAndIndexWorker.postMessage({ year: to, eventType, active: true })
+	}
 
 	for (const year of years) {
 		for (const eventType of eventTypes) {

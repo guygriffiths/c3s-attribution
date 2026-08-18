@@ -347,7 +347,8 @@ export const useStore = defineStore('events', {
 				}
 
 				// console.log('setting selected event to', id)
-				let path = `${DATA_ROOT}events/event-${this.selectedEventId}.json`
+				const eventDir = event.provisional ? 'events-current' : 'events'
+				let path = `${DATA_ROOT}${eventDir}/event-${this.selectedEventId}.json`
 				const resp = await fetch(path)
 				const eventJson = await resp.json()
 				eventJson.id = event.id

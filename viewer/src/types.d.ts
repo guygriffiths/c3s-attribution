@@ -41,6 +41,10 @@ declare global {
 		ocean_only: boolean
 		color: string
 		event_type: EventType
+		// True for events that are still in progress. Their full definition lives in
+		// events-current/ rather than events/, and both their extent and their id can
+		// still change as more data arrives.
+		provisional?: boolean
 	}
 
 	interface ExtremeEventFull extends ExtremeEvent {

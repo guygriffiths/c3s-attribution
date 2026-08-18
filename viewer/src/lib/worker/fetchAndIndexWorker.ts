@@ -4,21 +4,28 @@ export { }
 
 let startI = 0
 self.onmessage = async (e: MessageEvent) => {
-	const { year, eventType } = e.data
+	// `active` requests the events still in progress rather than a finished year.
+	// These are republished by the processing side every time step, so they have
+	// no year of their own and are only ever loaded once, at startup.
+	const { year, eventType, active } = e.data
 
-	const events = await fetch(`${DATA_ROOT}events-${eventType}-${year}.jsonl`)
+	const url = active
+		? `${DATA_ROOT}events-${eventType}-active.jsonl`
+		: `${DATA_ROOT}events-${eventType}-${year}.jsonl`
+
+	const events = await fetch(url)
 		.then((r) => r.text())
-		.then((t) =>
-			t
-				.trim()
-				.split('\n')
-				.map((line) => {
-					const event = JSON.parse(line)
-					// Convert to timestamps (numbers) instead of Date objects
-					event.times = event.times.map((t: string) => new Date(t).getTime())
-					return event
-				}),
-		)
+		.then((t) => {
+			const body = t.trim()
+			// The active file is legitimately empty when nothing is in progress
+			if (!body) return []
+			return body.split('\n').map((line) => {
+				const event = JSON.parse(line)
+				// Convert to timestamps (numbers) instead of Date objects
+				event.times = event.times.map((t: string) => new Date(t).getTime())
+				return event
+			})
+		})
 		.catch(() => [])
 
 	// Build pixel index right here
@@ -58,5 +65,13 @@ self.onmessage = async (e: MessageEvent) => {
 	// console.log(`Worker built date index for ${eventType} ${year}`)
 	startI += events.length
 
-	self.postMessage({ year, events, pixelIndex, dateIndex, monthIndex, eventType })
+	self.postMessage({
+		year,
+		events,
+		pixelIndex,
+		dateIndex,
+		monthIndex,
+		eventType,
+		active: !!active,
+	})
 }
