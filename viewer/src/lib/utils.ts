@@ -123,40 +123,6 @@ export const setTheme = (themeName: SelectedEventType) => {
 	applyTheme(themeName)
 }
 
-export const fetchDataForYear = async (year: number) => {
-	const [hot, cold] = await Promise.all([
-		fetch(`${DATA_ROOT}events-hot-${year}.jsonl`)
-			.then((r) => r.text())
-			.then((t) =>
-				t
-					.trim()
-					.split('\n')
-					.map((line) => {
-						const event = JSON.parse(line)
-						// Convert to timestamps (numbers) instead of Date objects
-						event.times = event.times.map((t: string) => new Date(t).getTime())
-						return event
-					}),
-			)
-			.catch(() => []),
-
-		fetch(`${DATA_ROOT}events-cold-${year}.jsonl`)
-			.then((r) => r.text())
-			.then((t) =>
-				t
-					.trim()
-					.split('\n')
-					.map((line) => {
-						const event = JSON.parse(line)
-						event.times = event.times.map((t: string) => new Date(t).getTime())
-						return event
-					}),
-			)
-			.catch(() => []),
-	])
-	return [hot, cold]
-}
-
 export const niceNumber = (n: number) => {
 	const num = Number(n)
 	const abs = Math.abs(num)
