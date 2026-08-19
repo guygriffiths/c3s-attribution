@@ -1,6 +1,11 @@
 import * as d3 from 'd3'
 
-export const DATA_ROOT = `${import.meta.env.PROD ? (import.meta.env.X_PUBLIC_PATH || '/') : '/'}data/`
+// Where the event catalogues, per-event detail and regions are served from.
+// This is a separate host to the app itself, so it needs to permit cross-origin
+// reads. Override with X_DATA_ROOT; it must end in a slash.
+export const DATA_ROOT =
+	import.meta.env.X_DATA_ROOT ||
+	'http://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/'
 export const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
 
 export const debounce = (func: (...args: any[]) => void, delay: number) => {

@@ -23,6 +23,11 @@ COPY src/ src/
 ARG X_PUBLIC_PATH="/"
 ENV X_PUBLIC_PATH=${X_PUBLIC_PATH}
 
+# Likewise for the host the event data is fetched from. Leave unset to take the
+# default baked into src/lib/utils.ts.
+ARG X_DATA_ROOT=""
+ENV X_DATA_ROOT=${X_DATA_ROOT}
+
 RUN yarn build
 
 # -------- Production stage --------

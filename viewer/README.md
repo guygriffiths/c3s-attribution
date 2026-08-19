@@ -30,20 +30,30 @@ The build inlines a `base` path taken from `X_PUBLIC_PATH` in `.env`. Set this t
 
 ## Data
 
-Event data is served as JSONL files in `public/data/`:
+Event data is served as JSONL files from the host given by `X_DATA_ROOT`, by default
+`http://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/`. Since that is a
+different origin to the app, the host must send permissive CORS headers. Point
+`X_DATA_ROOT` at `/data/` to serve out of `public/data/` instead.
 
 ```
-public/data/
-  events-hot-{year}.jsonl    # one file per year, extreme heat events
-  events-cold-{year}.jsonl   # one file per year, extreme cold events
-  regions.geojson             # named regions used for spatial filtering
-  events/                     # per-event detail files (loaded on demand)
-  compare/                    # data used for comparison views
+events-hot-{year}.jsonl    # one file per year, extreme heat events
+events-cold-{year}.jsonl   # one file per year, extreme cold events
+events-wet-{year}.jsonl    # one file per year, extreme precipitation events
+events-{type}-active.jsonl # events still in progress, republished every time step
+regions.geojson            # named regions used for spatial filtering
+events/                    # per-event detail files (loaded on demand)
+events-current/            # per-event detail for the events still in progress
+compare/                   # data used for comparison views
 ```
 
 Each `events-{type}-{year}.jsonl` line is a JSON object describing a single event: bounding pixels, timestamps, duration, area, and intensity statistics.
 
 Event data is loaded lazily: the fetch/index worker retrieves one year-file at a time and builds a spatial pixel index in the background. Detailed event geometry is fetched on demand from `events/` when the user selects a specific event.
+
+Events that have not finished yet are carried in `events-{type}-active.jsonl` and flagged
+`"provisional": true`. They are fetched once, at page load, so a site refresh is what picks
+up newer ones. Both their extent and their id can still change as more data arrives, and
+their detail is fetched from `events-current/` rather than `events/`.
 
 ---
 
@@ -144,6 +154,7 @@ All env vars must be prefixed `X_` to be exposed to the client bundle (see `vite
 | Variable | Default | Description |
 |---|---|---|
 | `X_PUBLIC_PATH` | `/` | Base path for the deployed app. Set to `/subpath/` for sub-directory deployments. |
+| `X_DATA_ROOT` | `http://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/` | Where event data is fetched from. Must end in a slash. Set to `/data/` to serve out of `public/data/`. |
 
 ---
 
