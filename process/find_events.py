@@ -1445,7 +1445,16 @@ class EventletFactory:
             with open(self.last_slice_name, "wb") as f:
                 pickle.dump(last_slice, f)
 
-        self._publish_active()
+        # Republishing the active set only matters to a reader watching the
+        # live output, and it costs more the larger and older the events in
+        # flight are: every step re-serialises every pixel every active event
+        # has ever covered. An operational update processes the one slice that
+        # has just arrived and stops, so it still publishes. A reprocess of the
+        # whole record would otherwise rewrite the same growing events once per
+        # day of data, for output nobody reads until the run ends. Publishing
+        # on the final slice alone leaves exactly the same files behind.
+        if not self.has_more():
+            self._publish_active()
 
     def _publish_active(self):
         """
@@ -1460,12 +1469,15 @@ class EventletFactory:
         - ``events-{type}-active.jsonl``, alongside the per-year catalogues
         - ``events-current/event-{id}.json``, alongside the finished events
 
-        Both are rebuilt from scratch on every time step, so the catalogue
+        Both are rebuilt from scratch every time this runs, so the catalogue
         cannot go stale. The per-event files can, because an event's id is
         derived from its most extreme pixel and that pixel can move as the
         event grows: the same event may be published under a different name
         tomorrow, orphaning today's file. So the directory is reconciled
-        against the live set on every step rather than cleaned periodically.
+        against the live set on every call rather than cleaned periodically.
+
+        Note that this is called at the end of a run rather than after every
+        slice; see process_next_slice for why.
 
         Event types run in separate processes and share events-current/, so
         reconciliation only ever considers this process's own event type. Ids
