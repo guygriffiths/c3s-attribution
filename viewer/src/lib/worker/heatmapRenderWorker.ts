@@ -39,6 +39,22 @@ export const heatmapAlphasByType = (
 // stops changing rather than at an arbitrary number.
 export const heatmapScaleMax = (alpha: number): number => Math.round(3 / alpha)
 
+const HEATMAP_COLORS: Record<EventType, string> = {
+	hot: c3sred,
+	cold: c3sblue,
+	wet: c3steal,
+}
+
+// Both the worker and the region overlay in Map.vue fill from this, so an
+// event is the same colour whichever of the two draws it.
+export const heatmapFillStyle = (
+	eventType: EventType,
+	alpha: number,
+): string =>
+	(HEATMAP_COLORS[eventType] ?? c3steal)
+		.replace(')', `,${alpha})`)
+		.replace('rgb', 'rgba')
+
 export const renderToContext = (
 	ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
 	events: {
@@ -81,16 +97,7 @@ export const renderToContext = (
 			})
 		}
 		ctx.closePath()
-		const alpha = alphas[event.event_type]
-		ctx.fillStyle = (
-			event.event_type === 'hot'
-				? c3sred
-				: event.event_type === 'cold'
-					? c3sblue
-					: c3steal
-		)
-			.replace(')', `,${alpha})`)
-			.replace('rgb', 'rgba')
+		ctx.fillStyle = heatmapFillStyle(event.event_type, alphas[event.event_type])
 		ctx.fill()
 	}
 }

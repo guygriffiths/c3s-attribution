@@ -2,6 +2,7 @@
 import HeatmapWorker from '@/lib/worker/heatmapRenderWorker?worker'
 import {
 	heatmapAlphasByType,
+	heatmapFillStyle,
 	renderToContext,
 } from '@/lib/worker/heatmapRenderWorker'
 import { ECMWF_BONN } from '@/lib/utils'
@@ -594,12 +595,10 @@ const addEventPanes = () => {
 				})
 			}
 			ctx.closePath()
-			const alpha = alphas[event.event_type]
-			ctx.fillStyle = (
-				event.event_type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
+			ctx.fillStyle = heatmapFillStyle(
+				event.event_type,
+				alphas[event.event_type],
 			)
-				.replace(')', `,${alpha})`)
-				.replace('rgb', 'rgba')
 			ctx.fill()
 		}
 	})
