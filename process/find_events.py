@@ -1189,6 +1189,7 @@ class EventletFactory:
         self.id = 0
         self.skipToTime = None
         self._mask_cache = {}  # Raw mask slices, keyed by time index
+        self._width_cache = {}  # Longitude reach, keyed by pair of grid rows
 
         # Create threshold mask based on event type
         if eventtype == 'wet':
@@ -1427,27 +1428,14 @@ class EventletFactory:
         lat_vals = self._lat_vals
         lon_vals = self._lon_vals
 
-        # Compute sparse distance matrix for spatial clustering
-        D, metadata = self.get_distance_matrix(
-            hot_indices, lat_vals, lon_vals, radius_km=self.radius
+        # Cluster the points spatially
+        labels = self.cluster_points(
+            hot_indices, self.radius, self.min_samples
         )
-
-        # Perform spatial clustering
-        if D.getnnz() > 0:
-            db = DBSCAN(
-                eps=self.radius,
-                min_samples=self.min_samples,
-                metric="precomputed",
-            )
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="Precomputed sparse input was not sorted",
-                    category=UserWarning,
-                )
-                labels = db.fit_predict(D.tocsr())
-        else:
-            labels = []
+        metadata = [
+            (float(lat_vals[i_lat]), float(lon_vals[i_lon]))
+            for i_lat, i_lon in hot_indices
+        ]
 
         # Group points by cluster label.
         # Sorting once is O(n log n); testing every point against every label
@@ -1795,6 +1783,277 @@ class EventletFactory:
         )
         
         return D, metadata
+
+    def _column_width(self, i_lat1, i_lat2, radius_km):
+        """
+        Widest longitude offset, in grid columns, still within radius_km for a
+        given pair of latitude rows.
+
+        For a fixed pair of latitudes the great-circle distance depends only on
+        the longitude difference, and grows with it over the half circle, so a
+        single offset separates the neighbours from everything else. Columns
+        converge towards the poles, so this has to be derived per row pair: a
+        fixed offset would reach steadily less far east-west the further north
+        you go.
+
+        The rows are the same at every time step, so answers are kept for the
+        life of the factory.
+
+        Args:
+            i_lat1: Grid row index of the first row
+            i_lat2: Grid row index of the second row
+            radius_km: Neighbourhood radius in kilometres
+
+        Returns:
+            Largest column offset within the radius, or -1 if the two rows are
+            already further apart than the radius on their own
+        """
+        key = (int(i_lat1), int(i_lat2))
+        cached = self._width_cache.get(key)
+        if cached is not None:
+            return cached
+
+        res = 0.25  # Grid resolution in degrees
+        max_width = (len(self._lon_vals) - 1) // 2
+        lat1 = float(self._lat_vals[i_lat1])
+        lat2 = float(self._lat_vals[i_lat2])
+
+        # Invert the Haversine formula for the longitude offset that lands
+        # exactly on the radius, given this pair of latitudes.
+        target = (math.sin(0.5 * radius_km / R) ** 2 -
+                  math.sin(0.5 * math.radians(lat2 - lat1)) ** 2)
+        if target < 0:
+            width = -1
+        else:
+            denom = math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+            if denom <= 0 or target >= denom:
+                # Beyond half the globe the window would wrap onto itself and
+                # the distance would stop growing with the offset.
+                width = max_width
+            else:
+                width = min(max_width, int(math.degrees(
+                    2 * math.asin(math.sqrt(target / denom))
+                ) / res) + 1)  # one cell of slack, trimmed exactly below
+            table = haversine_row_offsets(
+                lat1, lat2, np.arange(width + 1, dtype=np.float64) * res
+            )
+            width = int(np.searchsorted(table, radius_km, side="right")) - 1
+
+        self._width_cache[key] = width
+        return width
+
+    def cluster_points(self, coords, radius_km, min_samples):
+        """
+        Group grid points into clusters, exactly as DBSCAN would.
+
+        DBSCAN needs two things: which points have at least min_samples
+        neighbours within the radius, and how those points connect up. Asking
+        it for both through a precomputed distance matrix means materialising
+        every pair, and near the poles, where the columns converge, a single
+        point can have thousands of neighbours. Most of that work is spent
+        proving that the middle of a solid blob is solidly in the middle.
+
+        Both questions can be answered from the grid instead. For a pair of
+        latitude rows the neighbours of a point form one contiguous run of
+        columns (see _column_width), so counting them is a pair of binary
+        searches rather than a distance per candidate. Connectivity is then
+        resolved between whole runs of adjacent core columns rather than
+        between points, and there are far fewer runs than points.
+
+        The result is the same labelling DBSCAN produces, down to which
+        cluster a border point ends up in: clusters are numbered by their
+        lowest-numbered core point, which is the order sklearn expands them
+        in, and a border point goes to the lowest-numbered cluster that
+        reaches it, which is the one that would have claimed it first.
+
+        Args:
+            coords: Array of grid indices, shape (N, 2) with columns
+                [i_lat, i_lon], in row-major order and free of duplicates,
+                which is what np.argwhere produces
+            radius_km: Neighbourhood radius in kilometres
+            min_samples: Neighbours a point needs to be a core point
+
+        Returns:
+            Array of cluster labels, shape (N,), with -1 for noise
+        """
+        coords = np.asarray(coords, dtype=np.int64).reshape(-1, 2)
+        n_points = len(coords)
+        labels = np.full(n_points, -1, dtype=np.int64)
+        if n_points == 0:
+            return labels
+
+        i_lats = coords[:, 0]
+        i_lons = coords[:, 1]
+        lon_len = len(self._lon_vals)
+
+        # Rows are evenly spaced, so the latitude reach is exact
+        dlat_max = int(np.ceil(np.degrees(radius_km / R) / 0.25))
+
+        # Split the points into contiguous latitude rows
+        row_starts = np.flatnonzero(
+            np.concatenate(([True], i_lats[1:] != i_lats[:-1]))
+        )
+        row_ends = np.concatenate((row_starts[1:], [n_points]))
+        row_ids = i_lats[row_starts]
+        row_lookup = {int(r): k for k, r in enumerate(row_ids)}
+
+        # --- Which points are core points -------------------------------
+        # Only the size of each neighbour window is needed, not its contents,
+        # so no pair is ever built.
+        counts = np.zeros(n_points, dtype=np.int64)
+        for k_src, row_id in enumerate(row_ids):
+            src_from, src_to = row_starts[k_src], row_ends[k_src]
+            src_lon = i_lons[src_from:src_to]
+            for dlat in range(-dlat_max, dlat_max + 1):
+                k_dst = row_lookup.get(int(row_id) + dlat)
+                if k_dst is None:
+                    continue
+                width = self._column_width(row_id, row_id + dlat, radius_km)
+                if width < 0:
+                    continue
+
+                # Repeat the target row either side so that the window is a
+                # plain interval on a sorted array despite the wraparound
+                dst_lon = i_lons[row_starts[k_dst]:row_ends[k_dst]]
+                extended = np.concatenate(
+                    (dst_lon - lon_len, dst_lon, dst_lon + lon_len)
+                )
+                counts[src_from:src_to] += (
+                    np.searchsorted(extended, src_lon + width, side="right")
+                    - np.searchsorted(extended, src_lon - width, side="left")
+                )
+
+        # A point falls inside its own window, and DBSCAN counts it as one of
+        # its own neighbours, so the totals are already on the right footing
+        is_core = counts >= min_samples
+
+        # --- Runs of adjacent core columns ------------------------------
+        # A run is a maximal stretch of consecutive core columns in one row.
+        # Every column in it is a core point, so a run is also a contiguous
+        # block of the point list.
+        run_row, run_lo, run_hi, run_first, run_len = [], [], [], [], []
+        for k, row_id in enumerate(row_ids):
+            row_from, row_to = row_starts[k], row_ends[k]
+            in_row = np.flatnonzero(is_core[row_from:row_to])
+            if len(in_row) == 0:
+                continue
+            cols = i_lons[row_from:row_to][in_row]
+
+            # Consecutive columns cannot have anything between them, so column
+            # continuity alone delimits the runs
+            breaks = np.flatnonzero(
+                np.concatenate(([True], cols[1:] != cols[:-1] + 1))
+            )
+            for start, end in zip(breaks, np.concatenate(
+                    (breaks[1:], [len(cols)]))):
+                run_row.append(int(row_id))
+                run_lo.append(int(cols[start]))
+                run_hi.append(int(cols[end - 1]))
+                run_first.append(int(row_from + in_row[start]))
+                run_len.append(int(end - start))
+
+        n_runs = len(run_row)
+        if n_runs == 0:
+            return labels  # nothing dense enough to seed a cluster
+
+        # --- Connect the runs -------------------------------------------
+        parent = list(range(n_runs))
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(x, y):
+            root_x, root_y = find(x), find(y)
+            if root_x != root_y:
+                parent[max(root_x, root_y)] = min(root_x, root_y)
+
+        runs_by_row = {}
+        for i, row_id in enumerate(run_row):
+            runs_by_row.setdefault(row_id, []).append(i)
+
+        # Only look forwards: the relation is symmetric
+        for row_id, sources in runs_by_row.items():
+            for dlat in range(0, dlat_max + 1):
+                targets = runs_by_row.get(row_id + dlat)
+                if not targets:
+                    continue
+                width = self._column_width(row_id, row_id + dlat, radius_km)
+                if width < 0:
+                    continue
+                for i in sources:
+                    a_lo, a_hi = run_lo[i], run_hi[i]
+                    for j in targets:
+                        if dlat == 0 and j <= i:
+                            continue
+                        if find(i) == find(j):
+                            continue
+                        b_lo, b_hi = run_lo[j], run_hi[j]
+                        if a_lo <= b_hi and b_lo <= a_hi:
+                            gap = 0  # the two column ranges overlap
+                        else:
+                            gap = min((b_lo - a_hi) % lon_len,
+                                      (a_lo - b_hi) % lon_len)
+                        if gap <= width:
+                            union(i, j)
+
+        # --- Number the clusters ----------------------------------------
+        roots = np.array([find(i) for i in range(n_runs)], dtype=np.int64)
+        firsts = np.array(run_first, dtype=np.int64)
+
+        lowest_point = np.full(n_runs, np.iinfo(np.int64).max, dtype=np.int64)
+        np.minimum.at(lowest_point, roots, firsts)
+
+        live = np.unique(roots)
+        cluster_of_root = np.full(n_runs, -1, dtype=np.int64)
+        cluster_of_root[live[np.argsort(lowest_point[live], kind="stable")]] = (
+            np.arange(len(live), dtype=np.int64)
+        )
+        run_cluster = cluster_of_root[roots]
+
+        for i in range(n_runs):
+            labels[run_first[i]:run_first[i] + run_len[i]] = run_cluster[i]
+
+        # --- Attach the border points -----------------------------------
+        # A point that is not itself core still joins the cluster of any core
+        # point within the radius. Working outwards from each run covers all
+        # of them at once: the columns it can reach are one interval.
+        noncore_by_row = {}
+        for k, row_id in enumerate(row_ids):
+            row_from, row_to = row_starts[k], row_ends[k]
+            in_row = np.flatnonzero(~is_core[row_from:row_to])
+            if len(in_row):
+                noncore_by_row[int(row_id)] = (
+                    i_lons[row_from:row_to][in_row], row_from + in_row
+                )
+
+        claimed = np.full(n_points, np.iinfo(np.int64).max, dtype=np.int64)
+        for j in range(n_runs):
+            row_id = run_row[j]
+            for dlat in range(-dlat_max, dlat_max + 1):
+                entry = noncore_by_row.get(row_id + dlat)
+                if entry is None:
+                    continue
+                width = self._column_width(row_id, row_id + dlat, radius_km)
+                if width < 0:
+                    continue
+                cols, point_idx = entry
+                extended = np.concatenate(
+                    (cols - lon_len, cols, cols + lon_len)
+                )
+                lo = np.searchsorted(extended, run_lo[j] - width, side="left")
+                hi = np.searchsorted(extended, run_hi[j] + width, side="right")
+                if hi > lo:
+                    np.minimum.at(
+                        claimed, np.tile(point_idx, 3)[lo:hi], run_cluster[j]
+                    )
+
+        borders = claimed < np.iinfo(np.int64).max
+        labels[borders] = claimed[borders]
+
+        return labels
 
     def _finalize_cluster(self, ev):
         """
