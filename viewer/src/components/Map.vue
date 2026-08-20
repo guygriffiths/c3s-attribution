@@ -26,7 +26,7 @@ import { Map as LeafletMap, LeafletMouseEvent } from 'leaflet'
 import 'leaflet-draw'
 import 'leaflet-draw/dist/leaflet.draw.css'
 import 'leaflet/dist/leaflet.css'
-import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
 
 import scssVars from '@/assets/styles/scssVars.module.scss'
 import {
@@ -206,28 +206,53 @@ const drawControl = computed(
 )
 
 const currentEvents = ref<ExtremeEvent[]>([])
+
+// Redrawing the heatmap means walking every polygon of every visible event, so
+// it is far too expensive to run once per filter change while the time window
+// is being dragged. Collapse a burst of requests into one repaint on the next
+// frame. The map is then always a frame or two behind the handles rather than
+// holding them up, which is the trade we want.
+let repaintFrame = 0
+let repaintHeatmap = false
+let repaintOverlay = false
+
+const scheduleRepaint = (what: { heatmap?: boolean; overlay?: boolean }) => {
+	repaintHeatmap = repaintHeatmap || !!what.heatmap
+	repaintOverlay = repaintOverlay || !!what.overlay
+	if (repaintFrame) return
+	repaintFrame = requestAnimationFrame(() => {
+		repaintFrame = 0
+		const heatmap = repaintHeatmap
+		const overlay = repaintOverlay
+		repaintHeatmap = false
+		repaintOverlay = false
+		try {
+			if (heatmap) manualHeatmapUpdate()
+			// @ts-ignore
+			if (overlay) fastRenderer._update()
+		} catch (e) {
+			console.warn('Error updating heatmap renderer', e)
+		}
+	})
+}
+
+onUnmounted(() => {
+	if (repaintFrame) cancelAnimationFrame(repaintFrame)
+})
+
 onParameterFilterChanged(() => {
 	// globalHeatmapEvents and manualHeatmapUpdate are handled by onTimeFilterChanged,
 	// which always fires downstream after buildParameterFilterResults rebuilds the chain.
 	currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
 	if (store.viewMode === 'heatmap') {
-		try {
-			manualHeatmapUpdate()
-		} catch (e) {
-			console.warn('Error updating heatmap renderer', e)
-		}
+		scheduleRepaint({ heatmap: true })
 	}
 })
 onSpatialFilterChanged(() => {
 	// _spatiallyFilteredEventIds is now up to date — safe to refresh currentEvents
 	regionFilteredEvents = getSpatiallyFilteredEvents()
 	currentEvents.value = getCurrentEvents(timeStore.selectedTime, true)
-	try {
-		// @ts-ignore
-		fastRenderer._update()
-	} catch (e) {
-		console.warn('Error updating fast renderer', e)
-	}
+	scheduleRepaint({ overlay: true })
 })
 onTimeFilterChanged(() => {
 	// This will only happen in heatmap mode
@@ -235,13 +260,7 @@ onTimeFilterChanged(() => {
 
 	// When the time filter changes, we need to update the current events
 	globalHeatmapEvents.value = getTimeFilteredEvents()
-	try {
-		manualHeatmapUpdate()
-		// @ts-ignore
-		fastRenderer._update()
-	} catch (e) {
-		console.warn('Error updating heatmap renderer', e)
-	}
+	scheduleRepaint({ heatmap: true, overlay: true })
 })
 onSpaceTimeFilterChanged(() => {
 	// This will only happen in heatmap mode
@@ -249,12 +268,7 @@ onSpaceTimeFilterChanged(() => {
 
 	// When the time filter changes, we need to update the current events
 	regionFilteredEvents = getSpaceTimeFilteredEvents()
-	try {
-		// @ts-ignore
-		fastRenderer._update()
-	} catch (e) {
-		console.warn('Error updating heatmap renderer', e)
-	}
+	scheduleRepaint({ overlay: true })
 })
 
 const eventPointFilter = ref<[number, number] | null>(null)
