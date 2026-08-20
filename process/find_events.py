@@ -7,7 +7,6 @@ import os
 import logging, sys
 import pickle
 import tempfile
-import warnings
 from collections import deque, namedtuple
 from typing import List, Tuple, Union, Optional
 
@@ -15,11 +14,9 @@ from typing import List, Tuple, Union, Optional
 import numpy as np
 import pandas as pd
 import xarray as xr
-from scipy.sparse import coo_matrix
 from scipy.spatial import Delaunay
 from shapely.geometry import MultiLineString, MultiPoint, MultiPolygon, Polygon
 from shapely.ops import polygonize, unary_union
-from sklearn.cluster import DBSCAN
 
 # Local imports (if any)
 # from .module import something
@@ -1600,189 +1597,6 @@ class EventletFactory:
         """
         while self.output_queue:
             yield self.output_queue.popleft()
-
-    def get_distance_matrix(self, coords, lat_arr, lon_arr, radius_km=250):
-        """
-        Compute sparse distance matrix for spatial clustering.
-        
-        Builds a sparse matrix containing only pairwise distances below radius_km.
-        Points are grouped into latitude rows. For a fixed pair of rows the
-        distance depends only on the longitude offset and grows monotonically
-        with it, so the neighbours of every point in the row form one contiguous
-        longitude window. Each row pair therefore needs a single small distance
-        table plus a binary search per point, rather than a distance computation
-        for every candidate cell in the search box.
-        
-        The longitude window is derived per row pair by inverting the Haversine
-        formula, so the search region is a true circle rather than a box in grid
-        index space. Grid columns converge towards the poles, so a fixed column
-        offset would reach steadily less far east-west the further north you go.
-        
-        Args:
-            coords: Array of grid indices, shape (N, 2) with columns [i_lat, i_lon]
-            lat_arr: Latitude values for each grid row
-            lon_arr: Longitude values for each grid column
-            radius_km: Maximum distance threshold in kilometers
-            
-        Returns:
-            Tuple of (D, metadata) where:
-            - D: scipy COO sparse matrix of distances, shape (M, M)
-            - metadata: List of (lat, lon) tuples for each unique point
-            
-        Note:
-            Handles longitude wraparound correctly by using modulo arithmetic.
-            Assumes coords is grouped by latitude row in ascending row order and
-            free of duplicates, which is what np.argwhere produces. Matrix index
-            i corresponds to coords[i], so the numbering is independent of the
-            neighbour search geometry.
-        """
-        lon_len = len(lon_arr)
-
-        coords = np.asarray(coords, dtype=np.int64).reshape(-1, 2)
-        n_points = len(coords)
-        if n_points == 0:
-            return coo_matrix(([], ([], [])), shape=(0, 0)), []
-
-        i_lats = coords[:, 0]
-        i_lons = coords[:, 1]
-
-        lat_vals = np.asarray(lat_arr, dtype=np.float64)
-        lon_vals = np.asarray(lon_arr, dtype=np.float64)
-
-        res = 0.25  # Grid resolution in degrees
-
-        # Latitude reach: rows are evenly spaced, so this is exact
-        dlat_max = int(np.ceil(np.degrees(radius_km / R) / res))
-
-        # Largest longitude window worth considering, half the globe. Beyond
-        # that the window would wrap onto itself and the distance would stop
-        # increasing with the offset.
-        max_width = (lon_len - 1) // 2
-
-        # Split the points into contiguous latitude rows
-        row_starts = np.flatnonzero(
-            np.concatenate(([True], i_lats[1:] != i_lats[:-1]))
-        )
-        row_ends = np.concatenate((row_starts[1:], [n_points]))
-        row_ids = i_lats[row_starts]
-        row_lookup = {int(r): k for k, r in enumerate(row_ids)}
-
-        src_parts = []  # Source point indices
-        dst_parts = []  # Target point indices
-        dist_parts = []  # Distances
-
-        for k_src, row_id in enumerate(row_ids):
-            src_from, src_to = row_starts[k_src], row_ends[k_src]
-            src_lon = i_lons[src_from:src_to]
-            n_src = src_to - src_from
-
-            blocks = []
-            for dlat in range(-dlat_max, dlat_max + 1):
-                k_dst = row_lookup.get(int(row_id) + dlat)
-                if k_dst is None:
-                    continue
-
-                dst_from, dst_to = row_starts[k_dst], row_ends[k_dst]
-                dst_lon = i_lons[dst_from:dst_to]
-
-                lat1 = lat_vals[row_id]
-                lat2 = lat_vals[row_id + dlat]
-
-                # Invert the Haversine formula for the longitude offset that
-                # lands exactly on the radius, given this pair of latitudes.
-                target = (math.sin(0.5 * radius_km / R) ** 2 -
-                          math.sin(0.5 * math.radians(lat2 - lat1)) ** 2)
-                if target < 0:
-                    continue  # Rows are already further apart than the radius
-                denom = math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
-                if denom <= 0 or target >= denom:
-                    width = max_width  # Whole latitude circle is in range
-                else:
-                    width = int(
-                        math.degrees(2 * math.asin(math.sqrt(target / denom))) / res
-                    ) + 1  # One cell of slack, trimmed exactly below
-                    width = min(width, max_width)
-
-                # Distances for this row pair, indexed by |longitude offset|.
-                # Trim the window to the exact set that is within the radius.
-                dist_table = haversine_row_offsets(
-                    lat1, lat2, np.arange(width + 1, dtype=np.float64) * res
-                )
-                width = int(np.searchsorted(dist_table, radius_km, side="right")) - 1
-                if width < 0:
-                    continue
-
-                # Duplicate the target row either side to handle wraparound,
-                # so the window is a plain interval on a sorted array.
-                dst_lon_ext = np.concatenate(
-                    (dst_lon - lon_len, dst_lon, dst_lon + lon_len)
-                )
-                dst_pos_ext = np.tile(np.arange(dst_from, dst_to), 3)
-
-                lo = np.searchsorted(dst_lon_ext, src_lon - width, side="left")
-                hi = np.searchsorted(dst_lon_ext, src_lon + width, side="right")
-                counts = hi - lo
-                total = int(counts.sum())
-                if total == 0:
-                    continue
-
-                # Expand the per-point windows into a flat list of pairs
-                src_rep = np.repeat(np.arange(n_src), counts)
-                within = np.arange(total) - np.repeat(
-                    np.cumsum(counts) - counts, counts
-                )
-                flat = np.repeat(lo, counts) + within
-
-                src_idx = src_rep + src_from
-                dst_idx = dst_pos_ext[flat]
-                offsets = np.abs(dst_lon_ext[flat] - src_lon[src_rep])
-
-                if dlat == 0:
-                    # Skip self
-                    keep = src_idx != dst_idx
-                    src_idx = src_idx[keep]
-                    dst_idx = dst_idx[keep]
-                    offsets = offsets[keep]
-                    if len(src_idx) == 0:
-                        continue
-
-                blocks.append((src_idx, dst_idx, dist_table[offsets]))
-
-            if not blocks:
-                continue
-
-            src_idx = np.concatenate([b[0] for b in blocks])
-            dst_idx = np.concatenate([b[1] for b in blocks])
-            dists = np.concatenate([b[2] for b in blocks])
-
-            src_parts.append(src_idx)
-            dst_parts.append(dst_idx)
-            dist_parts.append(dists)
-
-        if src_parts:
-            src_idx = np.concatenate(src_parts)
-            dst_idx = np.concatenate(dst_parts)
-            dists = np.concatenate(dist_parts)
-        else:
-            src_idx = np.empty(0, dtype=np.int64)
-            dst_idx = np.empty(0, dtype=np.int64)
-            dists = np.empty(0, dtype=np.float64)
-
-        # Points keep the order they arrive in, which for np.argwhere is
-        # row-major by latitude then longitude. Matrix index i is coords[i], so
-        # the numbering does not depend on how the neighbour search is done.
-        metadata = [
-            (float(lat_vals[i_lat]), float(lon_vals[i_lon]))
-            for i_lat, i_lon in zip(i_lats, i_lons)
-        ]
-
-        # Every pair is generated from both ends, so this is already symmetric
-        D = coo_matrix(
-            (dists, (src_idx, dst_idx)),
-            shape=(n_points, n_points),
-        )
-        
-        return D, metadata
 
     def _column_width(self, i_lat1, i_lat2, radius_km):
         """
