@@ -50,7 +50,11 @@ TEMP_DATASET = "derived-era5-single-levels-daily-statistics"
 LAND_DATASET = "reanalysis-era5-land"
 PRECIP_DATASET = "derived-era5-single-levels-daily-statistics"
 STATISTICS = ["min", "max", "mean"]
-START_YEAR = 2024
+# Earliest year to keep on disk. The catalogue runs from here, and it is also
+# the start of the record the climatology is drawn from, so lowering it means
+# the percentiles can be rebuilt from the downloaded data rather than having
+# to be supplied separately.
+START_YEAR = 1979
 ALL_MONTHS = [f"{m:02d}" for m in range(1, 13)]
 ALL_DAYS = [f"{d:02d}" for d in range(1, 32)]
 
