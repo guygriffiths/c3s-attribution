@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import HeatmapWorker from '@/lib/worker/heatmapRenderWorker?worker'
-import { renderToContext } from '@/lib/worker/heatmapRenderWorker'
+import {
+	heatmapAlphasByType,
+	renderToContext,
+} from '@/lib/worker/heatmapRenderWorker'
 import { ECMWF_BONN } from '@/lib/utils'
 import { useStore } from '@/store/store'
 import {
@@ -559,6 +562,8 @@ const addEventPanes = () => {
 		ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 		ctx.globalCompositeOperation = 'multiply'
 
+		const alphas = heatmapAlphasByType(regionFilteredEvents)
+
 		for (const event of regionFilteredEvents) {
 			ctx.beginPath()
 			for (const ring of event.total_region || []) {
@@ -589,11 +594,7 @@ const addEventPanes = () => {
 				})
 			}
 			ctx.closePath()
-			const alpha = 0.1
-			// Math.min(
-			// 	0.25,
-			// 	Math.max(0.0, 250 / globalHeatmapEvents.value.length),
-			// )
+			const alpha = alphas[event.event_type]
 			ctx.fillStyle = (
 				event.event_type === 'hot' ? scssVars.c3sred : scssVars.c3sblue
 			)

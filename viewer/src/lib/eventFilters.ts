@@ -1,14 +1,15 @@
 import {
-	getCurrentEvents,
-	getParameterFilteredEvents,
-	getSpaceTimeFilteredEvents,
-	getSpatiallyFilteredEvents,
-	getTimeFilteredEvents,
-	onParameterFilterChanged,
-	onSpaceTimeFilterChanged,
-	onSpatialFilterChanged,
-	setEventTypeFilter,
-	setTimeRangeFilter,
+    getCurrentEvents,
+    getParameterFilteredEvents,
+    getSpaceTimeFilteredEvents,
+    getSpatiallyFilteredEvents,
+    getTimeFilteredEvents,
+    onParameterFilterChanged,
+    onSpaceTimeFilterChanged,
+    onSpatialFilterChanged,
+    onTimeFilterChanged,
+    setEventTypeFilter,
+    setTimeRangeFilter,
 } from '@/lib/eventsDB'
 import { eventTypesForMode } from '@/lib/utils'
 import { useStore as useEventStore } from '@/store/eventStore'
@@ -76,6 +77,15 @@ export const useEventFilters = () => {
 	// Background events for multi-event panel when filtering spatially
 	const globalFilteredEvents = ref<ExtremeEvent[]>([])
 
+	// Exactly what the heatmap draws, which is not any of the sets above. The
+	// colour scale is built from these, so it has to be the same list the map
+	// renderer is given or the scale describes a map nobody is looking at.
+	const heatmapEvents = ref<ExtremeEvent[]>([])
+
+	onTimeFilterChanged(() => {
+		heatmapEvents.value = getTimeFilteredEvents()
+	})
+
 	onParameterFilterChanged(() => {
 		globalFilteredEvents.value = getParameterFilteredEvents()
 		if (store.exploreGlobal) {
@@ -105,5 +115,5 @@ export const useEventFilters = () => {
 		},
 		{ immediate: true },
 	)
-	return { timeReelEvents, summaryEvents, globalFilteredEvents }
+	return { timeReelEvents, summaryEvents, globalFilteredEvents, heatmapEvents }
 }

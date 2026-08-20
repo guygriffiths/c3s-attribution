@@ -36,6 +36,10 @@ import {
 import { useEventFilters } from '@/lib/eventFilters'
 import { getCurrentEvents } from '@/lib/eventsDB'
 import { interpolateColorCold, interpolateColorHot, applyTheme } from '@/lib/utils'
+import {
+	heatmapAlphasByType,
+	heatmapScaleMax,
+} from '@/lib/worker/heatmapRenderWorker'
 import { c3sred, c3sblue, c3steal } from '@/assets/styles/scssVars.module.scss'
 
 import { usePersistentStore } from '@/store/persistentStore'
@@ -271,8 +275,12 @@ const exitFocus = () => {
 	store.draggingFilter = false
 }
 
-const { timeReelEvents, summaryEvents, globalFilteredEvents } =
+const { timeReelEvents, summaryEvents, globalFilteredEvents, heatmapEvents } =
 	useEventFilters()
+
+// The heatmap picks its opacity from how many events it is drawing, so the
+// scale has to be built from the same counts through the same helpers.
+const heatmapAlphas = computed(() => heatmapAlphasByType(heatmapEvents.value))
 
 // Time reel mode computation
 const mode = computed((): TimeReelMode => {
@@ -402,12 +410,15 @@ const parseHslColor = (hslColor: string): [number, number, number] | null => {
 	return hslToRgb01(h, s, l)
 }
 
-const multiplyStackedColor = (baseColor: string, value: number): string => {
+const multiplyStackedColor = (
+	baseColor: string,
+	value: number,
+	alpha: number,
+): string => {
 	const rgb = parseHslColor(baseColor)
 	if (!rgb) return baseColor
 
 	const layers = Math.max(0, Math.round(value))
-	const alpha = 0.1
 
 	const applyMultiplyLayer = (sourceChannel: number): number => {
 		const step = 1 - alpha * (1 - sourceChannel)
@@ -422,16 +433,16 @@ const multiplyStackedColor = (baseColor: string, value: number): string => {
 }
 
 const getStackedC3sRed = (value: number): string => {
-	return multiplyStackedColor(c3sred, value)
+	return multiplyStackedColor(c3sred, value, heatmapAlphas.value.hot)
 }
 
 const getStackedC3sBlue = (value: number): string => {
-	return multiplyStackedColor(c3sblue, value)
+	return multiplyStackedColor(c3sblue, value, heatmapAlphas.value.cold)
 }
 
 const getStackedC3steal = (value: number): string => {
 	// C3S green is not in HSL format, so we hardcode an approximation here
-	return multiplyStackedColor(c3steal, value)
+	return multiplyStackedColor(c3steal, value, heatmapAlphas.value.wet)
 }
 </script>
 
@@ -480,19 +491,19 @@ const getStackedC3steal = (value: number): string => {
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3sRed"
-				:domain="[0, 30]"
+				:domain="[0, heatmapScaleMax(heatmapAlphas.hot)]"
 				label="events"
 				v-if="hotHeatmapOn"
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3sBlue"
-				:domain="[0, 30]"
+				:domain="[0, heatmapScaleMax(heatmapAlphas.cold)]"
 				label="events"
 				v-if="coldHeatmapOn"
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3steal"
-				:domain="[0, 30]"
+				:domain="[0, heatmapScaleMax(heatmapAlphas.wet)]"
 				label="events"
 				v-if="wetHeatmapOn"
 			/>
