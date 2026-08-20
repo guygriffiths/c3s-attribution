@@ -1220,6 +1220,36 @@ class EventletFactory:
     def has_more(self):
         return self._t_index < len(self.times)
 
+    def reset_catalogues(self):
+        """
+        Discard the year catalogues belonging to this event type.
+
+        Finished events are appended to their year's catalogue as they expire,
+        which is what makes an interrupted run cheap to continue: the resume
+        state says which slice to carry on from and everything written before
+        it still stands. A run that starts with no resume state is a different
+        matter, because it replays the record from the beginning and would
+        append every event a second time.
+
+        Checking each event against what is already on disk would mean holding
+        every id in memory and paying for the check on every write, to guard
+        against something that only happens when the resume state is missing.
+        Clearing up front costs one pass over a handful of files and nothing
+        at all thereafter.
+
+        Only this event type's files are touched, so the three processes
+        running in parallel cannot interfere with each other. The active set
+        is left alone, since it is rewritten in full at the end of the run.
+        """
+        prefix = f"events-{self.eventtype}-"
+        for name in os.listdir(self.output_path):
+            if not name.startswith(prefix) or not name.endswith(".jsonl"):
+                continue
+            if not name[len(prefix):-len(".jsonl")].isdigit():
+                continue  # the active set, not a year
+            logger.info(f"Discarding {name}: reprocessing from the start")
+            os.remove(os.path.join(self.output_path, name))
+
     def _storage_time_chunk(self):
         """
         Number of time steps in one on-disk chunk of the source data.
@@ -2274,6 +2304,11 @@ def process_parameter_set(
             land_only=land_sea_mask is not None
         )
         logger.info(f"{out_path}/last_slice-{param_str} ,_ last slice")
+
+        # Without resume state the record is replayed from the beginning, so
+        # whatever a previous pass appended is about to be written again.
+        if factory.skipToTime is None:
+            factory.reset_catalogues()
 
         # Process all time slices
         logger.info("Processing time slices...")
