@@ -425,7 +425,7 @@ export const useStore = defineStore('events', {
 			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
 			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
 			timeStore.startTimeFilter = new Date(
-				Date.UTC(Math.max(to - 20, from), 0, 1),
+				Date.UTC(Math.max(to - 10, from), 0, 1),
 			)
 			timeStore.endTimeFilter = new Date(Date.UTC(to, 11, 31))
 			timeStore.selectedTime = new Date()

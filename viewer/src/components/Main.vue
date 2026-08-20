@@ -37,7 +37,7 @@ import { useEventFilters } from '@/lib/eventFilters'
 import { getCurrentEvents } from '@/lib/eventsDB'
 import { interpolateColorCold, interpolateColorHot, applyTheme } from '@/lib/utils'
 import {
-	heatmapAlphasByType,
+	HEATMAP_ALPHAS,
 	heatmapScaleMax,
 } from '@/lib/worker/heatmapRenderWorker'
 import { c3sred, c3sblue, c3steal } from '@/assets/styles/scssVars.module.scss'
@@ -275,12 +275,8 @@ const exitFocus = () => {
 	store.draggingFilter = false
 }
 
-const { timeReelEvents, summaryEvents, globalFilteredEvents, heatmapEvents } =
+const { timeReelEvents, summaryEvents, globalFilteredEvents } =
 	useEventFilters()
-
-// The heatmap picks its opacity from how many events it is drawing, so the
-// scale has to be built from the same counts through the same helpers.
-const heatmapAlphas = computed(() => heatmapAlphasByType(heatmapEvents.value))
 
 // Time reel mode computation
 const mode = computed((): TimeReelMode => {
@@ -433,16 +429,16 @@ const multiplyStackedColor = (
 }
 
 const getStackedC3sRed = (value: number): string => {
-	return multiplyStackedColor(c3sred, value, heatmapAlphas.value.hot)
+	return multiplyStackedColor(c3sred, value, HEATMAP_ALPHAS.hot)
 }
 
 const getStackedC3sBlue = (value: number): string => {
-	return multiplyStackedColor(c3sblue, value, heatmapAlphas.value.cold)
+	return multiplyStackedColor(c3sblue, value, HEATMAP_ALPHAS.cold)
 }
 
 const getStackedC3steal = (value: number): string => {
 	// C3S green is not in HSL format, so we hardcode an approximation here
-	return multiplyStackedColor(c3steal, value, heatmapAlphas.value.wet)
+	return multiplyStackedColor(c3steal, value, HEATMAP_ALPHAS.wet)
 }
 </script>
 
@@ -491,19 +487,19 @@ const getStackedC3steal = (value: number): string => {
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3sRed"
-				:domain="[0, heatmapScaleMax(heatmapAlphas.hot)]"
+				:domain="[0, heatmapScaleMax(HEATMAP_ALPHAS.hot)]"
 				label="events"
 				v-if="hotHeatmapOn"
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3sBlue"
-				:domain="[0, heatmapScaleMax(heatmapAlphas.cold)]"
+				:domain="[0, heatmapScaleMax(HEATMAP_ALPHAS.cold)]"
 				label="events"
 				v-if="coldHeatmapOn"
 			/>
 			<ColorScale
 				:colorfunc="getStackedC3steal"
-				:domain="[0, heatmapScaleMax(heatmapAlphas.wet)]"
+				:domain="[0, heatmapScaleMax(HEATMAP_ALPHAS.wet)]"
 				label="events"
 				v-if="wetHeatmapOn"
 			/>
