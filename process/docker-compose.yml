@@ -20,6 +20,7 @@ services:
     working_dir: /app
     environment:
       - EVENT_INPUT_DIR=/data
+      - EVENT_OUTPUT_DIR=/output
     command: ["/bin/bash", "-c", "\
-        micromamba run -n c3s-pyenv python3 download_era5.py \
+        micromamba run -n c3s-pyenv python3 run_pipeline.py \
     "]
