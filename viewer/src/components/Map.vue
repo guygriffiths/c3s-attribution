@@ -86,17 +86,17 @@ const zoom = ref(2)
 const bgLayers = {
 	light: {
 		name: 'C3S Light',
-		url: 'https://extreme-events.climate.copernicus.eu/maps/styles/c3s-light/{z}/{x}/{y}{r}.png',
+		url: 'https://extreme-events.service.compute.cci2.ecmwf.int/maps/styles/c3s-light/{z}/{x}/{y}{r}.png',
 		labelsUrl:
-			'https://extreme-events.climate.copernicus.eu/maps/styles/light-labels/{z}/{x}/{y}{r}.png',
+			'https://extreme-events.service.compute.cci2.ecmwf.int/maps/styles/light-labels/{z}/{x}/{y}{r}.png',
 		attribution:
 			'&copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
 	},
 	dark: {
 		name: 'C3S Dark',
-		url: 'https://extreme-events.climate.copernicus.eu/maps/styles/c3s-time-machine/{z}/{x}/{y}{r}.png',
+		url: 'https://extreme-events.service.compute.cci2.ecmwf.int/maps/styles/c3s-time-machine/{z}/{x}/{y}{r}.png',
 		labelsUrl:
-			'https://extreme-events.climate.copernicus.eu/maps/styles/dark-labels/{z}/{x}/{y}{r}.png',
+			'https://extreme-events.service.compute.cci2.ecmwf.int/maps/styles/dark-labels/{z}/{x}/{y}{r}.png',
 		attribution:
 			'&copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
 	},

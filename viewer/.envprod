@@ -7,4 +7,4 @@ X_PUBLIC_PATH='/'
 
 # Where the event data is served from. Must end in a slash. Set to '/data/' to
 # serve out of public/data instead.
-X_DATA_ROOT='http://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/'
+X_DATA_ROOT='https://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/'

@@ -31,7 +31,7 @@ The build inlines a `base` path taken from `X_PUBLIC_PATH` in `.env`. Set this t
 ## Data
 
 Event data is served as JSONL files from the host given by `X_DATA_ROOT`, by default
-`http://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/`. Since that is a
+`https://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/`. Since that is a
 different origin to the app, the host must send permissive CORS headers. Point
 `X_DATA_ROOT` at `/data/` to serve out of `public/data/` instead.
 
@@ -154,7 +154,7 @@ All env vars must be prefixed `X_` to be exposed to the client bundle (see `vite
 | Variable | Default | Description |
 |---|---|---|
 | `X_PUBLIC_PATH` | `/` | Base path for the deployed app. Set to `/subpath/` for sub-directory deployments. |
-| `X_DATA_ROOT` | `http://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/` | Where event data is fetched from. Must end in a slash. Set to `/data/` to serve out of `public/data/`. |
+| `X_DATA_ROOT` | `https://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/` | Where event data is fetched from. Must end in a slash. Set to `/data/` to serve out of `public/data/`. |
 
 ---
 
