@@ -5,18 +5,11 @@ dependencies:
   - python
   - xarray
   - netcdf4
-  - zarr
   - conda-pack
   - numpy
+  - pandas
   - dask
-  - geopandas
-  - fiona
   - shapely
-  - rasterio
-  - geopy
-  - beautifulsoup4
   - scipy
   - cdsapi
   - pip
-  - pip:
-      - hdbscan
