@@ -15,7 +15,6 @@ dependencies:
   - rasterio
   - geopy
   - beautifulsoup4
-  - scikit-learn
   - scipy
   - cdsapi
   - pip
