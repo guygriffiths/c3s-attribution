@@ -64,39 +64,6 @@ def pack_cell_keys(coords) -> np.ndarray:
 # Distance and Geometry Calculations
 # ============================================================================
 
-def haversine_fast(ll1: Tuple[float, float], ll2: Tuple[float, float]) -> float:
-    """
-    Calculate the great-circle distance between two points on Earth.
-    
-    Uses the Haversine formula to compute distance in kilometers between
-    two lat/lon coordinate pairs.
-    
-    Args:
-        ll1: First point as (latitude, longitude) in degrees
-        ll2: Second point as (latitude, longitude) in degrees
-        
-    Returns:
-        Distance in kilometers
-        
-    Example:
-        >>> haversine_fast((51.5074, -0.1278), (48.8566, 2.3522))  # London to Paris
-        334.57...
-    """
-    # Convert degrees to radians
-    lat1, lon1 = map(math.radians, ll1)
-    lat2, lon2 = map(math.radians, ll2)
-    
-    # Differences
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    
-    # Haversine formula
-    a = (math.sin(dlat * 0.5)**2 + 
-         math.cos(lat1) * math.cos(lat2) * math.sin(dlon * 0.5)**2)
-    
-    return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
-
-
 def haversine_row_offsets(lat1_deg: float, lat2_deg: float, dlon_deg: np.ndarray) -> np.ndarray:
     """
     Great-circle distances between two fixed latitudes over an array of
