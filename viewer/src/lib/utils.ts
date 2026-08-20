@@ -128,6 +128,22 @@ export const setTheme = (themeName: SelectedEventType) => {
 	applyTheme(themeName)
 }
 
+// Which event types a selected mode puts on screen. Spelt out rather than
+// derived from the name of the mode so that adding a mode is a type error
+// here rather than a mode that silently shows nothing.
+const EVENT_TYPES_BY_MODE: Record<SelectedEventType, EventType[]> = {
+	hot: ['hot'],
+	cold: ['cold'],
+	wet: ['wet'],
+	hotcold: ['hot', 'cold'],
+	hotwet: ['hot', 'wet'],
+	coldwet: ['cold', 'wet'],
+	all: ['hot', 'cold', 'wet'],
+}
+
+export const eventTypesForMode = (mode: SelectedEventType): EventType[] =>
+	EVENT_TYPES_BY_MODE[mode] ?? EVENT_TYPES_BY_MODE.all
+
 export const niceNumber = (n: number) => {
 	const num = Number(n)
 	const abs = Math.abs(num)

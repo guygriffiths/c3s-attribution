@@ -91,6 +91,10 @@ let postedCount = 0
 let latestYear = 0
 const loadedYears = new Set<number>()
 
+type FetchTask = { year: number; eventType: EventType; active?: boolean }
+let _backgroundTasks: FetchTask[] = []
+let _foregroundRemaining = 0
+
 const fetchAndIndexWorker = new FetchAndIndexWorker()
 fetchAndIndexWorker.onmessage = (
 	e: MessageEvent<{
@@ -104,6 +108,17 @@ fetchAndIndexWorker.onmessage = (
 	}>,
 ) => {
 	retrievedCount++
+
+	// Nothing is posted for the types the user cannot see until the ones they
+	// can are all in, so anything arriving while the count is still running is
+	// part of the visible wave. See fetchAndIndexEvents.
+	if (_foregroundRemaining > 0 && --_foregroundRemaining === 0) {
+		for (const task of _backgroundTasks) {
+			fetchAndIndexWorker.postMessage(task)
+		}
+		_backgroundTasks = []
+	}
+
 	const {
 		year,
 		events,
@@ -212,34 +227,68 @@ fetchAndIndexWorker.onmessage = (
 
 /**
  * Initialise global store
+ *
+ * The types the user is actually looking at are fetched first, most recent
+ * year first, and the rest only once those are in. All of it used to be posted
+ * at once, which left the year the map opens on queued behind decades of
+ * events for types that are not on screen.
+ *
+ * @param eventTypes every type to load
+ * @param from earliest year
+ * @param to latest year
+ * @param visibleTypes the subset that is currently on screen; the rest load in
+ *   the background
  */
 export async function fetchAndIndexEvents(
 	eventTypes: EventType[],
 	from: number,
 	to: number,
+	visibleTypes: EventType[] = eventTypes,
 ) {
 	postedCount = 0
 	retrievedCount = 0
 	latestYear = to
 	loadedYears.clear()
+	_backgroundTasks = []
+	_foregroundRemaining = 0
 
 	const years = Array.from(
 		{ length: to - from + 1 },
 		(_, i) => i + from,
 	).reverse()
 
-	// Events still in progress, fetched first so the leading edge fills in early.
-	// These are a snapshot taken at page load; a site refresh picks up newer ones.
-	for (const eventType of eventTypes) {
-		postedCount++
-		fetchAndIndexWorker.postMessage({ year: to, eventType, active: true })
+	const tasksFor = (types: EventType[]): FetchTask[] => {
+		// Events still in progress, fetched first so the leading edge fills in
+		// early. These are a snapshot taken at page load; a site refresh picks up
+		// newer ones.
+		const tasks: FetchTask[] = types.map((eventType) => ({
+			year: to,
+			eventType,
+			active: true,
+		}))
+		for (const year of years) {
+			for (const eventType of types) {
+				tasks.push({ year, eventType })
+			}
+		}
+		return tasks
 	}
 
-	for (const year of years) {
-		for (const eventType of eventTypes) {
-			postedCount++
-			fetchAndIndexWorker.postMessage({ year, eventType })
-		}
+	const visible = eventTypes.filter((t) => visibleTypes.includes(t))
+	const hidden = eventTypes.filter((t) => !visibleTypes.includes(t))
+
+	// If nothing is marked visible there is no sensible order to prefer, so
+	// fall back to loading everything at once as before.
+	const foreground = tasksFor(visible.length ? visible : eventTypes)
+	_backgroundTasks = visible.length ? tasksFor(hidden) : []
+
+	// Counted across both waves, so that "everything has arrived" stays true
+	// only when it has
+	postedCount = foreground.length + _backgroundTasks.length
+	_foregroundRemaining = foreground.length
+
+	for (const task of foreground) {
+		fetchAndIndexWorker.postMessage(task)
 	}
 }
 

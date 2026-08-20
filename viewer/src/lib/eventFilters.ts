@@ -10,6 +10,7 @@ import {
 	setEventTypeFilter,
 	setTimeRangeFilter,
 } from '@/lib/eventsDB'
+import { eventTypesForMode } from '@/lib/utils'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { useStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
@@ -95,21 +96,12 @@ export const useEventFilters = () => {
 	watch(
 		() => [eventStore.eventTypeMode],
 		() => {
-			if (eventStore.eventTypeMode === 'cold') {
-				setEventTypeFilter(false, true, false)
-			} else if (eventStore.eventTypeMode === 'hot') {
-				setEventTypeFilter(true, false, false)
-			} else if (eventStore.eventTypeMode === 'wet') {
-				setEventTypeFilter(false, false, true)
-			} else if (eventStore.eventTypeMode === 'hotcold') {
-				setEventTypeFilter(true, true, false)
-			} else if (eventStore.eventTypeMode === 'hotwet') {
-				setEventTypeFilter(true, false, true)
-			} else if (eventStore.eventTypeMode === 'coldwet') {
-				setEventTypeFilter(false, true, true)
-			} else {
-				setEventTypeFilter(true, true, true)
-			}
+			const visible = eventTypesForMode(eventStore.eventTypeMode)
+			setEventTypeFilter(
+				visible.includes('hot'),
+				visible.includes('cold'),
+				visible.includes('wet'),
+			)
 		},
 		{ immediate: true },
 	)

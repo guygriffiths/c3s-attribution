@@ -8,6 +8,7 @@ import {
 import {
 	applyTheme,
 	DATA_ROOT,
+	eventTypesForMode,
 	interpolateColorCold,
 	interpolateColorHot,
 	interpolateColorWet,
@@ -568,8 +569,15 @@ export const useStore = defineStore('events', {
 				]
 			})
 
-			// Load hot and cold events
-			await fetchAndIndexEvents(['hot', 'cold', 'wet'], from, to)
+			// Load the types the user can see first, then the rest in the
+			// background. eventTypeMode is read here rather than assumed to be the
+			// default, so a mode carried over from a previous visit is honoured.
+			await fetchAndIndexEvents(
+				['hot', 'cold', 'wet'],
+				from,
+				to,
+				eventTypesForMode(this.eventTypeMode),
+			)
 		},
 	},
 })
