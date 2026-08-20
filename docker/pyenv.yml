@@ -16,7 +16,7 @@ dependencies:
   - geopy
   - beautifulsoup4
   - scikit-learn
-  - alphashape
+  - scipy
   - cdsapi
   - pip
   - pip:
