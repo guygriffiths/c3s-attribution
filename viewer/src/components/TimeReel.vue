@@ -351,6 +351,7 @@ const localNeedleOffset = ref(null as number | null)
 const rangeDrag = ref<'start' | 'end' | 'move' | null>(null)
 let rangeDragStartDate: Date | null = null
 let rangeDragEndDate: Date | null = null
+let lastRangeDaysMoved = 0
 const startDrag = (event: MouseEvent) => {
 	if (event === null || event.target === null) return
 	// console.log('startDrag', event, event.target)
@@ -367,6 +368,7 @@ const startDrag = (event: MouseEvent) => {
 		rangeDragStartDate = new Date(props.startFilter!)
 		rangeDragEndDate = new Date(props.endFilter!)
 	}
+	lastRangeDaysMoved = 0
 	isDragging.value = true
 	hasMoved.value = true
 	// setTimeout(() => {
@@ -401,6 +403,7 @@ const startDrag = (event: MouseEvent) => {
 const initialScrubberPos = ref<[number, number]>([0, 0])
 
 const endDrag = (event: MouseEvent) => {
+	cancelPendingDrag()
 	isDragging.value = false
 	hasMoved.value = false
 	dragMode.value = null
@@ -486,7 +489,32 @@ const endDrag = (event: MouseEvent) => {
 const localScrubberOffset = ref<[number, number] | null>(null) // x,y
 const scrubStartYear = ref(selectedYear.value)
 const scrubStartDay = ref(selectedDay.value)
+
+// Mice and trackpads report faster than the screen refreshes, and every report
+// used to rebuild the filters and repaint the map. Keep only the newest
+// position and apply it once per frame: the handles then track the pointer
+// however far behind the map falls.
+let pendingDrag: { clientX: number; clientY: number } | null = null
+let dragFrame = 0
+
 const handleDrag = (event: MouseEvent) => {
+	pendingDrag = { clientX: event.clientX, clientY: event.clientY }
+	if (dragFrame) return
+	dragFrame = requestAnimationFrame(() => {
+		dragFrame = 0
+		const position = pendingDrag
+		pendingDrag = null
+		if (position) applyDrag(position)
+	})
+}
+
+const cancelPendingDrag = () => {
+	if (dragFrame) cancelAnimationFrame(dragFrame)
+	dragFrame = 0
+	pendingDrag = null
+}
+
+const applyDrag = (event: { clientX: number; clientY: number }) => {
 	const dx = event.clientX - startX
 	const dy = event.clientY - startY
 
@@ -518,6 +546,11 @@ const handleDrag = (event: MouseEvent) => {
 					if (rangeDrag.value !== null) {
 						const pixelsPerDay = rect.width / (years.value.length * TOTAL_DAYS)
 						const daysMoved = Math.round(dx / pixelsPerDay)
+						// The filter has a resolution of a day, so anything finer than
+						// that would rebuild every downstream filter and repaint the map
+						// to arrive at the window we are already showing.
+						if (daysMoved === lastRangeDaysMoved) return
+						lastRangeDaysMoved = daysMoved
 						let newStart = new Date(rangeDragStartDate!)
 						let newEnd = new Date(rangeDragEndDate!)
 						if (rangeDrag.value === 'start' || rangeDrag.value === 'move') {

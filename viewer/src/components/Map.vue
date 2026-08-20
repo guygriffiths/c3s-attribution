@@ -765,7 +765,7 @@ const selectEvent = (event: ExtremeEvent) => {
 						? scssVars.c3sred
 						: event.event_type === 'cold'
 							? scssVars.c3sblue
-							: scssVars.c3sgreen
+							: scssVars.c3steal
 				"
 				:fill-color="eventStore.colorForEvent(event)"
 				@click="selectEvent(event)"
