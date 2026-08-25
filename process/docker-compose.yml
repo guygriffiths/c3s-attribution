@@ -14,9 +14,9 @@ services:
       - ../docker/.env
     volumes:
       - ./:/app:ro  # Mount process scripts into container
-      - /Users/guy/Data/c3s-attribution/:/data:rw
-      - /Users/guy/.cdsapirc:/root/.cdsapirc:ro
-      - /Users/guy/Data/c3s-attribution/testout:/output:rw
+      - /private/shared/era5:/data:rw
+      - /homes/web/.cdsapirc:/root/.cdsapirc:ro
+      - /private/wp1/catalogue:/output:rw
     working_dir: /app
     environment:
       - EVENT_INPUT_DIR=/data
