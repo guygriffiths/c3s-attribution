@@ -26,6 +26,7 @@ Usage:
 
 import logging
 import sys
+import re
 from pathlib import Path
 from typing import List, Optional, Set
 
@@ -93,15 +94,16 @@ def get_existing_percentiles(base_dir: Path, stat: str) -> Set[float]:
     existing = set()
     
     for p in base_dir.glob(pattern):
-        # Extract percentile from filename like "99.0pc"
+        # Extract percentile from filename like "99.0pc" anywhere in the string
         try:
-            perc_str = p.stem.split('_')[-2].replace('pc', '')
-            percentile = float(perc_str)
-            existing.add(percentile)
-        except (IndexError, ValueError) as e:
+            match = re.search(r'_([0-9.]+?)pc', p.stem)
+            if match:
+                percentile = float(match.group(1))
+                existing.add(percentile)
+            else:
+                logger.warning(f"No percentile pattern found in {p.name}")
+        except ValueError as e:
             logger.warning(f"Could not parse percentile from {p.name}: {e}")
-    
-    logger.debug(f"Found {len(existing)} existing percentiles for {stat}")
     return existing
 
 

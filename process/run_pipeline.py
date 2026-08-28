@@ -15,7 +15,10 @@ already works out for itself what is missing:
 
     1. download_era5 compares the years on disk against the years that should
        exist and fetches only the gap, always re-fetching the current year
-       because it grows day by day.
+       because it grows day by day. It is only asked at all if this event
+       type's newest file is more than a day old, since ERA5 does not gain
+       anything in less than that and re-fetching the current year is the
+       most expensive request the run makes.
     2. make_percentiles compares the climatology files on disk against the
        threshold this event type is configured with. In normal operation there
        is nothing to do, because the climatology is a fixed 1991-2020 baseline
@@ -51,7 +54,10 @@ import fcntl
 import logging
 import os
 import sys
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import timedelta
+from pathlib import Path
 
 from download_era5 import download_all_latest, download_land_sea_mask
 from make_percentiles import PRECIP_PERCENTILES, calculate_all_percentiles
@@ -80,6 +86,12 @@ PIPELINE_ORDER = ('cold', 'hot', 'wet')
 # pipelines. Each one would otherwise open its own poolful and together they
 # would sail past the per-user limit, which is typically twenty.
 CDS_REQUEST_BUDGET = 12
+
+# How stale what is on disk has to be before a pipeline goes back to the CDS
+# API. ERA5 gains a day at a time, so a run started within a day of the last
+# successful one would queue requests for slices that cannot have moved, and
+# the current year is always re-fetched, so it would be the largest of them.
+MAX_DATA_AGE = timedelta(hours=24)
 
 
 def take_run_lock(path):
@@ -123,6 +135,33 @@ def count_failures(results):
         else:
             failed += len(value.get('failed', []))
     return failed
+
+
+def data_age(param, input_dir):
+    """
+    How long ago the newest file this event type reads was written.
+
+    Only this event type's own directory is looked at, for the same reason
+    the download is split up: cold data arriving says nothing about whether
+    the precipitation a wet run needs is up to date.
+
+    Args:
+        param: The detection parameter set
+        input_dir: Where the ERA5 data lives
+
+    Returns:
+        Time since the most recently written file, or None if this event type
+        has no data at all, which is the case on a fresh deployment.
+    """
+    if param.event_mode == 'wet':
+        data_dir = Path(input_dir) / 'precip'
+    else:
+        data_dir = Path(input_dir) / 't2m' / param.stat
+
+    mtimes = [path.stat().st_mtime for path in data_dir.glob('*.nc')]
+    if not mtimes:
+        return None
+    return timedelta(seconds=max(0.0, time.time() - max(mtimes)))
 
 
 def download_for(param, input_dir, max_workers):
@@ -220,8 +259,17 @@ def run_event_type(param, input_dir, output_dir, max_workers, skip_download):
             f'%(asctime)s - {param.event_mode} - %(levelname)s - %(message)s'
         ))
 
+    age = data_age(param, input_dir)
     if skip_download:
         logger.info("EVENT_SKIP_DOWNLOAD set, using the data already on disk")
+    elif age is not None and age < MAX_DATA_AGE:
+        # Detection still runs: it resumes from its own state, so there may be
+        # slices left to process even when nothing new has been fetched.
+        logger.info(
+            f"Data last updated {age.total_seconds() / 3600:.1f}h ago, "
+            f"under {MAX_DATA_AGE.total_seconds() / 3600:.0f}h; "
+            f"nothing new to download"
+        )
     else:
         failed = download_for(param, input_dir, max_workers)
         if failed:
