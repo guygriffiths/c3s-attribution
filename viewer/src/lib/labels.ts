@@ -25,6 +25,7 @@ const labelsEn = {
 	prevDay: 'Previous day',
 	endOfYear: 'End of year',
 	startOfYear: 'Start of year',
+	beyondDataLimit: 'Beyond data limit',
 	nextTimestep: 'Step forward',
 	prevTimestep: 'Step backward',
 	endOfTimeline: 'End of events',

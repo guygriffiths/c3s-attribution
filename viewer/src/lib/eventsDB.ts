@@ -91,6 +91,49 @@ let postedCount = 0
 let latestYear = 0
 const loadedYears = new Set<number>()
 
+/** Batches are still arriving from the fetch worker. */
+export const isLoadingEvents = (): boolean => retrievedCount < postedCount
+
+// Minimum gap between publishes while batches are still arriving.
+const PUBLISH_INTERVAL_MS = 250
+let _publishTimer: ReturnType<typeof setTimeout> | null = null
+let _lastPublish = 0
+
+/**
+ * Tell everything downstream that the catalogue has grown, and rebuild the
+ * whole filter chain from the top.
+ *
+ * The chain starts with the parameter filters, which triggers the spatial
+ * rebuild, which in turn triggers the time rebuild. Each stage notifies its own
+ * listeners as it finishes, so every filtered array ends up populated.
+ */
+const publishEvents = () => {
+	if (_publishTimer !== null) {
+		clearTimeout(_publishTimer)
+		_publishTimer = null
+	}
+	_lastPublish = performance.now()
+	for (const cb of globalEventsChangedTriggers) {
+		cb()
+	}
+	buildParameterFilterResults()
+}
+
+/**
+ * Publishing costs several passes over the entire catalogue, plus everything
+ * the listeners do in response. Around 150 batches arrive over the course of a
+ * load, and publishing each one as it lands leaves no main thread for the user
+ * to scrub the time reel with. Coalesce them onto a timer instead.
+ */
+const schedulePublishEvents = () => {
+	if (_publishTimer !== null) return
+	const wait = Math.max(
+		0,
+		PUBLISH_INTERVAL_MS - (performance.now() - _lastPublish),
+	)
+	_publishTimer = setTimeout(publishEvents, wait)
+}
+
 type FetchTask = { year: number; eventType: EventType; active?: boolean }
 let _backgroundTasks: FetchTask[] = []
 let _foregroundRemaining = 0
@@ -173,9 +216,6 @@ fetchAndIndexWorker.onmessage = (
 	if (recentYearsLoaded || retrievedCount === postedCount) {
 		const mainStore = useMainStore()
 		// mainStore.setLoading()
-		for (const cb of globalEventsChangedTriggers) {
-			cb()
-		}
 		if (eventType === 'hot' && (active || year === latestYear)) {
 			const timeStore = useTimeStore()
 			if (events.length > 0) {
@@ -195,15 +235,13 @@ fetchAndIndexWorker.onmessage = (
 			timeStore.selectedTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 		}
 
-		// Trigger a build of the entire filter chain
-		//
-		// This starts with parameter filters, which triggers spatial filter rebuild,
-		// which in turn triggers time filter rebuild
-		//
-		// Each stage notifies its own listeners when done
-		//
-		// This will populate all the filtered event arrays
-		buildParameterFilterResults()
+		// The last batch publishes straight away so that nothing is left waiting on
+		// a timer once everything is in; the rest are coalesced.
+		if (retrievedCount === postedCount) {
+			publishEvents()
+		} else {
+			schedulePublishEvents()
+		}
 
 		nextTick(async () => {
 			await new Promise((resolve) => requestAnimationFrame(resolve))

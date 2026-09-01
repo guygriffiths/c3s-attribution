@@ -40,6 +40,7 @@ import {
 	IconPlayerPause,
 } from '@tabler/icons-vue'
 import { usePersistentStore } from '@/store/persistentStore'
+import { isLoadingEvents } from '@/lib/eventsDB'
 
 const $l = useLabels()
 const persistentStore = usePersistentStore()
@@ -72,6 +73,51 @@ const model = defineModel<Date>({
 })
 const selectedDay = computed(() => getDayOfYear(model.value))
 const selectedYear = computed(() => model.value.getUTCFullYear())
+
+///////////////
+// Dead zone //
+///////////////
+// Stretches of the reel that no observation can ever sit behind. Two things
+// create them:
+//   - every row is TOTAL_DAYS (366) wide, so the 366th column of a non-leap
+//     year is a phantom day that maps onto no date at all
+//   - the final year is only recorded up to props.end
+// The needle is allowed to rest in the second kind so that scrolling between
+// years keeps the user's day-of-year anchor instead of clamping it away. It is
+// never allowed into the first, which would otherwise roll over into January.
+const daysInYear = (year: number) => (year % 4 === 0 ? 366 : 365)
+
+// Last day-of-year in `year` that has data behind it. The day containing
+// props.end counts as recorded; the dead zone starts the day after.
+const lastRecordedDay = (year: number) =>
+	year === endYear.value
+		? Math.min(daysInYear(year), getDayOfYear(props.end))
+		: daysInYear(year)
+
+// The needle is parked past the end of the record.
+const inDeadZone = computed(
+	() =>
+		selectedYear.value === endYear.value &&
+		selectedDay.value > lastRecordedDay(endYear.value),
+)
+// The needle is on, or past, the last day we have data for, so there is nothing
+// left to step or play forward onto.
+const atDataLimit = computed(
+	() =>
+		selectedYear.value >= endYear.value &&
+		selectedDay.value >= lastRecordedDay(endYear.value),
+)
+// Rows that need a dead zone painted, and where it starts as a percentage of
+// the row's width. Both the modes that draw them lay a single year out across
+// TOTAL_DAYS columns, one row per year.
+const deadZones = computed(() =>
+	years.value
+		.filter((year) => lastRecordedDay(year) < TOTAL_DAYS)
+		.map((year) => ({
+			year,
+			left: (lastRecordedDay(year) / TOTAL_DAYS) * 100,
+		})),
+)
 
 const emits = defineEmits<{
 	(event: 'eventSelected', ev: ExtremeEvent | null): void
@@ -124,6 +170,8 @@ const nextDay = () => {
 		emits('update:endFilter', newEnd)
 		return
 	}
+	// Nothing to step onto past the end of the record.
+	if (atDataLimit.value) return
 	const newVal = addHours(model.value, 24)
 	if (newVal.getUTCFullYear() <= endYear.value) {
 		if (newVal.getUTCFullYear() !== model.value.getUTCFullYear()) {
@@ -199,11 +247,16 @@ const endOfYear = () => {
 		emits('update:endFilter', props.end)
 		return
 	}
-	setDate(Date.UTC(selectedYear.value, 11, 31))
+	// In the final year this lands on props.end rather than 31 Dec, which would
+	// park the needle in the dead zone.
+	setDate(Date.UTC(selectedYear.value, 0, lastRecordedDay(selectedYear.value)))
 }
 const nextYear = () => {
 	const newYear = selectedYear.value + 1
-	setDate(Date.UTC(newYear, 0, selectedDay.value))
+	// Keep the day-of-year anchor, but never on a phantom 366th day.
+	setDate(
+		Date.UTC(newYear, 0, Math.min(selectedDay.value, daysInYear(newYear))),
+	)
 	autoScrolling.value = true
 	scrollToYear(newYear - 1)
 	nextTick(() => {
@@ -212,7 +265,9 @@ const nextYear = () => {
 }
 const prevYear = () => {
 	const newYear = selectedYear.value - 1
-	setDate(Date.UTC(newYear, 0, selectedDay.value))
+	setDate(
+		Date.UTC(newYear, 0, Math.min(selectedDay.value, daysInYear(newYear))),
+	)
 	autoScrolling.value = true
 	scrollToYear(newYear - 1)
 	nextTick(() => {
@@ -234,7 +289,8 @@ const togglePlay = () => {
 
 	if (
 		!playing.value &&
-		(model.value.getTime() === props.end.getTime() ||
+		((!isZoom.value && atDataLimit.value) ||
+			model.value.getTime() === props.end.getTime() ||
 			(isZoom.value &&
 				model.value.getTime() ===
 					props.selectedEvent!.times[props.selectedEvent!.times.length - 1]))
@@ -278,6 +334,7 @@ const togglePlay = () => {
 					}
 				} else {
 					if (
+						atDataLimit.value ||
 						model.value.getTime() === props.end.getTime() ||
 						(isZoom.value &&
 							model.value.getTime() ===
@@ -285,8 +342,9 @@ const togglePlay = () => {
 									props.selectedEvent!.times.length - 1
 								])
 					) {
-						// Reached end of event
+						// Reached the end of the event, or of the record
 						playing.value = false
+						emits('paused')
 						return
 					} else {
 						nextDay()
@@ -463,6 +521,8 @@ const endDrag = (event: MouseEvent) => {
 					event.clientY - (scroller.value?.getBoundingClientRect().top || 0)
 				const ySize = rowHeight.value
 				const yearClicked = Math.floor(clickYOff / ySize) + startYear.value
+				// Clicks in the dead zone are ignored: there is nothing there to jump to.
+				if (dayFromStart > lastRecordedDay(yearClicked)) return
 				if (yearClicked !== selectedYear.value) {
 					setDate(Date.UTC(yearClicked, newDate.getMonth(), newDate.getDate()))
 				}
@@ -519,18 +579,27 @@ const applyDrag = (event: { clientX: number; clientY: number }) => {
 	const dy = event.clientY - startY
 
 	if (isOverview.value) {
-		localScrubberOffset.value = [dx, dy]
 		const yearOffset = Math.round(dy / rowHeight.value)
 		const dayOffset = Math.round(
 			(dx / (scroller.value?.clientWidth || 1)) * TOTAL_DAYS,
 		)
-		setDate(
-			Date.UTC(
-				scrubStartYear.value + yearOffset,
-				0,
-				scrubStartDay.value + dayOffset,
-			),
-		)
+		const targetYear = scrubStartYear.value + yearOffset
+		const wantedDay = scrubStartDay.value + dayOffset
+		// The phantom 366th column of a non-leap year has no date behind it.
+		let day = Math.max(1, Math.min(wantedDay, daysInYear(targetYear)))
+		// Rightward drags stop hard at the end of the record, and stay put if the
+		// needle is already past it. Leftward and purely vertical drags are free,
+		// so changing year carries the day anchor into the dead zone and scrubbing
+		// back left reactivates the needle as soon as it crosses props.end.
+		const limit = lastRecordedDay(targetYear)
+		if (dayOffset > 0 && day > limit) {
+			day = Math.max(limit, Math.min(day, scrubStartDay.value))
+		}
+		// Pin the crosshair to the day we actually landed on, so a blocked drag
+		// visibly stops instead of sliding on ahead of the date it represents.
+		const pixelsPerDay = (scroller.value?.clientWidth || 1) / TOTAL_DAYS
+		localScrubberOffset.value = [dx - (wantedDay - day) * pixelsPerDay, dy]
+		setDate(Date.UTC(targetYear, 0, day))
 	} else {
 		if (!dragMode.value) {
 			if (Math.abs(dx) > Math.abs(dy)) dragMode.value = 'horizontal'
@@ -804,7 +873,13 @@ const scrollListener = () => {
 	const scrollTop = scroller.value.scrollTop
 	const rowsDown = scrollTop / rowHeight.value
 	const newYear = Math.round(startYear.value + rowsDown)
-	const newDate = Date.UTC(newYear, 0, getDayOfYear(model.value))
+	// Keep the day-of-year anchor across the year change, but never on a phantom
+	// 366th day, which would roll the model over into the following January.
+	const newDate = Date.UTC(
+		newYear,
+		0,
+		Math.min(getDayOfYear(model.value), daysInYear(newYear)),
+	)
 	setDate(newDate)
 	// console.log('scrolled to year', newYear)
 }
@@ -813,6 +888,11 @@ watch(isOverview, (newVal) => {
 	if (newVal) {
 		autoScrolling.value = true
 	} else {
+		// The overview is the only place the needle can sit past the end of the
+		// record, and every other mode expects a date with data behind it.
+		if (inDeadZone.value) {
+			setDate(Date.UTC(endYear.value, 0, lastRecordedDay(endYear.value)))
+		}
 		// @ts-ignore
 		scroller.value!.style.overflow = 'hidden'
 		setTimeout(
@@ -851,6 +931,11 @@ timeReelWorker.onmessage = (e: MessageEvent) => {
 	eventBoxesForYear.value = newEventBoxes
 	maxSimultaneousEvents.value = newMax
 	const yearsList = [...years.value].reverse()
+	// Animating is a nicety for changes the user asked for. While the catalogue is
+	// still streaming in every batch redraws every year, and each of those
+	// transitions is another ~350ms of work competing with whatever the user is
+	// dragging, for a shape that is about to be replaced by the next batch anyway.
+	const animate = !isLoadingEvents()
 	const drawNextYear = () => {
 		if (!yearsList.length) {
 			return
@@ -865,10 +950,15 @@ timeReelWorker.onmessage = (e: MessageEvent) => {
 		}
 		if (currentPath !== newDs[year]) {
 			// The line has changed, redraw it
-			d3.select(`#events-line-${year}`)
-				.transition()
-				.duration(intervalToMs(scssVars.animTime))
-				.attr('d', newDs[year])
+			const line = d3.select(`#events-line-${year}`)
+			if (animate) {
+				line
+					.transition()
+					.duration(intervalToMs(scssVars.animTime))
+					.attr('d', newDs[year])
+			} else {
+				line.attr('d', newDs[year])
+			}
 		}
 
 		// We can use this if it's blocking the UI, but the result will be a staggered draw,
@@ -1050,10 +1140,13 @@ const dateTranslate = computed(() => {
 	<div class="time-reel" ref="timeReelRef">
 		<div
 			class="date-info mono"
-			:class="{ dragging: hasMoved }"
+			:class="{ dragging: hasMoved, 'dead-zone': inDeadZone }"
 			:style="`transform: ${dateTranslate}`"
 		>
 			{{ dayStr(selectedDay, selectedYear, isOverview) }}
+			<span class="beyond-limit" v-if="inDeadZone"
+				>· {{ $l.beyondDataLimit }}</span
+			>
 		</div>
 		<div
 			class="controls event-graphs-help"
@@ -1090,11 +1183,12 @@ const dateTranslate = computed(() => {
 					@click="togglePlay"
 					v-tooltip="playing ? $l.pause : $l.play"
 					:disabled="
-						isZoom &&
-						(!props.selectedEvent ||
-							props.selectedEvent.times[0] > model.getTime() ||
-							props.selectedEvent.times[props.selectedEvent.times.length - 1] <
-								model.getTime())
+						inDeadZone ||
+						(isZoom &&
+							(!props.selectedEvent ||
+								props.selectedEvent.times[0] > model.getTime() ||
+								props.selectedEvent.times[props.selectedEvent.times.length - 1] <
+									model.getTime()))
 					"
 					:class="{ selected: playing }"
 				>
@@ -1104,7 +1198,7 @@ const dateTranslate = computed(() => {
 				<button
 					class="glassy color"
 					@click="nextDay"
-					:disabled="selectedYear >= endYear && selectedDay >= 365"
+					:disabled="atDataLimit"
 					v-tooltip="isTimeline ? $l.nextTimestep : $l.nextDay"
 				>
 					<IconChevronRight aria-hidden="true" />
@@ -1139,6 +1233,7 @@ const dateTranslate = computed(() => {
 			<div
 				class="scrubber"
 				v-if="isOverview"
+				:class="{ 'dead-zone': inDeadZone }"
 				:style="`transform: ${scrubberTranslate}; pointer-events: auto;`"
 				@mousedown="startDrag"
 			>
@@ -1160,6 +1255,23 @@ const dateTranslate = computed(() => {
 					<h1 class="label" :style="`opacity: ${isTimeline ? 0 : 1}`">
 						{{ year }}
 					</h1>
+				</div>
+				<!--
+					Painted in HTML rather than in the SVG because the SVG is drawn with
+					preserveAspectRatio="none", which would shear a 45 degree hatch into
+					near-vertical streaks.
+				-->
+				<div
+					class="dead-zones"
+					v-if="isOverview || isDefault"
+					:class="{ 'no-label-gutter': isDefault }"
+				>
+					<div
+						v-for="zone in deadZones"
+						:key="`dead-zone-${zone.year}`"
+						class="dead-zone-band"
+						:style="`top: ${(zone.year - startYear) * rowHeight}px; height: ${rowHeight}px; left: ${zone.left}%;`"
+					></div>
 				</div>
 				<div class="clipper">
 					<svg
@@ -1540,6 +1652,15 @@ const dateTranslate = computed(() => {
 			transition: transform 0s linear;
 			border-radius: $borderRadius;
 		}
+
+		&.dead-zone {
+			color: var(--text-tertiary);
+
+			.beyond-limit {
+				font-style: italic;
+				opacity: 0.85;
+			}
+		}
 	}
 	&.overview {
 		.date-info {
@@ -1633,6 +1754,16 @@ const dateTranslate = computed(() => {
 
 				height: auto;
 			}
+
+			// Past the end of the record: still draggable, but visibly inactive.
+			&.dead-zone {
+				color: var(--text-tertiary);
+				opacity: 0.55;
+
+				.tabler-icon {
+					filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 0.8));
+				}
+			}
 		}
 
 		&.dragging {
@@ -1651,6 +1782,38 @@ const dateTranslate = computed(() => {
 			width: 100%;
 			background-color: transparent;
 			pointer-events: none;
+
+			// Aligned with the overview SVG, which is inset by 2.5rem to leave room
+			// for the year labels. The default mode draws them over the row instead,
+			// so its SVG starts at the edge.
+			.dead-zones {
+				position: absolute;
+				top: 0;
+				left: 2.5rem;
+				right: 0;
+				height: 100%;
+				overflow: hidden;
+				pointer-events: none;
+				z-index: 2;
+
+				&.no-label-gutter {
+					left: 0;
+				}
+
+				.dead-zone-band {
+					position: absolute;
+					right: 0;
+					background-color: rgba($c3sgrey, 0.15);
+					background-image: repeating-linear-gradient(
+						-45deg,
+						rgba(black, 0.12) 0,
+						rgba(black, 0.12) 1px,
+						transparent 1px,
+						transparent 7px
+					);
+					border-left: 1px solid rgba($c3sgrey, 0.45);
+				}
+			}
 
 			.clipper {
 				position: absolute;

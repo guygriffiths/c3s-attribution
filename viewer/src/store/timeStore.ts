@@ -1,4 +1,4 @@
-import { addDays } from 'date-fns'
+import { addDays, startOfDay } from 'date-fns'
 import { defineStore } from 'pinia'
 
 interface TimeState {
@@ -50,6 +50,16 @@ export const useStore = defineStore('time', {
 		isoDatetime: (state) => {
 			// This always returns the datetime in UTC, which is what we need
 			return state.selectedTime.toISOString()
+		},
+		// True while the selected time sits past the end of the record, which the
+		// time reel allows in overview mode so that the day-of-year anchor is not
+		// destroyed by scrubbing into the final, incomplete year. Consumers should
+		// render their empty state rather than request data for this time.
+		beyondDataLimit: (state) => {
+			return (
+				startOfDay(state.selectedTime).getTime() >
+				startOfDay(state.endTime).getTime()
+			)
 		},
 	},
 	actions: {
