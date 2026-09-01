@@ -7,5 +7,17 @@ Operational + realtime working
 Remove rainbow mode :(
 bookmark events
 
+"hard mode" -> "advanced"
+
+jump straight to event with URL for sharing.
+
+connect to weatherreplay with URL parameters
+
+make event IDs depend on most extreme pixel
+
+Something in the URL which loads a non-default dataset!
+
 Charts more interactive
 Download of PNG charts
+
+

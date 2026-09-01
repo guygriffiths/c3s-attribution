@@ -5,7 +5,7 @@ import * as d3 from 'd3'
 // reads. Override with X_DATA_ROOT; it must end in a slash.
 export const DATA_ROOT =
 	import.meta.env.X_DATA_ROOT ||
-	'https://extreme-events.service.compute.cci2.ecmwf.int/datasets/large/'
+	'http://extreme-events.service.compute.cci2.ecmwf.int/catalogue/'
 export const ECMWF_BONN: [number, number] = [50.73438, 7.09549] // ECMWF location in Bonn
 
 export const debounce = (func: (...args: any[]) => void, delay: number) => {

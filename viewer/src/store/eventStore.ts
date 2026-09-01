@@ -423,12 +423,12 @@ export const useStore = defineStore('events', {
 			const from = 1979
 			const to = new Date().getUTCFullYear()
 			timeStore.startTime = new Date(Date.UTC(from, 0, 1))
-			timeStore.endTime = new Date(Date.UTC(to, 11, 31))
+			timeStore.endTime = new Date(Date.now() - 9 * 24 * 60 * 60 * 1000)//new Date(Date.UTC(to, 11, 31))
 			timeStore.startTimeFilter = new Date(
 				Date.UTC(Math.max(to - 10, from), 0, 1),
 			)
 			timeStore.endTimeFilter = new Date(Date.UTC(to, 11, 31))
-			timeStore.selectedTime = new Date()
+			timeStore.selectedTime = new Date(Date.now() - 9 * 24 * 60 * 60 * 1000)
 
 			// watch(
 			// 	() => [timeStore.startTimeFilter, timeStore.endTimeFilter],

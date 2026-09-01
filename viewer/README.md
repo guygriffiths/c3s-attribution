@@ -1,6 +1,30 @@
 # Extremes ERA — Viewer
 
-A Vue 3 single-page application for exploring extreme temperature events derived from ERA5 reanalysis data. Users can browse heat and cold-wave events across the historical record (1979–present), filter by duration, geographic area, or intensity, and inspect individual events on an interactive map.
+A Vue 3 single-page application for exploring extreme heat, cold, and wet events derived from ERA5 reanalysis data.
+
+The viewer is built for fast browsing through a large event catalogue. You can move quickly from a whole-planet overview to a specific event, scrub across time, filter by space and event properties, and inspect detail without waiting for the entire archive to load up front.
+
+## Why it feels fast
+
+This app is tuned for exploratory browsing rather than one-shot page loads.
+
+- It fetches the event types currently on screen first, with the most recent year first, so the opening view becomes useful before the rest of the archive arrives.
+- It loads one year-file at a time in a Web Worker and builds spatial and date indexes off the main thread.
+- It keeps several cached filter stages in memory, so changing a time window does not force a full rebuild of spatial and parameter filtering.
+- It renders the overview heatmap on an offscreen canvas in a worker instead of doing all map drawing on the UI thread.
+- It computes timeline summaries in a separate worker, so scrubbing and playback stay responsive.
+- It only fetches full event geometry when you ask for a specific event; the catalogue stays compact.
+
+In practice, that means you can start browsing recent visible data quickly, tighten filters interactively, and dive into event detail on demand.
+
+## What you can do
+
+- browse hot, cold, wet, and combined event modes
+- move between map overview, timeline, ranked events, and event detail views
+- filter by duration, size, intensity, date window, point, or named/drawn region
+- inspect events in progress alongside the finished historical catalogue
+- compare how event counts and footprints evolve through time
+- jump from a catalogue summary to full event geometry only when needed
 
 ---
 
@@ -48,7 +72,12 @@ compare/                   # data used for comparison views
 
 Each `events-{type}-{year}.jsonl` line is a JSON object describing a single event: bounding pixels, timestamps, duration, area, and intensity statistics.
 
-Event data is loaded lazily: the fetch/index worker retrieves one year-file at a time and builds a spatial pixel index in the background. Detailed event geometry is fetched on demand from `events/` when the user selects a specific event.
+The catalogue format is deliberately split for browsing speed:
+
+- yearly JSONL files contain compact summaries that are cheap to stream and index
+- detailed event geometries live in per-event JSON files and are only loaded on demand
+
+Event data is loaded lazily. The fetch/index worker retrieves one year-file at a time, parses the JSONL off the main thread, and builds pixel and date indexes in the background. The viewer now prioritises the event types that are actually visible, so the opening mode is not blocked behind decades of hidden data.
 
 Events that have not finished yet are carried in `events-{type}-active.jsonl` and flagged
 `"provisional": true`. They are fetched once, at page load, so a site refresh is what picks
@@ -133,9 +162,12 @@ src/
 
     worker/               Web Workers (loaded via Vite's `?worker` import)
       fetchAndIndexWorker.ts        Fetches a year's JSONL, parses events,
-                                    builds a pixel→event-index map
+                                    builds pixel/date indexes, and supports
+                                    visible-types-first loading
       heatmapRenderWorker.ts        Renders the heatmap canvas layer off-thread
+                                    with an OffscreenCanvas
       timeReelEventProcessWorker.ts Pre-processes event data for the TimeReel
+                                    and yearly summaries off-thread
 
   router/
     index.ts              Vue Router config (single route; 404 redirect handled
@@ -162,8 +194,22 @@ All env vars must be prefixed `X_` to be exposed to the client bundle (see `vite
 
 **Filtering pipeline** (`lib/eventsDB.ts`): filters are applied in a four-stage chain — parameter filters (type/duration/size/intensity) → spatial filter (point or drawn region) → time filter (date window). Each stage caches its output; downstream stages are only recomputed when an upstream stage changes.
 
-**Workers**: three Web Workers keep the main thread responsive. The fetch/index worker streams event data year-by-year; the heatmap render worker draws the overview canvas off-thread; the time-reel worker processes visible-event lists for the timeline.
+**Loading strategy** (`lib/eventsDB.ts`): the app asks for the event types currently visible first, starting from the most recent year, and only sends the rest of the workload once that foreground wave has landed. That gets the opening map and current time selection usable earlier.
+
+**Workers**: three Web Workers keep the main thread responsive. The fetch/index worker streams event data year-by-year and builds indexes; the heatmap render worker draws the overview canvas off-thread; the time-reel worker processes visible-event lists and yearly summary shapes for the timeline.
 
 **Pixel encoding**: events store geographic coverage as a set of packed integers (`(lat*4 << 16) | (lon*4 & 0xffff)`). The same algorithm is used in the Python backend and mirrored in `lib/utils.ts` for fast client-side spatial lookup.
 
+**On-demand detail**: the catalogue carries enough metadata for ranking, filtering, and time browsing. The much heavier per-event geometry is fetched only when the user selects an event.
+
 **Stores**: three Pinia stores with clear ownership — main UI state, event data/selection, and timeline/playback state. Components read from stores via composables; workers communicate back via `postMessage`.
+
+## Performance model
+
+If you are modifying the viewer, this is the core design to preserve:
+
+1. Keep the catalogue summaries cheap to load and index.
+2. Push parsing, indexing, and aggregate computations into workers.
+3. Recompute only the lowest filter stage affected by a change.
+4. Fetch full event payloads only when the user asks for them.
+5. Prefer making the current visible mode fast over making every dataset load at once.

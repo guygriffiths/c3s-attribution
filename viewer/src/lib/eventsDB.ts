@@ -192,8 +192,7 @@ fetchAndIndexWorker.onmessage = (
 				}
 			} 
 			// TODO - Get the latest updated date
-			// Set to 6 days before the current date
-			// timeStore.selectedTime = new Date()
+			timeStore.selectedTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 		}
 
 		// Trigger a build of the entire filter chain
