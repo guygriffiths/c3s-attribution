@@ -1,5 +1,6 @@
 import iconPng from '@/assets/img/marker-icon-2x-c3sred.png'
 import scssVars from '@/assets/styles/scssVars.module.scss'
+import { regionAt, totalRegionOf } from '@/lib/eventGeometry'
 import { IconMapPinFilled } from '@tabler/icons-vue'
 import { renderToString } from '@vue/server-renderer'
 import L from 'leaflet'
@@ -142,7 +143,7 @@ export const getEventRegion = (event: ExtremeEvent, time: Date) => {
 		// console.warn(
 		// 	`No region found for event ${event.id} at time ${time.toISOString()}`,
 		// )
-		return event.total_region || [] // Fallback to first region if no matching time found
+		return totalRegionOf(event) // Fallback to the whole footprint if no matching time found
 	}
-	return event.regions[idx] || [] // Fallback to empty array if no region found
+	return regionAt(event, idx)
 }

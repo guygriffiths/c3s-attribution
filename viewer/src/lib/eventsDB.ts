@@ -1,10 +1,11 @@
 import FetchAndIndexWorker from '@/lib/worker/fetchAndIndexWorker?worker'
+import type { PackedGeometry } from '@/lib/eventGeometry'
 import { EventStore } from '@/store/eventStore'
 import { useStore as useMainStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { bbox, booleanPointInPolygon, point } from '@turf/turf'
 import type { MultiPolygon, Polygon } from 'geojson'
-import { nextTick } from 'vue'
+import { markRaw, nextTick } from 'vue'
 import { packPixelToInt } from './utils'
 
 /**
@@ -143,6 +144,7 @@ fetchAndIndexWorker.onmessage = (
 	e: MessageEvent<{
 		year: number
 		events: ExtremeEvent[]
+		geometry: PackedGeometry
 		pixelIndex: Record<number, number[]>
 		dateIndex: Record<number, number[]>
 		monthIndex: Record<string, number[]>
@@ -165,6 +167,7 @@ fetchAndIndexWorker.onmessage = (
 	const {
 		year,
 		events,
+		geometry,
 		pixelIndex: pIndex,
 		dateIndex: dIndex,
 		monthIndex: mIndex,
@@ -173,6 +176,15 @@ fetchAndIndexWorker.onmessage = (
 	} = e.data
 
 	// console.log(`Main thread received ${events.length} events from worker for year ${year}`)
+
+	// The batch shares one set of geometry buffers; each event just needs to know
+	// where to look in them. Kept raw so that the refs holding filtered events do
+	// not wrap the buffers in reactive proxies, which would put a proxy trap on
+	// the path of every vertex read. See eventGeometry.
+	const geom = markRaw(geometry)
+	for (let i = 0; i < events.length; i++) {
+		events[i].geom = markRaw({ g: geom, i })
+	}
 
 	_events.push(...events)
 	// Events still in progress don't belong to a year, so they mustn't be allowed

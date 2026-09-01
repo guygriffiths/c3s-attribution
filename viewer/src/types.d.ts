@@ -28,15 +28,23 @@ declare global {
 		id: string
 		times: number[]
 		duration: number // in days
-		regions: [number, number][][]
-		total_region: [number, number][]
+		// Footprint geometry. Events from the catalogue carry `geom`, a view onto
+		// the packed buffers the fetch worker sends; events fetched individually
+		// carry the plain arrays. Read either through @/lib/eventGeometry, which
+		// takes both.
+		geom?: import('@/lib/eventGeometry').GeomRef
+		// One entry per day the event ran, each a set of polygon rings.
+		regions?: [number, number][][][]
+		// The union of all of them, likewise a set of rings.
+		total_region?: [number, number][][]
 		bbox: [number, number, number, number]
 		max_value: number
 		mean_value: number
 		min_value: number
 		total_area: number
 		pixel_count: number
-		pixel_set: number[]
+		// Stripped from catalogue events once the worker has indexed them.
+		pixel_set?: number[]
 		packedPixelSet?: Set<number>
 		ocean_only: boolean
 		color: string

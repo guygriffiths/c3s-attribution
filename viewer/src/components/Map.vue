@@ -36,6 +36,7 @@ import {
 	markerIconCold,
 	getEventRegion,
 } from '@/lib/map-utils'
+import { eachTotalRegionVertex, totalRegionOf } from '@/lib/eventGeometry'
 import { drawEventTile, TILE_SIZE } from '@/lib/renderer'
 import { Feature, MultiPolygon, Polygon } from 'geojson'
 import RegionControl from './util/RegionControl.vue'
@@ -539,11 +540,7 @@ const addEventPanes = () => {
 
 		const ctxEl = canvasEl.getContext('2d')
 
-		const events = globalHeatmapEvents.value?.map((event) => ({
-			total_region: [...event.total_region],
-			event_type: event.event_type,
-			id: event.id,
-		}))
+		const events = globalHeatmapEvents.value || []
 		const zoom = map.value.getZoom()
 		const crs = map.value.options.crs // Usually L.CRS.EPSG3857
 		// @ts-ignore
@@ -579,29 +576,12 @@ const addEventPanes = () => {
 
 		for (const event of regionFilteredEvents) {
 			ctx.beginPath()
-			for (const ring of event.total_region || []) {
-				// @ts-ignore
-				ring.forEach(([lat, lng], i) => {
+			// Three copies of the world, so footprints crossing the antimeridian show
+			// up wherever the map has been panned to.
+			for (const wrap of [0, 360, -360]) {
+				eachTotalRegionVertex(event, (lat, lng, i) => {
 					// @ts-ignore
-					const point = fastRenderer._map.latLngToLayerPoint([lat, lng])
-					if (i === 0) ctx.moveTo(point.x, point.y)
-					else ctx.lineTo(point.x, point.y)
-				})
-			}
-			for (const ring of event.total_region || []) {
-				// @ts-ignore
-				ring.forEach(([lat, lng], i) => {
-					// @ts-ignore
-					const point = fastRenderer._map.latLngToLayerPoint([lat, lng + 360])
-					if (i === 0) ctx.moveTo(point.x, point.y)
-					else ctx.lineTo(point.x, point.y)
-				})
-			}
-			for (const ring of event.total_region || []) {
-				// @ts-ignore
-				ring.forEach(([lat, lng], i) => {
-					// @ts-ignore
-					const point = fastRenderer._map.latLngToLayerPoint([lat, lng - 360])
+					const point = fastRenderer._map.latLngToLayerPoint([lat, lng + wrap])
 					if (i === 0) ctx.moveTo(point.x, point.y)
 					else ctx.lineTo(point.x, point.y)
 				})
@@ -615,6 +595,11 @@ const addEventPanes = () => {
 		}
 	})
 }
+
+// vue-leaflet types latLngs as a flat list of points, but Leaflet itself also
+// takes a list of rings, which is what an event footprint actually is.
+const polygonRings = (rings: [number, number][][]) =>
+	rings as unknown as L.LatLngExpression[]
 
 // Manually trigger a heatmap update on the worker.
 // When it returns, blit the bitmap to the heatmap canvas.
@@ -740,7 +725,7 @@ const selectEvent = (event: ExtremeEvent) => {
 			<LPolygon
 				v-if="eventStore.hoveringEvent"
 				:key="`ev-${eventStore.hoveringEvent.id}-hover`"
-				:lat-lngs="eventStore.hoveringEvent.total_region"
+				:lat-lngs="polygonRings(totalRegionOf(eventStore.hoveringEvent))"
 				:weight="0"
 				:fill="true"
 				:fill-opacity="0.8"
@@ -757,7 +742,7 @@ const selectEvent = (event: ExtremeEvent) => {
 					.filter((e) => e !== null)
 					.filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)"
 				:key="`ev-${event.id}-${timeStore.selectedTime.toISOString()}`"
-				:lat-lngs="getEventRegion(event, timeStore.selectedTime)"
+				:lat-lngs="polygonRings(getEventRegion(event, timeStore.selectedTime))"
 				:weight="
 					event.id === eventStore.selectedEventId
 						? 2

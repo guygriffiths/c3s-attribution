@@ -1,4 +1,5 @@
 import { DATA_ROOT } from '@/lib/utils'
+import { geometryTransferables, packGeometry } from '@/lib/eventGeometry'
 
 export { }
 
@@ -65,13 +66,26 @@ self.onmessage = async (e: MessageEvent) => {
 	// console.log(`Worker built date index for ${eventType} ${year}`)
 	startI += events.length
 
-	self.postMessage({
-		year,
-		events,
-		pixelIndex,
-		dateIndex,
-		monthIndex,
-		eventType,
-		active: !!active,
-	})
+	// Flatten the footprints into typed arrays and drop them, and pixel_set with
+	// them, off the events. Between them they are the bulk of a batch, and
+	// deserialising them on the far side was blocking the main thread for tens of
+	// milliseconds at a time all through the load.
+	const geometry = packGeometry(events)
+
+	// Cast because the project's lib does not include the worker globals, so `self`
+	// is typed as a Window, whose postMessage takes an origin rather than a
+	// transfer list.
+	;(self as unknown as Worker).postMessage(
+		{
+			year,
+			events,
+			geometry,
+			pixelIndex,
+			dateIndex,
+			monthIndex,
+			eventType,
+			active: !!active,
+		},
+		geometryTransferables(geometry),
+	)
 }
