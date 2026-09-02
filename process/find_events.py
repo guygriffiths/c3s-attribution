@@ -384,6 +384,8 @@ def write_atomic(path: str, text: str) -> None:
     directory = os.path.dirname(path) or "."
     fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tmp-", suffix=".part")
     try:
+        # Explicitly set permissions to 644 before writing
+        os.fchmod(fd, 0o644)
         with os.fdopen(fd, "w") as f:
             f.write(text)
         os.replace(tmp, path)
