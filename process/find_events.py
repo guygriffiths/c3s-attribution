@@ -1198,6 +1198,9 @@ class EventletFactory:
         if last_slice_name:
             if os.path.exists(last_slice_name):
                 with open(last_slice_name, "rb") as f:
+                    import sys
+                    if '__mp_main__' in sys.modules:
+                        sys.modules['__mp_main__'].Eventlet = Eventlet  # Inject class into worker namespace
                     last_slice_data = pickle.load(f)
 
                     logger.info(f"Resuming from last slice at {last_slice_data['time']}")
