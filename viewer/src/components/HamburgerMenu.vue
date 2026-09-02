@@ -18,6 +18,7 @@ import {
 	IconUpload,
 	IconTrash,
 	IconPolygon,
+	IconRocket,
 } from '@tabler/icons-vue'
 
 const $l = useLabels()
@@ -36,6 +37,13 @@ const speedIndex = computed(() => {
 
 const onSpeedInput = (e: Event) => {
 	timeStore.speedFactor = SPEEDS[Number((e.target as HTMLInputElement).value)]
+}
+
+// The intro resets itself when it opens, so the menu only has to get out of
+// the way and flip the flag.
+const replayIntro = () => {
+	store.hamburgerMenuOpen = false
+	store.onboardingOpen = true
 }
 
 // --- User regions ---
@@ -180,6 +188,12 @@ const featureLabel = (region: UserRegion) => {
 				</div>
 				<IconPlayerTrackNext class="speed-icon" :size="16" aria-hidden="true" />
 			</div>
+		</div>
+		<div class="menu-section intro-section">
+			<button class="intro-btn" @click="replayIntro">
+				<IconRocket :size="15" aria-hidden="true" />
+				{{ $l.replayIntro }}
+			</button>
 		</div>
 		<div v-if="persistentStore.allHardComplete" class="menu-section rainbow-section">
 			<h2>Rainbow Mode</h2>
@@ -390,6 +404,29 @@ const featureLabel = (region: UserRegion) => {
 				background: var(--text-tertiary);
 				opacity: 0.4;
 				border-radius: 1px;
+			}
+		}
+
+		.intro-section {
+			border-top: 1px solid var(--divider);
+			padding-top: 0.5rem;
+		}
+
+		.intro-btn {
+			display: flex;
+			align-items: center;
+			gap: 0.4rem;
+			padding: 0.375rem 0.75rem;
+			border-radius: 6px;
+			border: 1px solid var(--divider);
+			background: none;
+			cursor: pointer;
+			font-size: 0.875rem;
+			color: inherit;
+			transition: background $animTime $animEase;
+
+			&:hover {
+				background: var(--hover-bg, rgba(0, 0, 0, 0.06));
 			}
 		}
 

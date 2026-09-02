@@ -5,6 +5,9 @@ import { useStore as useEventStore } from './eventStore'
 
 type LayerDetails = any
 
+// The app buttons the intro's last step can borrow and fly home.
+export type IntroButton = 'help' | 'achievements'
+
 interface State {
 	lang: Language
 	// Loading count + message for main blocking indicator
@@ -35,6 +38,14 @@ interface State {
 
 	hamburgerMenuOpen: boolean // Whether the side hamburger menu is open
 	achievementsOpen: boolean // Whether the achievements panel is open
+
+	onboardingOpen: boolean // Whether the intro carousel is showing
+	// The intro borrows the real help and achievements buttons for its last step:
+	// an offset parks one over the overlay, and dropping it back to null lets it
+	// travel home under its own transition. `lifted` keeps them above the overlay
+	// for that journey.
+	introButtonOffsets: Record<IntroButton, { x: number; y: number } | null>
+	introButtonsLifted: boolean
 
 	mainHelpOpen: boolean // Whether the main help dialog is open
 
@@ -90,6 +101,10 @@ export const useStore = defineStore('main', {
 
 			hamburgerMenuOpen: false,
 			achievementsOpen: false,
+
+			onboardingOpen: false,
+			introButtonOffsets: { help: null, achievements: null },
+			introButtonsLifted: false,
 
 			focusVariable: 'duration',
 			sortDesc: true,

@@ -21,22 +21,24 @@ onMounted(() => {
 		if (pupilElement) {
 			if (mode.value === 'heatmap') {
 				const rect = pupilElement.getBoundingClientRect()
-				if (rect) {
+				if (rect.width > 0 && rect.height > 0) {
 					const eyeCenterX = rect.left + rect.width / 2
 					const eyeCenterY = rect.top + rect.height / 2
 					const deltaX = e.clientX - eyeCenterX
 					const deltaY = e.clientY - eyeCenterY
 					const angle = Math.atan2(deltaY, deltaX)
-					const radius = Math.min(rect.width, rect.height) * 0.15
+					const radius = Math.min(rect.width, rect.height) * 0.2
 					const pupilX = Math.cos(angle) * radius
 					const pupilY = Math.sin(angle) * radius
 					// console.log(`Mouse: (${e.clientX}, ${e.clientY}), Eye Center: (${eyeCenterX}, ${eyeCenterY}), Pupil Offset: (${pupilX.toFixed(2)}, ${pupilY.toFixed(2)})`)
-					pupilElement.setAttribute(
-						'transform',
-						`translate(${pupilX}, ${pupilY})`,
-					)
+					requestAnimationFrame(() => {
+						pupilElement.setAttribute(
+							'transform',
+							`translate(${pupilX}, ${pupilY})`,
+						)
+					})
 				} else {
-					// console.log('Could not get bounding rect for pupil element.')
+					console.log('Could not get bounding rect for pupil element.')
 					pupilElement.setAttribute('transform', `translate(0, 0)`)
 				}
 				// handsElement?.setAttribute('transform', `rotate(0)`)
@@ -68,15 +70,15 @@ const blink = () => {
 
 // When run, this will blink the eye every 2 to 5 minutes
 function scheduleBlink() {
-  const delay = (2 + Math.random() * 3) * 60 * 1000;
-  setTimeout(() => {
-    blink();
-    scheduleBlink();
-  }, delay);
+	const delay = (2 + Math.random() * 3) * 60 * 1000
+	setTimeout(() => {
+		blink()
+		scheduleBlink()
+	}, delay)
 }
 
 // Start the loop
-scheduleBlink();
+scheduleBlink()
 </script>
 
 <template>

@@ -181,6 +181,53 @@ const labelsEn = {
 	uploadErrorNoPolygons: 'No polygon or multipolygon features found in the file.',
 	uploadErrorTooLarge:
 		'This region is too large to save in your browser. Try simplifying the geometry (fewer points) and upload again.',
+
+	// Intro carousel. `{date}` is replaced with the month and year of the last
+	// day in the record, so the headline follows the data rather than going
+	// stale. The last step is the launch step and draws its own controls.
+	introSteps: [
+		{
+			title: 'Extreme weather, right up to {date}',
+			body: 'Every heatwave, cold spell and wet spell on record, from the latest ERA5 data all the way back to 1979.',
+		},
+		{
+			title: 'Pick a moment',
+			body: 'Drag and scroll the reel along the bottom to move through time, or press play and watch events come and go.',
+		},
+		{
+			title: 'Or see the whole picture',
+			body: 'Overview mode draws every event across a range of years at once, so hotspots and trends stand out. Filter by duration, area, temperature or wet day index to narrow the field.',
+		},
+		{
+			title: 'Dig into an event',
+			body: 'Select any event to explore it in detail — its day-by-day footprint, charts and statistics — or bookmark it to come back to later.',
+		},
+		{
+			title: 'Ready when you are',
+			body: 'Choose the events you want to explore, then pick where to start.',
+		},
+	],
+	replayIntro: 'Replay introduction',
+	introSkip: 'Skip the introduction',
+	introBack: 'Back',
+	introNext: 'Next',
+	introGoToStep: 'Go to step',
+	introChooseEventType: 'Explore',
+	introTimeMachine: 'Time Machine',
+	introTimeMachineBlurb: 'Explore events day by day, from 1979 to the present.',
+	introOverview: 'Overview',
+	introOverviewBlurb: 'See hotspots and trends across a range of years.',
+	introHelpNote: 'The full detail — where the data comes from, how events are defined, and the caveats — is always behind this button.',
+	introAchievementsNote: 'Not sure where to start? This button keeps a list of things to find. Work through it and the tools will make sense along the way.',
+	eventTypeNames: {
+		hot: 'Hot',
+		cold: 'Cold',
+		wet: 'Wet',
+		hotcold: 'Hot and cold',
+		hotwet: 'Hot and wet',
+		coldwet: 'Cold and wet',
+		all: 'All',
+	},
 }
 
 type Labels = typeof labelsEn

@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { differenceInDays } from 'date-fns'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
+import type { IntroButton } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'
 import { colorForValue, useStore as useEventStore } from '@/store/eventStore'
 import { helpMe } from '@/lib/help'
@@ -142,6 +143,41 @@ const randomiseEvent = () => {
 	const event = pool[Math.floor(Math.random() * pool.length)]
 	eventStore.selectEvent(event)
 }
+
+// The intro parks this button over its last step, where reaching for help is
+// also a way out of the intro, so treat the click as a launch too.
+const openAbout = () => {
+	store.onboardingOpen = false
+	helpMe('aboutInfo')
+}
+
+// Same again for the trophy: opening the achievements from the intro's last
+// step launches the app with the panel already up.
+const toggleAchievements = () => {
+	store.onboardingOpen = false
+	store.achievementsOpen = !store.achievementsOpen
+	achievementNew.value = false
+}
+
+// While the intro has borrowed a button it drives the position itself, so the
+// usual hide rules step aside and the inline transform takes over.
+const borrowed = (id: IntroButton) => store.introButtonOffsets[id] !== null
+const introStyle = (id: IntroButton) => {
+	const offset = store.introButtonOffsets[id]
+	return offset
+		? { transform: `translate(${offset.x}px, ${offset.y}px)` }
+		: undefined
+}
+
+const cornerHidden = computed(
+	() => store.isFocused || timeStore.timePanelExpanded,
+)
+const helpHidden = computed(() => cornerHidden.value && !borrowed('help'))
+const helpStyle = computed(() => introStyle('help'))
+const achievementsHidden = computed(
+	() => cornerHidden.value && !borrowed('achievements'),
+)
+const achievementsStyle = computed(() => introStyle('achievements'))
 
 // Rainbow mode
 watch(
@@ -515,17 +551,14 @@ const getStackedC3steal = (value: number): string => {
 			:class="{ hidden: timeStore.timePanelExpanded }"
 		/>
 
-		<!-- Help button -->
+		<!-- Help button. The intro borrows this for its last step. -->
 		<button
 			id="help-button"
 			class="glassy color"
-			:class="{
-				hidden: store.isFocused || timeStore.timePanelExpanded,
-			}"
-			:inert="
-				store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined
-			"
-			@click="helpMe('aboutInfo')"
+			:class="{ hidden: helpHidden, lifted: store.introButtonsLifted }"
+			:style="helpStyle"
+			:inert="helpHidden ? 'true' : undefined"
+			@click="openAbout"
 			v-tooltip="$l.aboutInfo"
 		>
 			<IconInfoCircle
@@ -549,20 +582,20 @@ const getStackedC3steal = (value: number): string => {
 			<IconDice size="24" aria-hidden="true" />
 		</button>
 
-		<!-- Achievements button -->
+		<!-- Achievements button. The intro borrows this for its last step too. -->
 		<button
 			id="achievements-button"
 			class="glassy color"
 			:class="{
-				hidden: store.isFocused || timeStore.timePanelExpanded,
+				hidden: achievementsHidden,
+				lifted: store.introButtonsLifted,
 				close: store.achievementsOpen,
 				pulse: achievementPulse && !store.achievementsOpen,
 				selected: achievementNew && !store.achievementsOpen,
 			}"
-			:inert="
-				store.isFocused || timeStore.timePanelExpanded ? 'true' : undefined
-			"
-			@click="store.achievementsOpen = !store.achievementsOpen; achievementNew = false"
+			:style="achievementsStyle"
+			:inert="achievementsHidden ? 'true' : undefined"
+			@click="toggleAchievements"
 			v-tooltip="store.achievementsOpen ? $l.close : 'Achievements'"
 		>
 			<IconTrophy size="24" aria-hidden="true" v-if="!store.achievementsOpen" />
@@ -947,9 +980,17 @@ const getStackedC3steal = (value: number): string => {
 		padding: 0.5rem;
 		z-index: 300;
 		box-shadow: var(--shadow-sm), var(--shadow-md);
+		// Slower and softer than the usual panel timing: this is the one control
+		// the user is meant to watch travel from the intro to its home corner.
+		transition: transform $animTime * 1.6 cubic-bezier(0.22, 1, 0.36, 1);
 
 		&.hidden {
 			transform: translateY(-200%);
+		}
+
+		// Held above the intro overlay (10000) until it has finished travelling.
+		&.lifted {
+			z-index: 10001;
 		}
 	}
 
@@ -979,9 +1020,16 @@ const getStackedC3steal = (value: number): string => {
 		padding: 0.5rem;
 		z-index: 350;
 		box-shadow: var(--shadow-sm), var(--shadow-md);
+		// Matches #help-button: the intro sends this one on the same journey.
+		transition: transform $animTime * 1.6 cubic-bezier(0.22, 1, 0.36, 1);
 
 		&.hidden {
 			transform: translateY(-200%);
+		}
+
+		// Held above the intro overlay (10000) until it has finished travelling.
+		&.lifted {
+			z-index: 10001;
 		}
 
 		&.pulse {

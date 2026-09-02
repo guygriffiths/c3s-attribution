@@ -142,13 +142,15 @@ if (typeof ResizeObserver !== 'undefined') {
 	inset: 0;
 	background: rgba(0, 0, 0, 0.2);
 	backdrop-filter: $frosty;
-	z-index: 9998;
+	// Above the loading overlay (9999) and the intro overlay (10000), both of
+	// which can be up when help is opened.
+	z-index: 10002;
 	overflow: hidden;
 }
 
 .help-popup {
 	position: fixed;
-	z-index: 10000;
+	z-index: 10003;
 	max-width: min(90vw, 640px);
 
 	max-height: 80vh;

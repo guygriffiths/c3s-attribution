@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 const ACHIEVEMENTS_COOKIE = 'c3s_achievements'
 const VISITS_COOKIE = 'c3s_visits'
 const HARDMODE_SEEN_COOKIE = 'c3s_hardmode_seen'
+const INTRO_SEEN_COOKIE = 'c3s_intro_seen'
 const RAINBOW_COOKIE = 'c3s_rainbow'
 const ALL_COMPLETE_SEEN_COOKIE = 'c3s_allcomplete_seen'
 const COOKIE_EXPIRY = 365 // days
@@ -306,6 +307,7 @@ interface PersistentState {
 	visitCount: number
 	lastUnlocked: string | null
 	hardModeSeen: boolean
+	introSeen: boolean
 	rainbowMode: boolean
 	allCompleteSeen: boolean
 }
@@ -315,12 +317,14 @@ function loadFromCookies(): PersistentState {
 		const achievementsCookie = Cookies.get(ACHIEVEMENTS_COOKIE)
 		const visitsCookie = Cookies.get(VISITS_COOKIE)
 		const hardModeSeen = Cookies.get(HARDMODE_SEEN_COOKIE) === '1'
+		const introSeen = Cookies.get(INTRO_SEEN_COOKIE) === '1'
 		const rainbowMode = Cookies.get(RAINBOW_COOKIE) === '1'
 		const allCompleteSeen = Cookies.get(ALL_COMPLETE_SEEN_COOKIE) === '1'
 		return {
 			achievements: achievementsCookie ? JSON.parse(achievementsCookie) : {},
 			visitCount: visitsCookie ? parseInt(visitsCookie, 10) : 0,
 			hardModeSeen,
+			introSeen,
 			rainbowMode,
 			allCompleteSeen,
 			lastUnlocked: null,
@@ -330,6 +334,7 @@ function loadFromCookies(): PersistentState {
 			achievements: {},
 			visitCount: 0,
 			hardModeSeen: false,
+			introSeen: false,
 			rainbowMode: false,
 			allCompleteSeen: false,
 			lastUnlocked: null,
@@ -383,6 +388,17 @@ export const usePersistentStore = defineStore('persistent', {
 			this.hardModeSeen = true
 			try {
 				Cookies.set(HARDMODE_SEEN_COOKIE, '1', { expires: COOKIE_EXPIRY })
+			} catch {
+				// Cookie write failed silently
+			}
+		},
+		// The intro shows once, then only on demand from the menu. This is its own
+		// flag rather than a visit-count threshold because the visit count is
+		// incremented by Main as it mounts, which is not ordered against the check.
+		setIntroSeen() {
+			this.introSeen = true
+			try {
+				Cookies.set(INTRO_SEEN_COOKIE, '1', { expires: COOKIE_EXPIRY })
 			} catch {
 				// Cookie write failed silently
 			}

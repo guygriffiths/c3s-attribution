@@ -3,12 +3,12 @@ import { onMounted } from 'vue'
 import 'vue3-loading-overlay/dist/vue3-loading-overlay.css'
 import Loading from '@/components/util/Loading.vue'
 import HelpOverlay from '@/components/util/HelpOverlay.vue'
+import OnboardingIntro from '@/components/OnboardingIntro.vue'
 import { useLabels } from '@/lib/labels'
 import { useStore } from '@/store/store'
 import { useStore as useEventStore } from '@/store/eventStore'
 import { usePersistentStore } from '@/store/persistentStore'
 import { useUserRegionsStore } from '@/store/userRegionsStore'
-import { helpMe } from '@/lib/help'
 
 const l = useLabels()
 const store = useStore()
@@ -36,9 +36,12 @@ onMounted(() => {
 		}, 500)
 	})
 	
-	// Show initial help overlay (skip after 5+ visits)
-	if (persistentStore.visitCount <= 5) {
-		helpMe('aboutInfo')
+	// Show the intro on the first visit only — after that it is on demand, from
+	// "Replay introduction" in the menu. The About panel is no longer part of
+	// startup; it opens only from the info button.
+	if (!persistentStore.introSeen) {
+		store.onboardingOpen = true
+		persistentStore.setIntroSeen()
 	}
 })
 </script>
@@ -52,6 +55,8 @@ onMounted(() => {
 	/>
 	
 	<HelpOverlay />
+	
+	<OnboardingIntro />
 	
 	<router-view id="main" />
 	

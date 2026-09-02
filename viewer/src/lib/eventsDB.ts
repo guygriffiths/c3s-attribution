@@ -1,5 +1,5 @@
-import FetchAndIndexWorker from '@/lib/worker/fetchAndIndexWorker?worker'
 import type { PackedGeometry } from '@/lib/eventGeometry'
+import FetchAndIndexWorker from '@/lib/worker/fetchAndIndexWorker?worker'
 import { EventStore } from '@/store/eventStore'
 import { useStore as useMainStore } from '@/store/store'
 import { useStore as useTimeStore } from '@/store/timeStore'

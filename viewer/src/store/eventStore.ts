@@ -374,16 +374,23 @@ export const useStore = defineStore('events', {
 		},
 		async setEventTypeMode(mode: SelectedEventType | null = null) {
 			const mainStore = useMainStore()
-			await mainStore.setLoading('Changing event type...')
-			this.eventTypeMode = mode || 'hot'
+			const next = mode || 'hot'
+			// Selection first. setLoading waits two animation frames for the
+			// overlay to paint, so calling it before this left every control
+			// bound to the mode looking dead for the length of that wait.
+			this.eventTypeMode = next
+			// One frame's grace so the pressed state is on screen before the
+			// theme starts shifting, then the reload behind the overlay.
+			await new Promise((resolve) => requestAnimationFrame(resolve))
 			const rainbow = usePersistentStore().rainbowMode
-			applyTheme(rainbow ? `${mode || 'hot'}-sparkle` : (mode || 'hot'))
+			applyTheme(rainbow ? `${next}-sparkle` : next)
+			await mainStore.setLoading('Changing event type...')
 			this.filters.heatIntensity.active =
-				mode === 'hot' || mode === 'hotcold' || mode === 'hotwet'
+				next === 'hot' || next === 'hotcold' || next === 'hotwet'
 			this.filters.coldIntensity.active =
-				mode === 'cold' || mode === 'hotcold' || mode === 'coldwet'
+				next === 'cold' || next === 'hotcold' || next === 'coldwet'
 			this.filters.wetIntensity.active =
-				mode === 'wet' || mode === 'hotwet' || mode === 'coldwet'
+				next === 'wet' || next === 'hotwet' || next === 'coldwet'
 			mainStore.setLoadingDone()
 		},
 		cycleEventType() {
@@ -411,6 +418,25 @@ export const useStore = defineStore('events', {
 			this.firstEventSetLoaded = false
 			const mainStore = useMainStore()
 			mainStore.setLoading()
+
+			// The event catalogue and the background map tiles are served from the
+			// same host (see DATA_ROOT). If that host is unreachable, the worker's
+			// fetch resolves to an empty catalogue rather than throwing, so it never
+			// reaches the `events.length > 0` branch below that clears the loading
+			// overlay. Without a fallback, a network failure at startup leaves the
+			// overlay up forever with the app otherwise unusable behind it.
+			const loadTimeoutMs = 20000
+			const loadTimeout = window.setTimeout(() => {
+				if (this.firstEventSetLoaded) return
+				console.error(
+					`No event data arrived within ${loadTimeoutMs / 1000}s of startup ` +
+						`(check network connectivity to ${DATA_ROOT}); dismissing the ` +
+						'loading overlay so the app remains usable.',
+				)
+				this.firstEventSetLoaded = true
+				mainStore.setLoadingDone()
+			}, loadTimeoutMs)
+
 			const rainbow = usePersistentStore().rainbowMode
 			applyTheme(rainbow ? `${this.eventTypeMode}-sparkle` : this.eventTypeMode)
 			watch(() => [this.filters], this.runFilters, {
@@ -445,6 +471,7 @@ export const useStore = defineStore('events', {
 				if (events.length > 0) {
 					if (!this.firstEventSetLoaded) {
 						this.firstEventSetLoaded = true
+						clearTimeout(loadTimeout)
 						mainStore.setLoadingDone()
 						setTimeout(() => {
 							mainStore.showInfoPanel = true
